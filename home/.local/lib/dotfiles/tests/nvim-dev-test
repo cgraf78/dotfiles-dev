@@ -2,7 +2,7 @@
 set -euo pipefail
 . "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
 
-NVIM_TEST_BIN=$(command -v nvim 2>/dev/null || true)
+NVIM_TEST_BIN=${NVIM_TEST_BIN:-$(command -v nvim 2>/dev/null || true)}
 if [[ -z $NVIM_TEST_BIN ]]; then
   _fail 'Development Nvim tests require nvim'
   _test_summary
