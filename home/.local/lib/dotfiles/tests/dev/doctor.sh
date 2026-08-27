@@ -4,6 +4,8 @@ dot_dev_doctor_test() {
   local result_file current_module sections failures extension_home path
   local doctor_home doctor_bin result drift expected health_log direct_tool
   local relative_link relative_target symlink_root symlink_alias
+  local agent_home installed_config installed_config_before installed_doctor_output
+  local installed_section
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -207,5 +209,73 @@ HM
   result=$(HOME="$doctor_home" _doctor_records _dr_check_dev_integrations)
   _assert_contains 'Doctor reports incomplete shell integration policy' \
     'bash dev integrations incomplete' "$result"
+
+  agent_home=$(_tmpdir)
+  mkdir -p "$agent_home/.local/bin" "$agent_home/.config/shell"
+  : >"$agent_home/.config/shell/env-noninteractive.sh"
+  cat >"$agent_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+input=$(cat)
+case $input in
+  *'"dot status"'*) printf '{}\n' ;;
+  *'"git status -uall"'*) printf 'use dot status instead\n' >&2; exit 2 ;;
+  *) exit 3 ;;
+esac
+SH
+  cat >"$agent_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '{}\n'
+SH
+  chmod +x "$agent_home/.local/bin/agent-hook-pre-bash" \
+    "$agent_home/.local/bin/agent-hook-stop"
+  result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks)
+  _assert_contains 'Agent Hooks doctor accepts the allowed dot status path' \
+    'agent pre-bash allows dot status' "$result"
+  _assert_contains 'Agent Hooks doctor accepts the raw Git denial path' \
+    'agent pre-bash guards raw dotfiles git status' "$result"
+  _assert_contains 'Agent Hooks doctor accepts the stop-hook path' \
+    'agent stop hook runs' "$result"
+
+  cat >"$agent_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'broken pre-bash\n' >&2
+exit 7
+SH
+  cat >"$agent_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'broken stop\n' >&2
+exit 9
+SH
+  result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor reports pre-bash failures' \
+    'agent pre-bash failed dot status smoke' "$result"
+  _assert_contains 'Agent Hooks doctor reports unexpected raw Git results' \
+    'agent pre-bash raw git smoke returned unexpected result' "$result"
+  _assert_contains 'Agent Hooks doctor reports stop-hook failures' \
+    'agent stop hook failed' "$result"
+
+  if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
+    installed_config=$HOME/.config/dot/config
+    installed_config_before=$(<"$installed_config")
+    printf 'version=1\nextension_api=1\nextensions_dir=%s\ndependency_provider=none\n' \
+      "$DOT_TEST_DOCTOR_EXTENSION_HOME/.local/lib/dotfiles" >"$installed_config"
+    installed_doctor_output=$(dot doctor 2>&1 || true)
+    printf '%s\n' "$installed_config_before" >"$installed_config"
+    for installed_section in \
+      'Development tools' \
+      'Development shell integrations' \
+      'Git hooks' \
+      'Agent hooks' \
+      'Hive Memory' \
+      'Nvim development tooling'; do
+      _assert_contains "Installed dot doctor discovers $installed_section" \
+        "$installed_section" "$installed_doctor_output"
+    done
+  fi
 
 }

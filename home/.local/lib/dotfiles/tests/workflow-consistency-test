@@ -17,6 +17,126 @@ linting_plugin=$root/.config/nvim/lua/plugins/linting.lua
 git_config=$root/.config/git/config
 deps=$root/.config/shdeps/30-dev.conf
 
+_assert_no_low_level_dispatch() {
+  local registry=$1 violations=$2 classifier=${3:-}
+
+  [[ -x $classifier ]] || {
+    _fail 'workflow surfaces: immutable AgentGuard classifier is available'
+    return
+  }
+
+  jq -r '
+    [
+      .selectors[]? | ((.format // []) + (.lint // []))[]?.tool,
+      .crossCutting.lint[]?.tool,
+      "mypy", "pyre", "prettier"
+    ]
+    | flatten
+    | map(select(type == "string" and test("^[A-Za-z0-9_.+-]+$")))
+    | map(select(. as $tool | ["cargo", "crontab", "php", "tmux", "zsh"] | index($tool) | not))
+    | unique
+    | .[]
+  ' "$registry" >"${violations%/*}/low-level-tools.txt"
+
+  git -C "$owner_root" ls-files -- \
+    home/.config/dot/merge-hooks.d \
+    home/.config/nvim/lua/config/checkrun-nvim.lua \
+    home/.config/nvim/lua/config/language-policy.lua \
+    home/.config/nvim/lua/config/schema-policy.lua \
+    home/.config/nvim/lua/config/sley-nvim.lua \
+    home/.config/nvim/lua/plugins/formatting.lua \
+    home/.config/nvim/lua/plugins/linting.lua \
+    home/.config/nvim/lua/plugins/sley.lua \
+    home/.local/lib/dotfiles/git-hooks \
+    >"${violations%/*}/workflow-surface-files.txt"
+
+  DOTFILES_ROOT="$owner_root" AGENTGUARD_CLASSIFIER="$classifier" \
+    python3 - "${violations%/*}/low-level-tools.txt" \
+    "${violations%/*}/workflow-surface-files.txt" >"$violations" <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+
+root = os.environ["DOTFILES_ROOT"]
+classifier = os.environ["AGENTGUARD_CLASSIFIER"]
+tools_path, files_path = sys.argv[1], sys.argv[2]
+with open(tools_path, encoding="utf-8") as handle:
+    tools = [line.strip() for line in handle if line.strip()]
+tool_names = set(tools)
+seam = r"""(?:["'\\])*"""
+loose = "|".join(
+    seam.join(re.escape(char) for char in tool)
+    for tool in sorted(tools, key=len, reverse=True)
+)
+token = re.compile(rf"(^|[^A-Za-z0-9_.+-])(?:{loose})(?:$|[^A-Za-z0-9_.+-])")
+js_exec = re.compile(r"\b(?:execFile|spawn|run)\(\s*['\"]")
+lua_exec = re.compile(r"\b(?:jobstart\(\s*\{|cmd\s*=\s*\{)\s*['\"]")
+json_command = re.compile(r'"(?:cmd|command)"\s*:\s*("(?:\\.|[^"\\])*")')
+
+def classify(commands):
+    unique = list(dict.fromkeys(command.rstrip("\n") for command in commands if "\n" not in command and token.search(command)))
+    if not unique:
+        return {}
+    result = subprocess.run(
+        [classifier, "--json-lines"],
+        input="".join(f"{command}\n" for command in unique),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return {
+        payload["input"]: {
+            item.get("basename", "")
+            for item in payload.get("commands", [])
+            if isinstance(item, dict)
+        }
+        for payload in map(json.loads, result.stdout.splitlines())
+    }
+
+def active(line, relpath):
+    stripped = line.lstrip()
+    if stripped.startswith("#") or stripped.startswith("--") or '"Bash(' in line:
+        return ""
+    return re.sub(r"//.*$", "", line) if relpath.endswith(".js") else line
+
+checks = []
+violations = set()
+with open(files_path, encoding="utf-8") as handle:
+    paths = [line.strip() for line in handle if line.strip()]
+for relpath in paths:
+    with open(os.path.join(root, relpath), encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, 1):
+            code = active(line, relpath)
+            if not code:
+                continue
+            if js_exec.search(code) or lua_exec.search(code):
+                if token.search(code):
+                    violations.add((relpath, line_no, line.rstrip()))
+            if token.search(code):
+                checks.append((relpath, line_no, line.rstrip(), code))
+            for match in json_command.finditer(code):
+                command = json.loads(match.group(1))
+                if token.search(command):
+                    checks.append((relpath, line_no, line.rstrip(), command))
+classified = classify([command for _, _, _, command in checks])
+for relpath, line_no, text, command in checks:
+    if classified.get(command.rstrip("\n"), set()) & tool_names:
+        violations.add((relpath, line_no, text))
+for record in sorted(violations):
+    print(f"{record[0]}:{record[1]}: {record[2]}")
+PY
+
+  if [[ -s $violations ]]; then
+    _fail 'workflow surfaces: low-level tools stay behind Checkrun/Sley'
+    sed 's/^/    /' "$violations" >&2
+  else
+    _pass 'workflow surfaces: low-level tools stay behind Checkrun/Sley'
+  fi
+}
+
 echo '=== Development workflow consistency ==='
 _assert_file_exists 'Checked Checkrun editor metadata is dev-owned' "$metadata"
 _assert_file_exists 'Checkrun schema association policy is dev-owned' "$associations"
@@ -107,20 +227,27 @@ else
 fi
 
 work=$(_tmpdir)
-provider_ready=1
-for command_name in checkrun jq node shdeps; do
-  command -v "$command_name" >/dev/null 2>&1 || provider_ready=0
-done
+checkrun_command=
+checkrun_nvim_fixture=
 sley_extension=
-if ((provider_ready)); then
-  sley_extension=$(SHDEPS_CONF_DIR="$HOME/.config/shdeps" \
-    shdeps dep-file cgraf78/sley \
-    share/sley/vscode/sley-tools-0.0.1/extension.js 2>/dev/null || true)
-  [[ -r $sley_extension ]] || provider_ready=0
-fi
-
-if ((provider_ready)); then
-  provider_scope=installed
+agentguard_classifier=
+if [[ -n ${DOT_TEST_CHECKRUN_ROOT:-} || -n ${DOT_TEST_SLEY_ROOT:-} ||
+  -n ${DOT_TEST_AGENTGUARD_ROOT:-} ]]; then
+  : "${DOT_TEST_CHECKRUN_ROOT:?provider compatibility requires Checkrun}"
+  : "${DOT_TEST_SLEY_ROOT:?provider compatibility requires Sley}"
+  : "${DOT_TEST_AGENTGUARD_ROOT:?provider compatibility requires AgentGuard}"
+  provider_scope=immutable
+  checkrun_command=$DOT_TEST_CHECKRUN_ROOT/bin/checkrun
+  checkrun_nvim_fixture=$DOT_TEST_CHECKRUN_ROOT/lib/checkrun/nvim.lua
+  sley_extension=$DOT_TEST_SLEY_ROOT/share/sley/vscode/sley-tools-0.0.1/extension.js
+  agentguard_classifier=$DOT_TEST_AGENTGUARD_ROOT/bin/agentguard-classify-command
+  for provider_asset in "$checkrun_command" "$checkrun_nvim_fixture" \
+    "$sley_extension" "$agentguard_classifier"; do
+    [[ -r $provider_asset ]] || {
+      echo "workflow-consistency-test: provider asset unavailable: $provider_asset" >&2
+      exit 1
+    }
+  done
 else
   provider_scope=hermetic
   provider_bin=$work/provider-bin
@@ -204,6 +331,7 @@ LUA
   chmod +x "$provider_bin/checkrun" "$provider_bin/cmp"
   PATH=$provider_bin:$PATH
   export PATH
+  checkrun_command=$provider_bin/checkrun
 fi
 
 echo "=== $provider_scope provider projection consistency ==="
@@ -215,8 +343,8 @@ settings=$work/settings.json
 nvim_policy=$work/nvim-policy.json
 repo=$work/repo
 mkdir -p "$repo"
-checkrun capabilities --json >"$cap"
-checkrun registry --json >"$registry"
+"$checkrun_command" capabilities --json >"$cap"
+"$checkrun_command" registry --json >"$registry"
 
 python3 - "$fixture" "$repo" <<'PY'
 import json
@@ -257,6 +385,59 @@ _assert_exit 'Actual Checkrun capabilities and registry match the shared fixture
 # shellcheck disable=SC1090
 . "$HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
 _vscode_checkrun_settings "$settings" 1
+
+while IFS=$'\t' read -r association_key association_value; do
+  [[ -n $association_key ]] || continue
+  if jq -e --arg key "$association_key" --arg value "$association_value" \
+    '.["files.associations"][$key] == $value' "$settings" >/dev/null; then
+    _pass "VS Code associates $association_key as $association_value"
+  else
+    _fail "VS Code associates $association_key as $association_value"
+  fi
+done < <(jq -r '.languages[] | select(.association) | [.association.key, .association.value] | @tsv' "$fixture")
+
+nvim_workspace_fixture=$work/nvim-workspace.lua
+home_shell_policy=$work/home-shell-policy.json
+cat >"$nvim_workspace_fixture" <<'LUA'
+return {
+  options = function()
+    return {
+      shell = {
+        home_files = { ".bashrc", ".bash_profile", ".profile", ".zshenv", ".zprofile", ".zshrc" },
+        home_dirs = {
+          { glob = ".config/dot/merge-hooks.d/**/*@(.sh|.inc|.bash|.zsh|.command)" },
+          { glob = ".config/shdeps/hooks.d/**/*@(.sh|.inc|.bash|.zsh|.command)" },
+          { glob = ".config/shell/**/*@(.sh|.inc|.bash|.zsh|.command)" },
+          { glob = ".local/share/cgraf78/**/*@(.sh|.inc|.bash|.zsh|.command)" },
+          { direct = true },
+        },
+        home_globs = { ".local/share/cgraf78/*/bin/*" },
+      },
+    }
+  end,
+}
+LUA
+nvim_bin=${NVIM_TEST_BIN:-$(command -v nvim)}
+DOT_TEST_NVIM_WORKSPACE_FIXTURE="$nvim_workspace_fixture" \
+  "$nvim_bin" --headless --noplugin -u NONE -i NONE \
+  -c "lua package.preload['config.nvim-workspace']=function() return dofile(vim.env.DOT_TEST_NVIM_WORKSPACE_FIXTURE) end; local opts=require('config.nvim-workspace').options(); vim.fn.writefile({vim.json.encode(opts.shell)}, '$home_shell_policy')" \
+  -c 'qa!'
+node - "$root/.vscode/settings.json" "$home_shell_policy" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const shell = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const parts = [...shell.home_files];
+for (const dir of shell.home_dirs) if (dir.glob) parts.push(dir.glob);
+parts.push(...shell.home_globs);
+assert.equal(settings["bashIde.globPattern"], `{${parts.join(",")}}`);
+NODE
+_assert_exit 'VS Code and the inherited Nvim contract share HOME Bash globs' 0 "$?"
+
+if [[ $provider_scope == immutable ]]; then
+  _assert_no_low_level_dispatch "$registry" "$work/low-level-dispatch-violations.txt" \
+    "$agentguard_classifier"
+fi
 
 SLEY_VSCODE_EXTENSION_PATH=${sley_extension%/extension.js} \
   node - "$cap" "$settings" "$fixture" "$repo" <<'NODE'
@@ -302,9 +483,8 @@ try {
 NODE
 _assert_exit 'Provider Sley extension and generated VS Code settings match Checkrun' 0 "$?"
 
-nvim_bin=${NVIM_TEST_BIN:-$(command -v nvim)}
 nvim_command=("$nvim_bin")
-if [[ $provider_scope == hermetic ]]; then
+if [[ -n $checkrun_nvim_fixture ]]; then
   nvim_command=(env DOT_TEST_CHECKRUN_NVIM_ADAPTER="$checkrun_nvim_fixture" "$nvim_bin")
 fi
 "${nvim_command[@]}" --headless --noplugin -u NONE -i NONE \
@@ -327,8 +507,8 @@ _assert_exit 'Actual Nvim projections mirror Checkrun capabilities' 0 "$?"
 format_plan=$work/format-plan.json
 lint_plan=$work/lint-plan.json
 mapfile -t fixture_paths < <(jq -r --arg repo "$repo" '.languages[] | $repo + "/" + .path' "$fixture")
-checkrun plan --json --phase format "${fixture_paths[@]}" >"$format_plan"
-checkrun plan --json --phase lint "${fixture_paths[@]}" >"$lint_plan"
+"$checkrun_command" plan --json --phase format "${fixture_paths[@]}" >"$format_plan"
+"$checkrun_command" plan --json --phase lint "${fixture_paths[@]}" >"$lint_plan"
 python3 - "$format_plan" "$lint_plan" "$fixture" "$repo" <<'PY'
 import json
 import pathlib
@@ -349,6 +529,28 @@ for item in fixture["languages"]:
             assert set(item.get("lintTools", [])) <= tools
 PY
 _assert_exit 'Actual Checkrun plans match shared format and lint expectations' 0 "$?"
+
+if [[ $provider_scope == immutable ]]; then
+  codex_native=$DOT_TEST_AGENTGUARD_ROOT/share/agentguard/integrations/codex/hooks.toml
+  codex_trust=$root/.local/lib/dotfiles/merge-hooks.d/lib/codex/refresh-trust.py
+  codex_unmapped=$(
+    python3 - "$codex_native" "$codex_trust" <<'PY'
+import importlib.util
+import sys
+import tomllib
+
+native, trust = sys.argv[1], sys.argv[2]
+with open(native, "rb") as handle:
+    events = set(tomllib.load(handle).get("hooks", {}))
+spec = importlib.util.spec_from_file_location("codex_refresh_trust", trust)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(",".join(sorted(events - set(module.EVENT_LABELS))))
+PY
+  )
+  _assert_eq 'AgentGuard native Codex events all have trust labels' '' \
+    "$codex_unmapped"
+fi
 _pass "$provider_scope provider projection path completed"
 
 _test_summary

@@ -21,6 +21,68 @@ jobs:
       shellcheck-exclude-codes: SC1091
       shellcheck-inventory-path: .github/shellcheck-files.txt
       test-command: test/run
+      termux-command: test/run --termux
+
+  provider-compatibility:
+    name: Immutable provider compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cgraf78/checkrun
+          ref: 638c4dc8a1012c4552a1c42e412a310b8c175c70
+          path: .provider-checkouts/checkrun
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cgraf78/sley
+          ref: 7cf7b2ed9b3b3f68b22e5ac1d6edcc5f652d7125
+          path: .provider-checkouts/sley
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cgraf78/git-tools
+          ref: 7434dd9072906812084270debc55e63568626463
+          path: .provider-checkouts/git-tools
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cgraf78/agentguard
+          ref: 02ec2f41907cabd344c7fbdf57300dcc969e3a3f
+          path: .provider-checkouts/agentguard
+          persist-credentials: false
+      - name: Install compatibility prerequisites
+        uses: cgraf78/actions/.github/actions/shell-ci-prereqs@de3f6086e36a77eec8ee62f2c9871266e4b5c05c
+        with:
+          matrix-name: Ubuntu
+          profiles: base,jq,python,lua,neovim,zsh,procps,yq
+          setup: none
+      - name: Install pinned Watchexec compatibility artifact
+        shell: bash
+        run: |-
+          set -euo pipefail
+          install_root="$RUNNER_TEMP/watchexec-2.7.0"
+          archive="$RUNNER_TEMP/watchexec-2.7.0.tar.xz"
+          mkdir -p "$install_root"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$archive" \
+            https://github.com/watchexec/watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz
+          tar -xJf "$archive" --strip-components=1 -C "$install_root"
+          printf '%s  %s\n' \
+            2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1 \
+            "$install_root/watchexec" | sha256sum --check --strict
+      - name: Exercise real provider contracts
+        env:
+          DOT_TEST_CHECKRUN_ROOT: ${{ github.workspace }}/.provider-checkouts/checkrun
+          DOT_TEST_SLEY_ROOT: ${{ github.workspace }}/.provider-checkouts/sley
+          DOT_TEST_GIT_TOOLS_ROOT: ${{ github.workspace }}/.provider-checkouts/git-tools
+          DOT_TEST_AGENTGUARD_ROOT: ${{ github.workspace }}/.provider-checkouts/agentguard
+          DOT_TEST_WATCHEXEC_BIN: ${{ runner.temp }}/watchexec-2.7.0/watchexec
+        run: test/run --provider-compatibility
 
   actions-sync:
     name: cgraf78/actions sync

@@ -4,6 +4,49 @@ set -euo pipefail
 repo_root=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
 cd "$repo_root"
 
+mode=${1:-}
+case $mode in
+  '' | --inventory-self-test | --provider-compatibility | --termux) ;;
+  *)
+    echo 'usage: test/run [--provider-compatibility|--termux]' >&2
+    exit 2
+    ;;
+esac
+
+provider_lock_value() {
+  local key=$1
+  sed -n "s/^$key=//p" .github/provider-test.lock
+}
+
+validate_provider_checkout() {
+  local key=$1 root=$2 expected actual
+  expected=$(provider_lock_value "$key")
+  [[ $expected =~ ^[0-9a-f]{40}$ ]] || {
+    echo "invalid provider lock for $key" >&2
+    return 1
+  }
+  [[ $root == /* && -d $root ]] || {
+    echo "DOT_TEST_${key^^}_ROOT must name an absolute checkout" >&2
+    return 1
+  }
+  actual=$(git -C "$root" rev-parse HEAD 2>/dev/null) || return 1
+  [[ $actual == "$expected" ]] || {
+    echo "provider checkout mismatch for $key: expected $expected, got $actual" >&2
+    return 1
+  }
+}
+
+if [[ $mode == --provider-compatibility ]]; then
+  validate_provider_checkout checkrun "${DOT_TEST_CHECKRUN_ROOT:-}"
+  validate_provider_checkout sley "${DOT_TEST_SLEY_ROOT:-}"
+  validate_provider_checkout git_tools "${DOT_TEST_GIT_TOOLS_ROOT:-}"
+  validate_provider_checkout agentguard "${DOT_TEST_AGENTGUARD_ROOT:-}"
+  [[ ${DOT_TEST_WATCHEXEC_BIN:-} == /* && -x ${DOT_TEST_WATCHEXEC_BIN:-} ]] || {
+    echo 'DOT_TEST_WATCHEXEC_BIN must name an absolute executable' >&2
+    exit 1
+  }
+fi
+
 validate_suite_inventory() {
   local root=$1 inventory=$2 source_root=$3 entry suite relative_suite suite_name
   while IFS= read -r entry || [[ -n $entry ]]; do
@@ -81,6 +124,20 @@ git -C "$dot_checkout" checkout --quiet --detach FETCH_HEAD
 [[ $(git -C "$dot_checkout" rev-parse HEAD) == "$dot_sha" ]]
 ln -s "$dot_checkout/bin/dot" "$fixture_home/.local/bin/dot"
 
+if [[ $mode == --termux ]]; then
+  export HOME=$fixture_home
+  export XDG_CONFIG_HOME=$fixture_home/.config
+  export XDG_DATA_HOME=$tmp/xdg-data
+  export XDG_STATE_HOME=$tmp/xdg-state
+  export XDG_CACHE_HOME=$tmp/xdg-cache
+  export XDG_RUNTIME_DIR=$tmp/xdg-runtime
+  export PATH=$fixture_home/.local/bin:$PATH
+  mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
+  dot update >/dev/null
+  "$HOME/.local/lib/dotfiles/tests/android-dev-ci-smoke"
+  exit 0
+fi
+
 # Keep user-local host tools out of capability tests. Resolve only commands
 # supplied by audited system/prerequisite roots into a private fixture bin.
 controlled_bin=$tmp/bin
@@ -88,7 +145,7 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv node od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs yq)
+required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv node od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs yq zsh)
 for command_name in "${required_commands[@]}"; do
   command_path=
   if [[ $command_name == yq && -n ${CAPABILITY_TEST_YQ:-} ]]; then
@@ -117,6 +174,29 @@ for command_name in "${required_commands[@]}"; do
   }
   ln -s "$command_path" "$controlled_bin/$command_name"
 done
+if [[ $mode == --provider-compatibility ]]; then
+  ln -s "$DOT_TEST_CHECKRUN_ROOT/bin/checkrun" "$controlled_bin/checkrun"
+  ln -s "$DOT_TEST_SLEY_ROOT/bin/sley" "$controlled_bin/sley"
+  ln -s "$DOT_TEST_AGENTGUARD_ROOT/bin/agentguard-classify-command" \
+    "$controlled_bin/agentguard-classify-command"
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/cmp && ! -d $command_root/cmp ]]; then
+      ln -s "$command_root/cmp" "$controlled_bin/cmp"
+      break
+    fi
+  done
+  [[ -x $controlled_bin/cmp ]] || {
+    echo 'missing required provider compatibility command: cmp' >&2
+    exit 1
+  }
+  cat >"$controlled_bin/gitleaks" <<'EOF'
+#!/bin/sh
+# Sley owns secret-scanner orchestration. The compatibility lane keeps that
+# provider path real while making the external scanner result deterministic.
+exit 0
+EOF
+  chmod +x "$controlled_bin/gitleaks"
+fi
 cat >"$controlled_bin/hostname" <<'EOF'
 #!/bin/sh
 printf 'capability-ci.invalid\n'
@@ -264,6 +344,16 @@ installed_dev_root=$(
 suite_root=$repo_root/home/.local/lib/dotfiles/tests
 validate_suite_inventory "$suite_root" .github/dot-test-suites.txt "$repo_root" >"$tmp/suites"
 mapfile -t suites <"$tmp/suites"
+
+if [[ $mode == --provider-compatibility ]]; then
+  suites=(
+    dev-shdeps-hooks
+    git-shell-workflows
+    validate-commit-msg
+    vscode-sley
+    workflow-consistency
+  )
+fi
 
 if [[ ${DOTFILES_CAPABILITY_PHASE:-final} == final && ${#suites[@]} -eq 0 ]]; then
   echo 'final capability repository requires at least one focused suite' >&2

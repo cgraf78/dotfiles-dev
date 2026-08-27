@@ -112,6 +112,37 @@ for _upstream_tool in Wilfred/difftastic direnv/direnv jesseduffield/lazygit jdx
       "$REAL_HOME/.config/shdeps/30-dev.conf")"
 done
 
+_watchexec_pkg=$(awk '$1 == "watchexec" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_watchexec_upstream=$(awk '$1 == "watchexec/watchexec" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq 'watchexec: native route uses package management' pkg \
+  "$(awk '{ print $2 }' <<<"$_watchexec_pkg")"
+_assert_contains 'watchexec: native route covers macOS and Android' \
+  'os:macos,os:android' "$_watchexec_pkg"
+_assert_eq 'watchexec: upstream route uses the GitHub updater' github \
+  "$(awk '{ print $2 }' <<<"$_watchexec_upstream")"
+_assert_eq 'watchexec: upstream route checks the public command' watchexec \
+  "$(awk '{ print $3 }' <<<"$_watchexec_upstream")"
+_assert_contains 'watchexec: upstream route excludes macOS and Android' \
+  'os:!macos,os:!android' "$_watchexec_upstream"
+if [[ -n ${DOT_TEST_WATCHEXEC_BIN:-} ]]; then
+  if watchexec_version=$($DOT_TEST_WATCHEXEC_BIN --version 2>&1) &&
+    [[ $watchexec_version == watchexec* ]]; then
+    _pass 'watchexec: pinned CI artifact executes successfully'
+  else
+    _fail 'watchexec: pinned CI artifact executes successfully'
+  fi
+fi
+
+_assert_not_contains 'gstack: dotfiles does not install Bun for skill registration' \
+  'bun                                       custom' \
+  "$(<"$REAL_HOME/.config/shdeps/00-toolchains.conf")"
+_assert_file_missing 'Hive Memory: private store config stays outside the public overlay' \
+  "$REAL_HOME/.config/hive-memory/config.toml"
+_assert_file_missing 'Hive Memory: legacy private launcher stays retired' \
+  "$REAL_HOME/.local/lib/dot/hive-memory/hm-launcher"
+
 echo "=== Python toolchain hook ==="
 
 _python_dep=$(

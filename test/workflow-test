@@ -86,6 +86,7 @@ fi
 required_files=(
   .selene.toml vim.yml
   .github/cgraf78-actions.lock .github/dependabot.yml .github/dot.lock
+  .github/provider-test.lock
   .github/dot-test-suites.txt .github/dotfiles-source.lock
   .github/repository-settings-endpoints.txt .github/shellcheck-files.txt
   .github/workflows/retry-infrastructure.yml .github/workflows/test.yml
@@ -138,6 +139,8 @@ grep -Fx "    - cron: \"$expected_cron\"" "$workflow" >/dev/null || fail 'nightl
 grep -Fx '      setup: none' "$workflow" >/dev/null || fail 'capability CI must use setup: none'
 grep -Fx '      matrix-set: full' "$workflow" >/dev/null || fail 'capability CI must use the full matrix'
 grep -Fx "      profiles: $expected_profiles" "$workflow" >/dev/null || fail 'capability prerequisite profile drifted'
+grep -Fx '      test-command: test/run' "$workflow" >/dev/null || fail 'full suite runner is not wired'
+grep -Fx '      termux-command: test/run --termux' "$workflow" >/dev/null || fail 'Termux smoke command is not explicit'
 grep -Fx '    name: cgraf78/actions sync' "$workflow" >/dev/null || fail 'actions-sync job is missing'
 grep -Fx '          persist-credentials: false' "$workflow" >/dev/null || fail 'checkout credentials must not persist'
 if grep -F 'setup: dotfiles' "$workflow" >/dev/null; then fail 'overlay CI must not bootstrap the base dotfiles repository'; fi
@@ -157,9 +160,31 @@ grep -F 'wait_github_state 120 3' test/workflow-test >/dev/null || fail 'remote 
 grep -F "infra-retry@$actions_sha" .github/workflows/retry-infrastructure.yml >/dev/null || fail 'retry action ref is missing'
 grep -F 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' "$workflow" >/dev/null || fail 'checkout pin drifted'
 grep -F 'android-dev-ci-smoke' test/run >/dev/null || fail 'Termux dev smoke test is not wired into the runner'
+grep -F 'for dependency in difftastic direnv lazygit mise yq watchexec; do' \
+  home/.local/lib/dotfiles/tests/android-dev-ci-smoke >/dev/null ||
+  fail 'Termux smoke lacks substantive watchexec policy coverage'
 if grep -E '^required_commands=.*(^|[[:space:]])cmp([[:space:]]|$)' test/run >/dev/null; then
   fail 'controlled runtime PATH must not require cmp after bootstrap validation'
 fi
+
+expected_provider_lock=$'version=1\ncheckrun=638c4dc8a1012c4552a1c42e412a310b8c175c70\nsley=7cf7b2ed9b3b3f68b22e5ac1d6edcc5f652d7125\ngit_tools=7434dd9072906812084270debc55e63568626463\nagentguard=02ec2f41907cabd344c7fbdf57300dcc969e3a3f'
+[[ $(<.github/provider-test.lock) == "$expected_provider_lock" ]] ||
+  fail 'provider compatibility lock is not canonical'
+grep -Fx '  provider-compatibility:' "$workflow" >/dev/null || fail 'provider compatibility job is missing'
+grep -Fx '        run: test/run --provider-compatibility' "$workflow" >/dev/null ||
+  fail 'provider compatibility runner is not wired'
+grep -F 'watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz' \
+  "$workflow" >/dev/null || fail 'Watchexec compatibility artifact is not version-pinned'
+grep -F '2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1' \
+  "$workflow" >/dev/null || fail 'Watchexec compatibility checksum drifted'
+while IFS='=' read -r provider sha; do
+  case $provider in version) continue ;; esac
+  repository=${provider//_/-}
+  grep -F "          repository: cgraf78/$repository" "$workflow" >/dev/null ||
+    fail "provider checkout is missing: $repository"
+  grep -F "          ref: $sha" "$workflow" >/dev/null ||
+    fail "provider checkout pin drifted: $repository"
+done <.github/provider-test.lock
 
 declare -a expected_shell_files=()
 declare -a actual_shell_files=()
