@@ -199,16 +199,44 @@ api_input() {
   printf '%s\n' "$payload" | gh api --method "$method" "$path" --input - >/dev/null
 }
 
+repository_payload() {
+  local body=$1 description=$2
+  jq -c --arg description "$description" \
+    '{description:$description,visibility,default_branch,has_issues,has_projects,has_wiki,has_discussions,is_template,web_commit_signoff_required,allow_merge_commit,allow_squash_merge,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,allow_update_branch,use_squash_pr_title_as_default,squash_merge_commit_title,squash_merge_commit_message,archived,security_and_analysis:(.security_and_analysis | with_entries(select(.key == "secret_scanning" or .key == "secret_scanning_push_protection" or .key == "secret_scanning_non_provider_patterns" or .key == "secret_scanning_validity_checks")))}' \
+    "$body"
+}
+
+protection_payload() {
+  local body=$1
+  jq -c \
+    '{required_status_checks:(.required_status_checks | if . == null then null else {strict,checks} end),enforce_admins:.enforce_admins.enabled,required_pull_request_reviews:(.required_pull_request_reviews | if . == null then null else {dismiss_stale_reviews,require_code_owner_reviews,required_approving_review_count,require_last_push_approval} end),restrictions:null,required_linear_history:.required_linear_history.enabled,allow_force_pushes:.allow_force_pushes.enabled,allow_deletions:.allow_deletions.enabled,block_creations:.block_creations.enabled,required_conversation_resolution:.required_conversation_resolution.enabled,lock_branch:.lock_branch.enabled,allow_fork_syncing:.allow_fork_syncing.enabled}' \
+    "$body"
+}
+
+list_ruleset_ids() {
+  local target=$1
+  gh api --paginate --slurp "repos/$target/rulesets" |
+    jq -r 'flatten[]?.id'
+}
+
+list_environment_names() {
+  local target=$1
+  gh api --paginate --slurp "repos/$target/environments" |
+    jq -r 'map(.environments // []) | flatten | .[]?.name'
+}
+
 apply_one() {
   local family=$1 target=$2 source_dir=$3 apply_method=$4 apply_path=$5
   local path status body payload id name
   status=$(<"$source_dir/$family.status")
   body=$source_dir/$family.body
-  render_path "$apply_path" "$target"
-  path=$REPLY
+  if [[ $family != environments ]]; then
+    render_path "$apply_path" "$target"
+    path=$REPLY
+  fi
   case $family in
     repository)
-      payload=$(jq -c --arg description "Public ${target#cgraf78/dotfiles-} capability overlay for cgraf78/dotfiles." '{description:$description,visibility,default_branch,has_issues,has_projects,has_wiki,has_discussions,is_template,allow_forking,web_commit_signoff_required,allow_merge_commit,allow_squash_merge,allow_rebase_merge,allow_auto_merge,delete_branch_on_merge,allow_update_branch,use_squash_pr_title_as_default,squash_merge_commit_title,squash_merge_commit_message,archived,security_and_analysis:(.security_and_analysis | with_entries(select(.key == "secret_scanning" or .key == "secret_scanning_push_protection" or .key == "secret_scanning_non_provider_patterns" or .key == "secret_scanning_validity_checks")))}' "$body")
+      payload=$(repository_payload "$body" "Public ${target#cgraf78/dotfiles-} capability overlay for cgraf78/dotfiles.")
       api_input "$apply_method" "$path" "$payload"
       ;;
     actions_permissions | actions_workflow) api_input "$apply_method" "$path" "$(jq -c . "$body")" ;;
@@ -217,10 +245,10 @@ apply_one() {
       ;;
     rulesets)
       [[ $(jq 'flatten | length' "$body") == 0 ]] || die 'non-empty source rulesets require reviewed synchronization support'
-      while IFS= read -r id; do gh api --method DELETE "repos/$target/rulesets/$id" >/dev/null; done < <(gh api --paginate --slurp "repos/$target/rulesets" --jq 'flatten[]?.id')
+      while IFS= read -r id; do gh api --method DELETE "repos/$target/rulesets/$id" >/dev/null; done < <(list_ruleset_ids "$target")
       ;;
     main_protection)
-      payload=$(jq -c '{required_status_checks:(.required_status_checks | if . == null then null else {strict,checks} end),enforce_admins:.enforce_admins.enabled,required_pull_request_reviews:(.required_pull_request_reviews | if . == null then null else {dismissal_restrictions:{},dismiss_stale_reviews,require_code_owner_reviews,required_approving_review_count,require_last_push_approval} end),restrictions:null,required_linear_history:.required_linear_history.enabled,allow_force_pushes:.allow_force_pushes.enabled,allow_deletions:.allow_deletions.enabled,block_creations:.block_creations.enabled,required_conversation_resolution:.required_conversation_resolution.enabled,lock_branch:.lock_branch.enabled,allow_fork_syncing:.allow_fork_syncing.enabled}' "$body")
+      payload=$(protection_payload "$body")
       api_input "$apply_method" "$path" "$payload"
       ;;
     topics) api_input "$apply_method" "$path" "$(jq -c '{names}' "$body")" ;;
@@ -253,7 +281,7 @@ apply_one() {
         [[ $name =~ ^[A-Za-z0-9._-]+$ ]] || die 'unsafe target environment name'
         render_path "$apply_path" "$target" "$name"
         gh api --method DELETE "$REPLY" >/dev/null
-      done < <(gh api --paginate "repos/$target/environments" --jq '.environments[]?.name')
+      done < <(list_environment_names "$target")
       ;;
   esac
 }
@@ -278,7 +306,7 @@ apply_policy() {
 }
 
 self_test() {
-  local tmp body
+  local tmp body payload source_dir
   validate_manifest
   repo_allowed cgraf78/dotfiles
   target_allowed cgraf78/dotfiles-nvim
@@ -303,6 +331,33 @@ self_test() {
   if source_state_allowed automated_security_fixes 200 forbidden "$body"; then
     die 'preflight accepted a malformed enabled value'
   fi
+
+  printf '%s\n' '{"allow_forking":true,"visibility":"public","default_branch":"main","has_issues":true,"has_projects":false,"has_wiki":false,"has_discussions":false,"is_template":false,"web_commit_signoff_required":false,"allow_merge_commit":false,"allow_squash_merge":true,"allow_rebase_merge":true,"allow_auto_merge":false,"delete_branch_on_merge":true,"allow_update_branch":true,"use_squash_pr_title_as_default":false,"squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"COMMIT_MESSAGES","archived":false,"security_and_analysis":{}}' >"$body"
+  payload=$(repository_payload "$body" 'Public dev capability overlay for cgraf78/dotfiles.')
+  jq -e 'has("allow_forking") | not' <<<"$payload" >/dev/null ||
+    die 'repository mutation payload includes personal-repository allow_forking'
+
+  printf '%s\n' '{"required_status_checks":{"strict":true,"checks":[]},"enforce_admins":{"enabled":true},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1,"require_last_push_approval":true},"required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},"block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":true},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}' >"$body"
+  payload=$(protection_payload "$body")
+  jq -e '.required_pull_request_reviews | has("dismissal_restrictions") | not' <<<"$payload" >/dev/null ||
+    die 'branch-protection payload includes unsupported dismissal restrictions'
+
+  gh() {
+    case $* in
+      *'/rulesets'*) printf '%s\n' '[[{"id":17}],[{"id":23}]]' ;;
+      *'/environments'*) printf '%s\n' '[]' ;;
+      *) die "unexpected self-test gh call: $*" ;;
+    esac
+  }
+  [[ $(list_ruleset_ids cgraf78/dotfiles-dev | paste -sd, -) == 17,23 ]] ||
+    die 'paginated ruleset IDs were not flattened'
+
+  source_dir=$(mktemp -d)
+  trap 'rm -f -- "$tmp" "$body"; rm -rf -- "$source_dir"' RETURN
+  printf '200\n' >"$source_dir/environments.status"
+  printf '{"environments":[]}\n' >"$source_dir/environments.body"
+  apply_one environments cgraf78/dotfiles-dev "$source_dir" DELETE_UNEXPECTED \
+    'repos/{repo}/environments/{environment_name}'
 }
 
 case ${1:-} in
