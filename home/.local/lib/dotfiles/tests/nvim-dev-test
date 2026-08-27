@@ -542,7 +542,8 @@ result=$(_nvim_vscode_keys "
   print(table.concat(vim.fn.readfile(path), '|'))
   vim.fn.delete(path)
 ")
-expected="$(printf '%s/%s\nhome-relative' "$HOME" "$NVIM_CTRL_S_RELATIVE_NAME")"
+expected="$(printf '%s/%s\nhome-relative' "$(_test_realpath "$HOME")" \
+  "$NVIM_CTRL_S_RELATIVE_NAME")"
 _assert_eq_realpath_lines "save: relative filename resolves under HOME" "$expected" "$result"
 
 NVIM_CTRL_S_ABSOLUTE_TMP=$(_tmpdir)

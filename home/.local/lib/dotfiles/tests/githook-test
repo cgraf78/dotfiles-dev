@@ -229,8 +229,9 @@ SLEY_COMMIT_MESSAGE_TEMPLATE="ambient-template" \
   "$HOOK_DIR/commit-msg" "$message_file"
 commit_rc=$?
 _assert_exit "commit-msg activation succeeds" 0 "$commit_rc"
-_assert_contains "commit-msg selects dotfiles' advanced validator" \
-  "validator=$default_validator" "$(cat "$provider_log")"
+actual_validator=$(sed -n 's/^validator=//p' "$provider_log")
+_assert_eq "commit-msg selects dotfiles' advanced validator" \
+  "$(_test_realpath "$default_validator")" "$(_test_realpath "$actual_validator")"
 _assert_contains "commit-msg identifies the Git message profile" \
   "format=git" "$(cat "$provider_log")"
 _assert_contains "commit-msg forwards the message path unchanged" \

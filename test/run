@@ -36,6 +36,15 @@ validate_provider_checkout() {
   }
 }
 
+nvim_version_supported() {
+  local version=${1:-} major minor patch
+  [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]] || return 1
+  major=$((10#${BASH_REMATCH[1]}))
+  minor=$((10#${BASH_REMATCH[2]}))
+  patch=$((10#${BASH_REMATCH[3]}))
+  ((major > 0 || minor > 11 || minor == 11 && patch >= 2))
+}
+
 if [[ $mode == --provider-compatibility ]]; then
   validate_provider_checkout checkrun "${DOT_TEST_CHECKRUN_ROOT:-}"
   validate_provider_checkout sley "${DOT_TEST_SLEY_ROOT:-}"
@@ -51,6 +60,10 @@ if [[ $mode == --provider-compatibility ]]; then
   }
   [[ ${CAPABILITY_TEST_NODE:-} == /* && -x ${CAPABILITY_TEST_NODE:-} ]] || {
     echo 'provider compatibility requires an explicit Node executable' >&2
+    exit 1
+  }
+  [[ ${CAPABILITY_TEST_NVIM:-} == /* && -x ${CAPABILITY_TEST_NVIM:-} ]] || {
+    echo 'provider compatibility requires an explicit Neovim executable' >&2
     exit 1
   }
 fi
@@ -97,6 +110,14 @@ inventory_self_test() {
   rm "$root/unlisted-test"
   output=$(validate_suite_inventory "$root" "$inventory" "$tmp/repo")
   [[ $output == declared ]]
+  nvim_version_supported 0.11.2
+  nvim_version_supported 0.11.10
+  nvim_version_supported 0.12.0
+  nvim_version_supported 0.20.0
+  nvim_version_supported 1.0.0
+  nvim_version_supported 10.0.0
+  if nvim_version_supported 0.11.1; then return 1; fi
+  if nvim_version_supported unknown; then return 1; fi
 }
 
 if [[ ${1:-} == --inventory-self-test ]]; then
@@ -341,6 +362,13 @@ fi
   echo 'missing required fixture command: nvim' >&2
   exit 1
 }
+nvim_version=$($nvim_path --version 2>/dev/null | sed -n '1s/^NVIM v//p')
+nvim_supported=false
+if nvim_version_supported "$nvim_version"; then nvim_supported=true; fi
+if [[ $mode == --provider-compatibility && $nvim_supported != true ]]; then
+  echo "provider compatibility requires Neovim 0.11.2 or newer, got ${nvim_version:-unknown}" >&2
+  exit 1
+fi
 ln -s "$nvim_path" "$controlled_bin/nvim"
 find "$repo_root/home" -type f -print | LC_ALL=C sort >"$tmp/overlay-payloads"
 linked_source=
@@ -377,13 +405,24 @@ if [[ $mode == --provider-compatibility ]]; then
     dev-merges
     dev-shdeps-hooks
     git-shell-workflows
+    nvim-dev
     validate-commit-msg
     vscode-sley
     workflow-consistency
   )
   DOT_TEST_YQ_MERGE_BLOCK_MARKER=$tmp/yq-merge-block.executed
   DOT_TEST_NODE_PROJECTION_MARKER=$tmp/node-projection.executed
+  DOT_TEST_VSCODE_HISTORY_MARKER=$tmp/vscode-history.executed
   export DOT_TEST_YQ_MERGE_BLOCK_MARKER DOT_TEST_NODE_PROJECTION_MARKER
+  export DOT_TEST_VSCODE_HISTORY_MARKER
+elif [[ $nvim_supported != true ]]; then
+  printf 'SKIP: nvim-dev suite requires Neovim 0.11.2 or newer (found %s)\n' \
+    "${nvim_version:-unknown}"
+  filtered_suites=()
+  for suite in "${suites[@]}"; do
+    [[ $suite == nvim-dev ]] || filtered_suites+=("$suite")
+  done
+  suites=("${filtered_suites[@]}")
 fi
 
 if [[ ${DOTFILES_CAPABILITY_PHASE:-final} == final && ${#suites[@]} -eq 0 ]]; then
@@ -403,6 +442,11 @@ if [[ $mode == --provider-compatibility ]]; then
   [[ -f $DOT_TEST_NODE_PROJECTION_MARKER &&
     $(<"$DOT_TEST_NODE_PROJECTION_MARKER") == executed ]] || {
     echo 'provider compatibility did not execute the real-Node projection block' >&2
+    exit 1
+  }
+  [[ -f $DOT_TEST_VSCODE_HISTORY_MARKER &&
+    $(<"$DOT_TEST_VSCODE_HISTORY_MARKER") == executed ]] || {
+    echo 'provider compatibility did not execute the live retirement-history guard' >&2
     exit 1
   }
 fi

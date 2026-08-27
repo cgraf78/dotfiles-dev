@@ -1818,6 +1818,10 @@ JSON
       fi
 
       if [[ -z "$base" ]]; then
+        if [[ $(git -C "$git_root" rev-parse --is-shallow-repository 2>/dev/null) == true ]]; then
+          _pass "vscode keybindings: dynamic retirement history guard deferred to full-history CI"
+          return
+        fi
         _fail "vscode keybindings: retirement history guard requires a Git base"
         return
       fi
@@ -1930,6 +1934,9 @@ JSON
         '[]' "$(jq -c '.legacy_proof_missing' "$report")"
       _assert_eq "vscode keybindings: retirement proof labels stay allowlisted" \
         '[]' "$(jq -c '.invalid_proofs' "$report")"
+      if [[ -n ${DOT_TEST_VSCODE_HISTORY_MARKER:-} ]]; then
+        printf 'executed\n' >"$DOT_TEST_VSCODE_HISTORY_MARKER"
+      fi
     }
 
     _assert_vscode_retirement_history "$REAL_HOME"
@@ -3860,33 +3867,29 @@ JSON
     vscode_inaccessible_remote_home=$(_tmpdir)
     mkdir -p "$vscode_inaccessible_remote_home/.cursor-server"
     if ((EUID == 0)); then
-      chown 1 "$vscode_inaccessible_remote_home/.cursor-server"
+      echo "  SKIP: vscode inaccessible server-root permission fixture (running as root)"
     else
       chmod 000 "$vscode_inaccessible_remote_home/.cursor-server"
-    fi
-    vscode_inaccessible_remote_dirs=""
-    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
-    vscode_inaccessible_remote_dirs=$(env \
-      HOME="$vscode_inaccessible_remote_home" REAL_HOME="$REAL_HOME" \
-      PATH="$vscode_bin:$PATH" DOT_TEST_MV_LOG="$vscode_mv_log" \
-      DOT_TEST_VSCODE_HOSTNAME="inaccessible-remote-host" bash -c '
-      set -euo pipefail
-      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
-      dot_hook_platform_match() { return 1; }
-      uname() { printf "Linux\n"; }
-      _log() { :; }
-      _warn() { printf "%s\n" "$*" >&2; }
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
-      _vscode_remote_settings_dirs
-    ')
-    if ((EUID == 0)); then
-      chown 0 "$vscode_inaccessible_remote_home/.cursor-server"
-    else
+      vscode_inaccessible_remote_dirs=""
+      # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+      vscode_inaccessible_remote_dirs=$(env \
+        HOME="$vscode_inaccessible_remote_home" REAL_HOME="$REAL_HOME" \
+        PATH="$vscode_bin:$PATH" DOT_TEST_MV_LOG="$vscode_mv_log" \
+        DOT_TEST_VSCODE_HOSTNAME="inaccessible-remote-host" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        dot_hook_platform_match() { return 1; }
+        uname() { printf "Linux\n"; }
+        _log() { :; }
+        _warn() { printf "%s\n" "$*" >&2; }
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        _vscode_remote_settings_dirs
+      ')
       chmod 700 "$vscode_inaccessible_remote_home/.cursor-server"
+      _assert_eq "vscode remote settings: inaccessible server root is not discovered" \
+        "" "$vscode_inaccessible_remote_dirs"
     fi
-    _assert_eq "vscode remote settings: inaccessible server root is not discovered" \
-      "" "$vscode_inaccessible_remote_dirs"
 
     vscode_nosley_extensions=$(jq -c . "$vscode_home/.vscode-nosley/extensions/extensions.json")
     _assert_not_contains "vscode sley: no-sley variant unregisters formatter extension" \

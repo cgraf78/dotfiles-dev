@@ -192,9 +192,33 @@ grep -F 'provider compatibility did not execute the real-yq merge block' \
   test/run >/dev/null || fail 'provider compatibility does not enforce real-yq merge coverage'
 grep -F 'provider compatibility did not execute the real-Node projection block' \
   test/run >/dev/null || fail 'provider compatibility does not enforce real-Node projection coverage'
+grep -F 'provider compatibility did not execute the live retirement-history guard' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce live history coverage'
 # shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
 grep -F 'CAPABILITY_TEST_NODE: ${{ runner.temp }}/node-provider' "$workflow" >/dev/null ||
   fail 'provider compatibility does not receive an explicit Node runtime'
+primary_checkout=$'      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          fetch-depth: 0\n          persist-credentials: false'
+grep -F "$primary_checkout" "$workflow" >/dev/null ||
+  fail 'provider compatibility primary checkout does not fetch development history'
+grep -F 'neovim/releases/download/v0.12.2/nvim-linux-x86_64.tar.gz' "$workflow" >/dev/null ||
+  fail 'provider compatibility Neovim is not version-pinned'
+grep -F 'fe333ad1dddfeb4b15169859287369207443477288737d4b94c07df7647ae21e' \
+  "$workflow" >/dev/null || fail 'provider compatibility Neovim checksum drifted'
+grep -F '31cf85945cb600d96cdf69f88bc68bec814acbff50863c5546adef3a1bcef260' \
+  "$workflow" >/dev/null || fail 'provider compatibility Neovim archive checksum drifted'
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+nvim_archive_verify_line=$(grep -nF '            "$archive" | sha256sum --check --strict' \
+  "$workflow" | head -1 | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+nvim_extract_line=$(grep -nF '          tar -xzf "$archive"' "$workflow" | cut -d: -f1)
+[[ -n $nvim_archive_verify_line && -n $nvim_extract_line &&
+  $nvim_archive_verify_line -lt $nvim_extract_line ]] ||
+  fail 'provider compatibility Neovim archive is not verified before extraction'
+# shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
+grep -F 'CAPABILITY_TEST_NVIM: ${{ runner.temp }}/neovim-0.12.2/bin/nvim' \
+  "$workflow" >/dev/null || fail 'provider compatibility does not receive explicit Neovim'
+grep -F '    nvim-dev' test/run >/dev/null ||
+  fail 'provider compatibility does not execute nvim-dev coverage'
 while IFS='=' read -r provider sha; do
   case $provider in version) continue ;; esac
   repository=${provider//_/-}
