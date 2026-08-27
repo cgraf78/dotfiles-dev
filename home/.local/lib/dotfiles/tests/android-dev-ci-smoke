@@ -3,6 +3,7 @@ set -euo pipefail
 
 for path in \
   "$HOME/.config/git/config" \
+  "$HOME/.config/shdeps/00-toolchains.conf" \
   "$HOME/.config/shdeps/30-dev.conf" \
   "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"; do
   [[ -f $path ]] || {
@@ -10,5 +11,48 @@ for path in \
     exit 1
   }
 done
+
+toolchains=$HOME/.config/shdeps/00-toolchains.conf
+deps=$HOME/.config/shdeps/30-dev.conf
+
+awk '$1 == "cargo" && $2 == "pkg" && $0 ~ /android:rust/ { found = 1 }
+     END { exit !found }' "$toolchains" || {
+  echo 'android-dev-ci-smoke: Rust toolchain lacks Android package mapping' >&2
+  exit 1
+}
+awk '$1 == "uv" && $2 == "pkg" && $0 ~ /os:macos,os:android/ { found = 1 }
+     END { exit !found }' "$toolchains" || {
+  echo 'android-dev-ci-smoke: uv lacks Android package policy' >&2
+  exit 1
+}
+for dependency in ast-grep/ast-grep duckdb/duckdb cgraf78/hive-memory; do
+  awk -v dependency="$dependency" \
+    '$1 == dependency && $0 ~ /os:!android/ { found = 1 }
+     END { exit !found }' "$deps" || {
+    echo "android-dev-ci-smoke: $dependency is not excluded on Android" >&2
+    exit 1
+  }
+done
+for dependency in difftastic direnv lazygit mise yq watchexec; do
+  awk -v dependency="$dependency" \
+    '$1 == dependency && $2 == "pkg" && $0 ~ /os:macos,os:android/ { found = 1 }
+     END { exit !found }' "$deps" || {
+    echo "android-dev-ci-smoke: $dependency lacks native Android policy" >&2
+    exit 1
+  }
+done
+for dependency in direnv/direnv jesseduffield/lazygit jdx/mise mikefarah/yq watchexec/watchexec; do
+  awk -v dependency="$dependency" \
+    '$1 == dependency && $0 ~ /os:!android/ { found = 1 }
+     END { exit !found }' "$deps" || {
+    echo "android-dev-ci-smoke: $dependency upstream route is not excluded on Android" >&2
+    exit 1
+  }
+done
+
+if command -v neocmakelsp >/dev/null || command -v superhtml >/dev/null; then
+  echo 'android-dev-ci-smoke: unsupported desktop LSP providers were installed' >&2
+  exit 1
+fi
 
 printf 'android-dev-ci-smoke: development payload present\n'

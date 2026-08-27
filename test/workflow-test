@@ -50,7 +50,7 @@ case $repo_name in
   dotfiles-dev)
     expected_cron='37 9 * * *'
     descriptor=30-dev.conf
-    expected_profiles=base,jq,python,lua,neovim,zsh,procps
+    expected_profiles=base,jq,python,lua,neovim,zsh,procps,yq
     ;;
   *) fail "unexpected repository name: $repo_name" ;;
 esac

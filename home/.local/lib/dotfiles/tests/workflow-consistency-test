@@ -1,18 +1,94 @@
 #!/usr/bin/env bash
-# Cross-surface consistency for dev-owned Checkrun and Sley integrations.
+# workflow-consistency-test - exact dev-owned editor/workflow projections.
 set -euo pipefail
 export NO_COLOR=1
 . "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
 
-echo '=== Development workflow consistency ==='
-git_config=$(<"$HOME/.config/git/config")
-deps=$(<"$HOME/.config/shdeps/30-dev.conf")
-vscode_local=$(<"$HOME/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv")
+owner_root=$(_dev_repo_root)
+root=$owner_root/home
+metadata=$root/.config/nvim/checkrun-editor-metadata.json
+associations=$root/.config/checkrun/associations.json
+vscode_settings=$root/.config/dot/merge-hooks.d/vscode/settings.d/10-settings.json
+vscode_extensions=$root/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv
+language_policy=$root/.config/nvim/lua/config/language-policy.lua
+checkrun_adapter=$root/.config/nvim/lua/config/checkrun-nvim.lua
+formatting_plugin=$root/.config/nvim/lua/plugins/formatting.lua
+linting_plugin=$root/.config/nvim/lua/plugins/linting.lua
+git_config=$root/.config/git/config
+deps=$root/.config/shdeps/30-dev.conf
 
-_assert_contains 'Git activates the dev-owned hook directory' '.local/lib/dotfiles/git-hooks' "$git_config"
-_assert_contains 'Sley provider is installed by dev' 'cgraf78/sley' "$deps"
-_assert_contains 'Checkrun provider is installed by dev' 'cgraf78/checkrun' "$deps"
-_assert_contains 'VS Code activates the Sley provider asset' 'share/sley/vscode' "$vscode_local"
-_assert_file_exists 'Nvim Checkrun integration is dev-owned' "$HOME/.config/nvim/lua/config/checkrun-nvim.lua"
-_assert_file_exists 'Nvim Sley integration is dev-owned' "$HOME/.config/nvim/lua/config/sley-nvim.lua"
+echo '=== Development workflow consistency ==='
+_assert_file_exists 'Checked Checkrun editor metadata is dev-owned' "$metadata"
+_assert_file_exists 'Checkrun schema association policy is dev-owned' "$associations"
+_assert_contains 'Git activates the dev-owned hook directory' '.local/lib/dotfiles/git-hooks' "$(<"$git_config")"
+_assert_contains 'Sley provider is installed by dev' 'cgraf78/sley' "$(<"$deps")"
+_assert_contains 'Checkrun provider is installed by dev' 'cgraf78/checkrun' "$(<"$deps")"
+_assert_contains 'VS Code activates the provider-owned Sley extension' 'share/sley/vscode' "$(<"$vscode_extensions")"
+_assert_contains 'Nvim resolves Checkrun through the dependency boundary' 'cgraf78/checkrun' "$(<"$checkrun_adapter")"
+_assert_contains 'Nvim derives formatter policy from Checkrun capabilities' 'sley_formatters_by_ft' "$(<"$language_policy")"
+_assert_contains 'Nvim derives linter policy from Checkrun capabilities' 'sley_linters_by_ft' "$(<"$language_policy")"
+_assert_contains 'Nvim formatter consumes the shared language policy' 'config.language-policy' "$(<"$formatting_plugin")"
+_assert_contains 'Nvim linter consumes the shared language policy' 'config.language-policy' "$(<"$linting_plugin")"
+_assert_contains 'VS Code keeps generated Checkrun settings out of sync' 'evenBetterToml.schema.associations' "$(<"$vscode_settings")"
+_assert_contains 'VS Code excludes dependency trees from Sley diagnostics' '**/node_modules/**' "$(<"$vscode_settings")"
+
+projection_output=$(
+  python3 - "$metadata" "$associations" "$vscode_settings" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+metadata = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+associations = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+settings = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+
+assert metadata["version"] == 1
+cap = metadata["capabilities"]
+assert cap["version"] == 2
+for phase in ("format", "lint"):
+    values = cap["filetypes"][phase]
+    assert values == sorted(set(values)), (phase, values)
+    assert {"bash", "lua", "python", "rust"}.issubset(values), (phase, values)
+
+vscode_ids = cap["editorLanguageIds"]["vscode"]
+assert vscode_ids["bash"] == ["shellscript"]
+assert vscode_ids["zsh"] == ["shellscript"]
+assert vscode_ids["starlark"] == ["starlark", "bzl"]
+assert vscode_ids["sshconfig"] == ["ssh_config"]
+
+custom = cap["filetypes"]["custom"]
+assert custom["filename"]["CMakeLists.txt"] == "cmake"
+assert custom["filename"]["Dockerfile"] == "dockerfile"
+assert custom["extension"]["tsx"] == "typescriptreact"
+assert custom["extension"]["hgrc"] == "ini"
+assert any(item == {"pattern": "Dockerfile.*", "filetype": "dockerfile"}
+           for item in custom["patterns"])
+
+items = associations["associations"]
+names = [item["name"] for item in items]
+assert len(names) == len(set(names))
+assert all(item.get("matches") for item in items)
+assert all(isinstance(item.get("enforce", True), bool) for item in items)
+required = {
+    "Checkrun schema association policy",
+    "Sley verify registry",
+    "GitHub CLI config layers",
+    "Claude Code settings layers",
+    "mise global config",
+}
+assert required.issubset(names), sorted(required - set(names))
+
+ignored = settings["settingsSync.ignoredSettings"]
+assert ignored == sorted(set(ignored))
+assert {
+    "evenBetterToml.schema.associations",
+    "json.schemas",
+    "yaml.schemas",
+}.issubset(ignored)
+print(f"format={len(cap['filetypes']['format'])} lint={len(cap['filetypes']['lint'])} associations={len(items)}")
+PY
+)
+_assert_exit 'Checkrun metadata and editor projections satisfy exact policy invariants' 0 "$?"
+_pass "Projection inventory: $projection_output"
+
 _test_summary
