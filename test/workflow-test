@@ -3,7 +3,21 @@ set -euo pipefail
 
 repo_root=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
 cd "$repo_root"
-repo_name=${repo_root##*/}
+
+resolve_repo_name() {
+  local root=$1 github_repository=${2:-}
+  if [[ -n $github_repository ]]; then
+    printf '%s\n' "${github_repository##*/}"
+  else
+    printf '%s\n' "${root##*/}"
+  fi
+}
+
+[[ $(resolve_repo_name /tmp/project cgraf78/dotfiles-dev) == dotfiles-dev ]] || {
+  printf 'workflow-test: GitHub repository identity did not override checkout basename\n' >&2
+  exit 1
+}
+repo_name=$(resolve_repo_name "$repo_root" "${GITHUB_REPOSITORY:-}")
 
 fail() {
   printf 'workflow-test: %s\n' "$*" >&2
@@ -78,7 +92,7 @@ single_sha() {
   [[ $value == "$expected" ]] || fail "$file contains an unexpected commit SHA"
 }
 single_sha .github/cgraf78-actions.lock de3f6086e36a77eec8ee62f2c9871266e4b5c05c
-single_sha .github/dot.lock dfe976f4962389ee2c2bfe107a8bcfc34660469d
+single_sha .github/dot.lock 99b651bdea9707af03e3b004eb57371226de1469
 
 expected_source=$'version=1\nrepository=cgraf78/dotfiles\ncommit=703e1aeea7286fccec56f65fa4314b8d57b46469\nlicense_path=.github/LICENSE'
 [[ $(<.github/dotfiles-source.lock) == "$expected_source" ]] || fail 'source lock is not canonical'
@@ -106,7 +120,7 @@ grep -Fx 'name: Tests' "$workflow" >/dev/null || fail 'test workflow name drifte
 grep -Fx "    - cron: \"$expected_cron\"" "$workflow" >/dev/null || fail 'nightly schedule drifted'
 grep -Fx '      setup: none' "$workflow" >/dev/null || fail 'capability CI must use setup: none'
 grep -Fx '      matrix-set: full' "$workflow" >/dev/null || fail 'capability CI must use the full matrix'
-grep -Fx '      profiles: base,jq,python' "$workflow" >/dev/null || fail 'bootstrap prerequisite profile drifted'
+grep -Fx '      profiles: base,jq,python,procps' "$workflow" >/dev/null || fail 'bootstrap prerequisite profile drifted'
 grep -Fx '    name: cgraf78/actions sync' "$workflow" >/dev/null || fail 'actions-sync job is missing'
 grep -Fx '          persist-credentials: false' "$workflow" >/dev/null || fail 'checkout credentials must not persist'
 if grep -F 'setup: dotfiles' "$workflow" >/dev/null; then fail 'overlay CI must not bootstrap the base dotfiles repository'; fi
@@ -125,6 +139,9 @@ grep -Fx '        run: test/workflow-test --remote' "$workflow" >/dev/null || fa
 grep -F 'wait_github_state 120 3' test/workflow-test >/dev/null || fail 'remote checks must use bounded polling'
 grep -F "infra-retry@$actions_sha" .github/workflows/retry-infrastructure.yml >/dev/null || fail 'retry action ref is missing'
 grep -F 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' "$workflow" >/dev/null || fail 'checkout pin drifted'
+if grep -E '^required_commands=.*(^|[[:space:]])cmp([[:space:]]|$)' test/run >/dev/null; then
+  fail 'controlled runtime PATH must not require cmp after bootstrap validation'
+fi
 
 expected_shell_files=(test/run test/workflow-test test/lib/capability-fixture.sh test/lib/repository-settings.sh test/lib/wait-github-state.sh)
 declare -a actual_shell_files=()

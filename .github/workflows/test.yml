@@ -17,7 +17,7 @@ jobs:
     with:
       setup: none
       matrix-set: full
-      profiles: base,jq,python
+      profiles: base,jq,python,procps
       shellcheck-exclude-codes: SC1091
       shellcheck-inventory-path: .github/shellcheck-files.txt
       test-command: test/run

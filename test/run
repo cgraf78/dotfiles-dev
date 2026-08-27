@@ -88,7 +88,7 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cmp cut date dirname env find git grep head id jq ln mkdir mkfifo mktemp mv od ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee tr uname wc xargs)
+required_commands=(awk bash basename cat chmod cut date dirname env find git grep head id jq ln mkdir mkfifo mktemp mv od ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee tr uname wc xargs)
 for command_name in "${required_commands[@]}"; do
   command_path=
   for command_root in "${system_roots[@]}"; do
