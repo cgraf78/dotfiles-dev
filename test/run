@@ -149,6 +149,7 @@ DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
 GIT="git --git-dir=$DOTFILES --work-tree=$HOME"
 _dr_is_dotfiles_checkout() { return 1; }
 EOF
+chmod 600 "$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh"
 export DOT_TEST_DOCTOR_EXTENSION_HOME=$doctor_fixture_home
 
 if git -C "$HOME" rev-parse --show-toplevel >/dev/null 2>&1; then

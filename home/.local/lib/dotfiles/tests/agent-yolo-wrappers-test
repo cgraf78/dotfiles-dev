@@ -23,11 +23,13 @@ mkdir -p "$mock_bin" "$project_dir"
 # argument is bracketed so a wrapper that splits or merges a quoted argument
 # (a prompt with spaces, say) fails instead of matching by accident.
 for agent in claude codex muse opencode; do
-  cat >"$mock_bin/$agent" <<'EOF'
-#!/usr/bin/env bash
+  {
+    printf '#!%s\n' "${BASH:-$(command -v bash)}"
+    cat <<'EOF'
 printf '[%s]' "$@"
 printf '\n'
 EOF
+  } >"$mock_bin/$agent"
   chmod +x "$mock_bin/$agent"
 done
 

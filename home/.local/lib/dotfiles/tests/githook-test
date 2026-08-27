@@ -23,6 +23,7 @@ _test_prefer_system_git
 
 HOOK_DIR=$(HOME="$SOURCE_HOME" git config \
   --file "$SOURCE_HOME/.config/git/config" --path --get core.hooksPath)
+HOOK_DIR_REAL=$(_test_realpath "$HOOK_DIR")
 
 for hook in \
   pre-commit pre-merge-commit pre-applypatch prepare-commit-msg commit-msg \
@@ -136,7 +137,7 @@ _assert_file_content "provider activation: matching checkout CLI wins PATH" \
 _assert_file_content "provider activation: ambient CLI is not mixed in" \
   "" "$shadow_log"
 _assert_contains "provider activation: injects the dotfiles policy gate" \
-  "gate=$HOOK_DIR/sley-commit-gate" "$(cat "$provider_log")"
+  "gate=$HOOK_DIR_REAL/sley-commit-gate" "$(cat "$provider_log")"
 
 echo
 echo "=== Git hook activation shims ==="
@@ -210,7 +211,8 @@ _assert_not_contains "other bare repositories do not skip untracked files" \
 echo
 echo "=== Commit-message policy selection ==="
 
-default_validator="$SOURCE_HOME/.local/lib/dotfiles/sley-hooks/validate-commit-msg"
+default_validator=$(_test_realpath \
+  "$SOURCE_HOME/.local/lib/dotfiles/sley-hooks/validate-commit-msg")
 : >"$provider_log"
 : >"$cli_log"
 SLEY_COMMIT_MESSAGE_TEMPLATE="ambient-template" \
