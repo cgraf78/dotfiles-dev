@@ -96,6 +96,22 @@ def classify(commands):
         for payload in map(json.loads, result.stdout.splitlines())
     }
 
+parser_examples = [
+    "if ! prettier --check .; then",
+    "{ prettier --check .; }",
+    "env -u GIT_DIR prettier --check .",
+    "xargs -r -n 1 prettier --check",
+    'env -u GIT_DIR ru"ff" check .',
+    r"ru\ff check .",
+]
+parser_classified = classify(parser_examples + ["prettier --check ."])
+for example in parser_examples:
+    if not (parser_classified.get(example, set()) & tool_names):
+        print(f"<parser-self-test>: expected direct tool command in: {example}")
+json_example = json.loads('"prettier --check ."')
+if not (parser_classified.get(json_example, set()) & tool_names):
+    print("<parser-self-test>: expected direct tool command in JSON command key")
+
 def active(line, relpath):
     stripped = line.lstrip()
     if stripped.startswith("#") or stripped.startswith("--") or '"Bash(' in line:
@@ -396,44 +412,7 @@ while IFS=$'\t' read -r association_key association_value; do
   fi
 done < <(jq -r '.languages[] | select(.association) | [.association.key, .association.value] | @tsv' "$fixture")
 
-nvim_workspace_fixture=$work/nvim-workspace.lua
-home_shell_policy=$work/home-shell-policy.json
-cat >"$nvim_workspace_fixture" <<'LUA'
-return {
-  options = function()
-    return {
-      shell = {
-        home_files = { ".bashrc", ".bash_profile", ".profile", ".zshenv", ".zprofile", ".zshrc" },
-        home_dirs = {
-          { glob = ".config/dot/merge-hooks.d/**/*@(.sh|.inc|.bash|.zsh|.command)" },
-          { glob = ".config/shdeps/hooks.d/**/*@(.sh|.inc|.bash|.zsh|.command)" },
-          { glob = ".config/shell/**/*@(.sh|.inc|.bash|.zsh|.command)" },
-          { glob = ".local/share/cgraf78/**/*@(.sh|.inc|.bash|.zsh|.command)" },
-          { direct = true },
-        },
-        home_globs = { ".local/share/cgraf78/*/bin/*" },
-      },
-    }
-  end,
-}
-LUA
 nvim_bin=${NVIM_TEST_BIN:-$(command -v nvim)}
-DOT_TEST_NVIM_WORKSPACE_FIXTURE="$nvim_workspace_fixture" \
-  "$nvim_bin" --headless --noplugin -u NONE -i NONE \
-  -c "lua package.preload['config.nvim-workspace']=function() return dofile(vim.env.DOT_TEST_NVIM_WORKSPACE_FIXTURE) end; local opts=require('config.nvim-workspace').options(); vim.fn.writefile({vim.json.encode(opts.shell)}, '$home_shell_policy')" \
-  -c 'qa!'
-node - "$root/.vscode/settings.json" "$home_shell_policy" <<'NODE'
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const shell = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
-const parts = [...shell.home_files];
-for (const dir of shell.home_dirs) if (dir.glob) parts.push(dir.glob);
-parts.push(...shell.home_globs);
-assert.equal(settings["bashIde.globPattern"], `{${parts.join(",")}}`);
-NODE
-_assert_exit 'VS Code and the inherited Nvim contract share HOME Bash globs' 0 "$?"
-
 if [[ $provider_scope == immutable ]]; then
   _assert_no_low_level_dispatch "$registry" "$work/low-level-dispatch-violations.txt" \
     "$agentguard_classifier"

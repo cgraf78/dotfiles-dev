@@ -45,6 +45,10 @@ if [[ $mode == --provider-compatibility ]]; then
     echo 'DOT_TEST_WATCHEXEC_BIN must name an absolute executable' >&2
     exit 1
   }
+  [[ ${CAPABILITY_TEST_YQ:-} == /* && -x ${CAPABILITY_TEST_YQ:-} ]] || {
+    echo 'provider compatibility requires an explicit yq executable' >&2
+    exit 1
+  }
 fi
 
 validate_suite_inventory() {
@@ -145,16 +149,10 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv node od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs yq zsh)
+required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv node od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs zsh)
 for command_name in "${required_commands[@]}"; do
   command_path=
-  if [[ $command_name == yq && -n ${CAPABILITY_TEST_YQ:-} ]]; then
-    [[ $CAPABILITY_TEST_YQ == /* && -x $CAPABILITY_TEST_YQ && ! -d $CAPABILITY_TEST_YQ ]] || {
-      echo 'CAPABILITY_TEST_YQ must name an absolute executable' >&2
-      exit 1
-    }
-    command_path=$CAPABILITY_TEST_YQ
-  elif [[ $command_name == node ]]; then
+  if [[ $command_name == node ]]; then
     command_path=${CAPABILITY_TEST_NODE:-$(command -v node 2>/dev/null || true)}
     [[ -z $command_path || $command_path == /* && -x $command_path && ! -d $command_path ]] || {
       echo 'CAPABILITY_TEST_NODE must name an absolute executable' >&2
@@ -174,6 +172,22 @@ for command_name in "${required_commands[@]}"; do
   }
   ln -s "$command_path" "$controlled_bin/$command_name"
 done
+yq_path=${CAPABILITY_TEST_YQ:-}
+if [[ -z $yq_path ]]; then
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/yq && ! -d $command_root/yq ]]; then
+      yq_path=$command_root/yq
+      break
+    fi
+  done
+fi
+if [[ -n $yq_path ]]; then
+  [[ $yq_path == /* && -x $yq_path && ! -d $yq_path ]] || {
+    echo 'CAPABILITY_TEST_YQ must name an absolute executable' >&2
+    exit 1
+  }
+  ln -s "$yq_path" "$controlled_bin/yq"
+fi
 if [[ $mode == --provider-compatibility ]]; then
   ln -s "$DOT_TEST_CHECKRUN_ROOT/bin/checkrun" "$controlled_bin/checkrun"
   ln -s "$DOT_TEST_SLEY_ROOT/bin/sley" "$controlled_bin/sley"
@@ -347,6 +361,7 @@ mapfile -t suites <"$tmp/suites"
 
 if [[ $mode == --provider-compatibility ]]; then
   suites=(
+    dev-merges
     dev-shdeps-hooks
     git-shell-workflows
     validate-commit-msg

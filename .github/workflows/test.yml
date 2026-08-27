@@ -17,7 +17,7 @@ jobs:
     with:
       setup: none
       matrix-set: full
-      profiles: base,jq,python,lua,neovim,zsh,procps,yq
+      profiles: base,jq,python,lua,neovim,zsh,procps
       shellcheck-exclude-codes: SC1091
       shellcheck-inventory-path: .github/shellcheck-files.txt
       test-command: test/run
@@ -59,8 +59,20 @@ jobs:
         uses: cgraf78/actions/.github/actions/shell-ci-prereqs@de3f6086e36a77eec8ee62f2c9871266e4b5c05c
         with:
           matrix-name: Ubuntu
-          profiles: base,jq,python,lua,neovim,zsh,procps,yq
+          profiles: base,jq,python,lua,neovim,zsh,procps
           setup: none
+      - name: Install pinned yq compatibility runtime
+        shell: bash
+        run: |-
+          set -euo pipefail
+          yq_bin="$RUNNER_TEMP/yq-v4.53.6"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$yq_bin" \
+            https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64
+          printf '%s  %s\n' \
+            c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385 \
+            "$yq_bin" | sha256sum --check --strict
+          chmod +x "$yq_bin"
       - name: Install pinned Watchexec compatibility artifact
         shell: bash
         run: |-
@@ -71,6 +83,9 @@ jobs:
           curl --fail --location --retry 3 --retry-all-errors \
             --output "$archive" \
             https://github.com/watchexec/watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz
+          xz --test "$archive"
+          tar -tJf "$archive" | grep -Fx \
+            watchexec-2.7.0-x86_64-unknown-linux-gnu/watchexec
           tar -xJf "$archive" --strip-components=1 -C "$install_root"
           printf '%s  %s\n' \
             2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1 \
@@ -82,6 +97,7 @@ jobs:
           DOT_TEST_GIT_TOOLS_ROOT: ${{ github.workspace }}/.provider-checkouts/git-tools
           DOT_TEST_AGENTGUARD_ROOT: ${{ github.workspace }}/.provider-checkouts/agentguard
           DOT_TEST_WATCHEXEC_BIN: ${{ runner.temp }}/watchexec-2.7.0/watchexec
+          CAPABILITY_TEST_YQ: ${{ runner.temp }}/yq-v4.53.6
         run: test/run --provider-compatibility
 
   actions-sync:

@@ -50,7 +50,7 @@ case $repo_name in
   dotfiles-dev)
     expected_cron='37 9 * * *'
     descriptor=30-dev.conf
-    expected_profiles=base,jq,python,lua,neovim,zsh,procps,yq
+    expected_profiles=base,jq,python,lua,neovim,zsh,procps
     ;;
   *) fail "unexpected repository name: $repo_name" ;;
 esac
@@ -177,6 +177,17 @@ grep -F 'watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux
   "$workflow" >/dev/null || fail 'Watchexec compatibility artifact is not version-pinned'
 grep -F '2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1' \
   "$workflow" >/dev/null || fail 'Watchexec compatibility checksum drifted'
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+watchexec_verify_line=$(grep -nF '          xz --test "$archive"' "$workflow" | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+watchexec_extract_line=$(grep -nF '          tar -xJf "$archive"' "$workflow" | cut -d: -f1)
+[[ -n $watchexec_verify_line && -n $watchexec_extract_line &&
+  $watchexec_verify_line -lt $watchexec_extract_line ]] ||
+  fail 'Watchexec archive integrity is not checked before extraction'
+grep -F 'mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64' "$workflow" >/dev/null ||
+  fail 'yq compatibility runtime is not version-pinned'
+grep -F 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' \
+  "$workflow" >/dev/null || fail 'yq compatibility checksum drifted'
 while IFS='=' read -r provider sha; do
   case $provider in version) continue ;; esac
   repository=${provider//_/-}
