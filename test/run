@@ -368,6 +368,8 @@ if [[ $mode == --provider-compatibility ]]; then
     vscode-sley
     workflow-consistency
   )
+  DOT_TEST_YQ_MERGE_BLOCK_MARKER=$tmp/yq-merge-block.executed
+  export DOT_TEST_YQ_MERGE_BLOCK_MARKER
 fi
 
 if [[ ${DOTFILES_CAPABILITY_PHASE:-final} == final && ${#suites[@]} -eq 0 ]]; then
@@ -377,6 +379,12 @@ fi
 if ((${#suites[@]} > 0)); then
   DOT_TEST_TESTS_DIR=$suite_root DOT_TEST_INCLUDE_PROVIDER=0 \
     dot test -s "${suites[@]}"
+fi
+if [[ $mode == --provider-compatibility ]]; then
+  [[ $(<"$DOT_TEST_YQ_MERGE_BLOCK_MARKER") == executed ]] || {
+    echo 'provider compatibility did not execute the real-yq merge block' >&2
+    exit 1
+  }
 fi
 
 case ${PREFIX:-} in

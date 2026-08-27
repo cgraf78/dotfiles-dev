@@ -188,6 +188,8 @@ grep -F 'mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64' "$workflow" >/de
   fail 'yq compatibility runtime is not version-pinned'
 grep -F 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' \
   "$workflow" >/dev/null || fail 'yq compatibility checksum drifted'
+grep -F 'provider compatibility did not execute the real-yq merge block' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce real-yq merge coverage'
 while IFS='=' read -r provider sha; do
   case $provider in version) continue ;; esac
   repository=${provider//_/-}

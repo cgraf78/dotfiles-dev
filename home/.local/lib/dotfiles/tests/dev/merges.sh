@@ -4616,22 +4616,27 @@ JSON
   echo ""
   echo "=== Codex config merge hook ==="
 
-  CODEX_DIR="$TEST_HOME/.codex"
-  CODEX_CONFIG="$CODEX_DIR/config.toml"
-  CODEX_AGENTGUARD_ASSETS="$TEST_HOME/agentguard-codex-assets"
-  rm -rf "$CODEX_DIR"
-  mkdir -p "$CODEX_DIR" \
-    "$CODEX_AGENTGUARD_ASSETS/_shared" \
-    "$CODEX_AGENTGUARD_ASSETS/codex" \
-    "$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace" \
-    "$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/50-environment.replace" \
-    "$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/experimental.d"
+  if command -v yq >/dev/null 2>&1; then
+    if [[ -n ${DOT_TEST_YQ_MERGE_BLOCK_MARKER:-} ]]; then
+      printf 'executed\n' >"$DOT_TEST_YQ_MERGE_BLOCK_MARKER"
+    fi
 
-  _CODEX_HOOK="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/codex.sh"
-  _CODEX_BIN=$(_mock_bin)
-  _CODEX_VERSION_PROBE="$TEST_HOME/.codex-version-probe"
-  export DOT_TEST_CODEX_VERSION_PROBE="$_CODEX_VERSION_PROBE"
-  cat >"$_CODEX_BIN/codex" <<'MOCK'
+    CODEX_DIR="$TEST_HOME/.codex"
+    CODEX_CONFIG="$CODEX_DIR/config.toml"
+    CODEX_AGENTGUARD_ASSETS="$TEST_HOME/agentguard-codex-assets"
+    rm -rf "$CODEX_DIR"
+    mkdir -p "$CODEX_DIR" \
+      "$CODEX_AGENTGUARD_ASSETS/_shared" \
+      "$CODEX_AGENTGUARD_ASSETS/codex" \
+      "$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace" \
+      "$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/50-environment.replace" \
+      "$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/experimental.d"
+
+    _CODEX_HOOK="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/codex.sh"
+    _CODEX_BIN=$(_mock_bin)
+    _CODEX_VERSION_PROBE="$TEST_HOME/.codex-version-probe"
+    export DOT_TEST_CODEX_VERSION_PROBE="$_CODEX_VERSION_PROBE"
+    cat >"$_CODEX_BIN/codex" <<'MOCK'
 #!/usr/bin/env bash
 if [[ "$1" == "--version" ]]; then
   if [[ -n "${DOT_TEST_CODEX_VERSION_PROBE:-}" ]]; then
@@ -4642,29 +4647,29 @@ if [[ "$1" == "--version" ]]; then
 fi
 exit 2
 MOCK
-  chmod +x "$_CODEX_BIN/codex"
+    chmod +x "$_CODEX_BIN/codex"
 
-  _run_codex_merge() (
-    unset -f merge _merge_codex_config _trust_codex_dotfile_hooks 2>/dev/null
-    # shellcheck source=/dev/null
-    . "$_CODEX_HOOK"
-    # shellcheck disable=SC2329 # Invoked by Codex source discovery.
-    dot_agentguard_integration_file() {
-      if [[ "$1" == "codex" && "$2" == "hooks.toml" ]]; then
-        printf '%s/codex/hooks.toml\n' "$CODEX_AGENTGUARD_ASSETS"
-      elif [[ "$1" == "_shared" && "$2" == "reconcile-hooks.jq" ]]; then
-        printf '%s/_shared/reconcile-hooks.jq\n' "$CODEX_AGENTGUARD_ASSETS"
-      else
-        return 1
-      fi
-    }
-    PATH="$_CODEX_BIN:$PATH" merge
-  )
+    _run_codex_merge() (
+      unset -f merge _merge_codex_config _trust_codex_dotfile_hooks 2>/dev/null
+      # shellcheck source=/dev/null
+      . "$_CODEX_HOOK"
+      # shellcheck disable=SC2329 # Invoked by Codex source discovery.
+      dot_agentguard_integration_file() {
+        if [[ "$1" == "codex" && "$2" == "hooks.toml" ]]; then
+          printf '%s/codex/hooks.toml\n' "$CODEX_AGENTGUARD_ASSETS"
+        elif [[ "$1" == "_shared" && "$2" == "reconcile-hooks.jq" ]]; then
+          printf '%s/_shared/reconcile-hooks.jq\n' "$CODEX_AGENTGUARD_ASSETS"
+        else
+          return 1
+        fi
+      }
+      PATH="$_CODEX_BIN:$PATH" merge
+    )
 
-  # A neutral provider fixture proves the dependency layer participates in
-  # merge, cache, and trust handling without copying AgentGuard's real Codex
-  # compatibility map into this consumer suite.
-  cat >"$CODEX_AGENTGUARD_ASSETS/_shared/reconcile-hooks.jq" <<'JQ'
+    # A neutral provider fixture proves the dependency layer participates in
+    # merge, cache, and trust handling without copying AgentGuard's real Codex
+    # compatibility map into this consumer suite.
+    cat >"$CODEX_AGENTGUARD_ASSETS/_shared/reconcile-hooks.jq" <<'JQ'
 # Neutral provider contract fixture. Replace incoming provider event arrays,
 # retire one provider event, and preserve consumer-owned hook metadata/state.
 ($d[0] // {}) as $live |
@@ -4673,7 +4678,7 @@ $s[0] as $provider |
 .hooks = (($live.hooks // {}) + ($provider.hooks // {})) |
 del(.hooks.ProviderRetired)
 JQ
-  cat >"$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml" <<'TOML'
+    cat >"$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml" <<'TOML'
 [features]
 hooks = true
 
@@ -4699,7 +4704,7 @@ command = "provider-post-edit"
 timeout = 60
 TOML
 
-  cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/10-settings.toml" <<'TOML'
+    cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/10-settings.toml" <<'TOML'
 model = "common-model"
 project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]
 
@@ -4710,7 +4715,7 @@ trust_level = "trusted"
 status_line = ["model-with-reasoning"]
 TOML
 
-  cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace/80-work.toml" <<'TOML'
+    cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace/80-work.toml" <<'TOML'
 [projects."/work/project"]
 trust_level = "trusted"
 
@@ -4721,9 +4726,9 @@ command = "true"
 approval_mode = "approve"
 TOML
 
-  # Pre-existing config.toml carries a legacy [profiles.default] table (CLI state
-  # from before the overlay migration); the merge must strip it from config.toml.
-  cat >"$CODEX_CONFIG" <<'TOML'
+    # Pre-existing config.toml carries a legacy [profiles.default] table (CLI state
+    # from before the overlay migration); the merge must strip it from config.toml.
+    cat >"$CODEX_CONFIG" <<'TOML'
 [profiles.default]
 model = "local-default"
 
@@ -4745,19 +4750,19 @@ type = "command"
 command = "provider-retired"
 TOML
 
-  _CODEX_ALIAS_PARENT=$(_tmpdir)
-  ln -s "$TEST_HOME" "$_CODEX_ALIAS_PARENT/home-link"
-  cat >>"$CODEX_CONFIG" <<TOML
+    _CODEX_ALIAS_PARENT=$(_tmpdir)
+    ln -s "$TEST_HOME" "$_CODEX_ALIAS_PARENT/home-link"
+    cat >>"$CODEX_CONFIG" <<TOML
 
 [hooks.state."$_CODEX_ALIAS_PARENT/home-link/.codex/config.toml:pre_tool_use:0:0"]
 enabled = false
 trusted_hash = "sha256:old"
 TOML
 
-  # Named profiles render as standalone ~/.codex/<name>.config.toml overlays.
-  # Layer a common + work profile fragment and seed the overlay with local CLI
-  # state to verify merge order and state preservation below.
-  cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/10-settings.toml" <<'TOML'
+    # Named profiles render as standalone ~/.codex/<name>.config.toml overlays.
+    # Layer a common + work profile fragment and seed the overlay with local CLI
+    # state to verify merge order and state preservation below.
+    cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/10-settings.toml" <<'TOML'
 approval_policy = "never"
 model_reasoning_effort = "high"
 
@@ -4765,33 +4770,33 @@ model_reasoning_effort = "high"
 web_search_request = true
 TOML
 
-  cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/50-environment.replace/80-work.toml" <<'TOML'
+    cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/layered.d/50-environment.replace/80-work.toml" <<'TOML'
 model_reasoning_effort = "low"
 sandbox_mode = "danger-full-access"
 TOML
 
-  cat >"$CODEX_DIR/layered.config.toml" <<'TOML'
+    cat >"$CODEX_DIR/layered.config.toml" <<'TOML'
 model = "local-allow"
 approval_policy = "on-request"
 TOML
 
-  # These profiles were previously dot-managed. Removing their source families
-  # must also retire generated outputs instead of leaving stale policy behind.
-  printf 'sandbox_mode = "danger-full-access"\n' >"$CODEX_DIR/allow_all.config.toml"
-  printf 'sandbox_mode = "workspace-write"\n' >"$CODEX_DIR/no_prompt.config.toml"
+    # These profiles were previously dot-managed. Removing their source families
+    # must also retire generated outputs instead of leaving stale policy behind.
+    printf 'sandbox_mode = "danger-full-access"\n' >"$CODEX_DIR/allow_all.config.toml"
+    printf 'sandbox_mode = "workspace-write"\n' >"$CODEX_DIR/no_prompt.config.toml"
 
-  cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/experimental.d/10-settings.toml" <<'TOML'
+    cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/profiles/experimental.d/10-settings.toml" <<'TOML'
 model = "experimental-model"
 model_reasoning_effort = "high"
 TOML
 
-  _run_codex_merge 2>/dev/null
-  _assert_file_exists "codex hook: config created" "$CODEX_CONFIG"
-  _assert_file_missing "codex hook: merge does not probe installed Codex version" "$_CODEX_VERSION_PROBE"
-  codex_content=$(cat "$CODEX_CONFIG")
-  _assert_contains "codex hook: emits hook array tables" "[[hooks.PreToolUse]]" "$codex_content"
+    _run_codex_merge 2>/dev/null
+    _assert_file_exists "codex hook: config created" "$CODEX_CONFIG"
+    _assert_file_missing "codex hook: merge does not probe installed Codex version" "$_CODEX_VERSION_PROBE"
+    codex_content=$(cat "$CODEX_CONFIG")
+    _assert_contains "codex hook: emits hook array tables" "[[hooks.PreToolUse]]" "$codex_content"
 
-  if python3 - "$CODEX_CONFIG" <<'PY'; then
+    if python3 - "$CODEX_CONFIG" <<'PY'; then
 import hashlib
 import json
 import pathlib
@@ -4878,51 +4883,51 @@ assert state[post_edit_key]["trusted_hash"] == current_hash(
     data["hooks"]["PostToolUse"][0]["hooks"][0],
 )
 PY
-    _pass "codex hook: merges common/work, preserves local state, and trusts managed hooks"
-  else
-    _fail "codex hook: merges common/work, preserves local state, and trusts managed hooks"
-  fi
+      _pass "codex hook: merges common/work, preserves local state, and trusts managed hooks"
+    else
+      _fail "codex hook: merges common/work, preserves local state, and trusts managed hooks"
+    fi
 
-  mv \
-    "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml" \
-    "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml.unavailable"
-  # Recreate the former generated outputs after a successful merge. Even a
-  # provider failure must still perform the independent retirement cleanup.
-  printf 'sandbox_mode = "danger-full-access"\n' >"$CODEX_DIR/allow_all.config.toml"
-  printf 'sandbox_mode = "workspace-write"\n' >"$CODEX_DIR/no_prompt.config.toml"
-  codex_before_missing=$(cat "$CODEX_CONFIG")
-  codex_missing_output=$(_run_codex_merge 2>&1)
-  codex_missing_status=$?
-  _assert_exit "codex consumer: missing provider asset is a failed refresh" \
-    1 "$codex_missing_status"
-  _assert_contains "codex consumer: missing provider asset reports the failed refresh" \
-    "AgentGuard codex integration unavailable" "$codex_missing_output"
-  _assert_eq "codex consumer: missing provider asset preserves the whole live config" \
-    "$codex_before_missing" "$(cat "$CODEX_CONFIG")"
-  _assert_eq "codex consumer: missing provider asset preserves live hook tables" \
-    "provider-pre-shell" \
-    "$(
-      python3 - "$CODEX_CONFIG" <<'PY'
+    mv \
+      "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml" \
+      "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml.unavailable"
+    # Recreate the former generated outputs after a successful merge. Even a
+    # provider failure must still perform the independent retirement cleanup.
+    printf 'sandbox_mode = "danger-full-access"\n' >"$CODEX_DIR/allow_all.config.toml"
+    printf 'sandbox_mode = "workspace-write"\n' >"$CODEX_DIR/no_prompt.config.toml"
+    codex_before_missing=$(cat "$CODEX_CONFIG")
+    codex_missing_output=$(_run_codex_merge 2>&1)
+    codex_missing_status=$?
+    _assert_exit "codex consumer: missing provider asset is a failed refresh" \
+      1 "$codex_missing_status"
+    _assert_contains "codex consumer: missing provider asset reports the failed refresh" \
+      "AgentGuard codex integration unavailable" "$codex_missing_output"
+    _assert_eq "codex consumer: missing provider asset preserves the whole live config" \
+      "$codex_before_missing" "$(cat "$CODEX_CONFIG")"
+    _assert_eq "codex consumer: missing provider asset preserves live hook tables" \
+      "provider-pre-shell" \
+      "$(
+        python3 - "$CODEX_CONFIG" <<'PY'
 import sys
 import tomllib
 
 with open(sys.argv[1], "rb") as f:
     print(tomllib.load(f)["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
 PY
-    )"
-  mv \
-    "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml.unavailable" \
-    "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml"
+      )"
+    mv \
+      "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml.unavailable" \
+      "$CODEX_AGENTGUARD_ASSETS/codex/hooks.toml"
 
-  _assert_file_missing "codex hook: retires generated allow_all profile" \
-    "$CODEX_DIR/allow_all.config.toml"
-  _assert_file_missing "codex hook: retires generated no_prompt profile" \
-    "$CODEX_DIR/no_prompt.config.toml"
+    _assert_file_missing "codex hook: retires generated allow_all profile" \
+      "$CODEX_DIR/allow_all.config.toml"
+    _assert_file_missing "codex hook: retires generated no_prompt profile" \
+      "$CODEX_DIR/no_prompt.config.toml"
 
-  # Profile overlays: common + work fragments merge into the per-profile file,
-  # later layers win, source layers override pre-existing local keys, and local
-  # CLI-owned keys without a source counterpart survive.
-  if python3 - "$CODEX_DIR/layered.config.toml" <<'PY'; then
+    # Profile overlays: common + work fragments merge into the per-profile file,
+    # later layers win, source layers override pre-existing local keys, and local
+    # CLI-owned keys without a source counterpart survive.
+    if python3 - "$CODEX_DIR/layered.config.toml" <<'PY'; then
 import sys
 import tomllib
 
@@ -4934,12 +4939,12 @@ assert data["approval_policy"] == "never", data            # source beats local 
 assert data["model"] == "local-allow", data                # local-only key preserved
 assert data["features"]["web_search_request"] is True, data  # nested profile tables survive
 PY
-    _pass "codex hook: renders profile overlays, layering work over common and preserving local state"
-  else
-    _fail "codex hook: renders profile overlays, layering work over common and preserving local state"
-  fi
+      _pass "codex hook: renders profile overlays, layering work over common and preserving local state"
+    else
+      _fail "codex hook: renders profile overlays, layering work over common and preserving local state"
+    fi
 
-  if python3 - "$CODEX_DIR/experimental.config.toml" <<'PY'; then
+    if python3 - "$CODEX_DIR/experimental.config.toml" <<'PY'; then
 import sys
 import tomllib
 
@@ -4948,13 +4953,13 @@ with open(sys.argv[1], "rb") as f:
 assert data["model"] == "experimental-model", data
 assert data["model_reasoning_effort"] == "high", data
 PY
-    _pass "codex hook: renders dynamically discovered profile families"
-  else
-    _fail "codex hook: renders dynamically discovered profile families"
-  fi
+      _pass "codex hook: renders dynamically discovered profile families"
+    else
+      _fail "codex hook: renders dynamically discovered profile families"
+    fi
 
-  _run_codex_merge 2>/dev/null
-  if python3 - "$CODEX_CONFIG" <<'PY'; then
+    _run_codex_merge 2>/dev/null
+    if python3 - "$CODEX_CONFIG" <<'PY'; then
 import sys
 import tomllib
 
@@ -4962,37 +4967,37 @@ with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
 assert "profiles" not in data, "new Codex config should not keep legacy inline profiles"
 PY
-    _pass "codex hook: keeps config.toml free of legacy inline profiles"
-  else
-    _fail "codex hook: keeps config.toml free of legacy inline profiles"
-  fi
-  _assert_file_missing "codex hook: repeat merge does not probe installed Codex version" "$_CODEX_VERSION_PROBE"
+      _pass "codex hook: keeps config.toml free of legacy inline profiles"
+    else
+      _fail "codex hook: keeps config.toml free of legacy inline profiles"
+    fi
+    _assert_file_missing "codex hook: repeat merge does not probe installed Codex version" "$_CODEX_VERSION_PROBE"
 
-  codex_content_before_cache_probe=$(cat "$CODEX_CONFIG")
-  saved_path=$PATH
-  codex_cache_output=""
-  codex_cache_status=0
-  codex_cache_output=$(_run_codex_merge 2>&1) || codex_cache_status=$?
-  PATH=$saved_path
-  _assert_exit "codex hook: warm cache succeeds without merge dependencies" \
-    0 "$codex_cache_status"
-  _assert_not_contains "codex hook: warm cache emits no missing-dependency warning" \
-    "mikefarah/yq not found" "$codex_cache_output"
-  _assert_eq "codex hook: warm cache skips yq when inputs are unchanged" \
-    "$codex_content_before_cache_probe" "$(cat "$CODEX_CONFIG")"
+    codex_content_before_cache_probe=$(cat "$CODEX_CONFIG")
+    saved_path=$PATH
+    codex_cache_output=""
+    codex_cache_status=0
+    codex_cache_output=$(_run_codex_merge 2>&1) || codex_cache_status=$?
+    PATH=$saved_path
+    _assert_exit "codex hook: warm cache succeeds without merge dependencies" \
+      0 "$codex_cache_status"
+    _assert_not_contains "codex hook: warm cache emits no missing-dependency warning" \
+      "mikefarah/yq not found" "$codex_cache_output"
+    _assert_eq "codex hook: warm cache skips yq when inputs are unchanged" \
+      "$codex_content_before_cache_probe" "$(cat "$CODEX_CONFIG")"
 
-  cat >>"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace/80-work.toml" <<'TOML'
+    cat >>"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/50-environment.replace/80-work.toml" <<'TOML'
 
 [projects."/cache-source-change"]
 trust_level = "trusted"
 TOML
-  saved_path=$PATH
-  _codex_no_yq_bin=$(_mock_bin)
-  ln -s "$(command -v python3)" "$_codex_no_yq_bin/python3"
-  PATH="$_codex_no_yq_bin:/usr/bin:/bin" _run_codex_merge 2>/dev/null
-  PATH=$saved_path
-  _run_codex_merge 2>/dev/null
-  if python3 - "$CODEX_CONFIG" <<'PY'; then
+    saved_path=$PATH
+    _codex_no_yq_bin=$(_mock_bin)
+    ln -s "$(command -v python3)" "$_codex_no_yq_bin/python3"
+    PATH="$_codex_no_yq_bin:/usr/bin:/bin" _run_codex_merge 2>/dev/null
+    PATH=$saved_path
+    _run_codex_merge 2>/dev/null
+    if python3 - "$CODEX_CONFIG" <<'PY'; then
 import sys
 import tomllib
 
@@ -5000,27 +5005,27 @@ with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
 assert data["projects"]["/cache-source-change"]["trust_level"] == "trusted"
 PY
-    _pass "codex hook: skipped merge does not cache stale config"
-  else
-    _fail "codex hook: skipped merge does not cache stale config"
-  fi
-
-  if [[ -n "${CI:-}" ]]; then
-    _pass "codex hook: installed Codex trust check skipped in CI"
-  elif [[ "${DOT_TEST_INSTALLED_CODEX:-0}" != "1" ]]; then
-    # The config merge behavior above is deterministic; this probe exercises the
-    # user's installed Codex binary, which may depend on host-specific wrappers,
-    # downloads, or cache permissions. Keep base dotfiles tests hermetic unless
-    # someone explicitly opts into that integration check.
-    _pass "codex hook: installed Codex trust check skipped (set DOT_TEST_INSTALLED_CODEX=1)"
-  elif command -v codex >/dev/null 2>&1; then
-    _CODEX_TEST_DOTSLASH_CACHE="${DOTSLASH_CACHE:-}"
-    if [[ -z "$_CODEX_TEST_DOTSLASH_CACHE" && "$(uname -s)" == "Darwin" && "$HOME" != "$REAL_HOME" ]]; then
-      _CODEX_TEST_DOTSLASH_CACHE="$REAL_HOME/Library/Caches/dotslash"
+      _pass "codex hook: skipped merge does not cache stale config"
+    else
+      _fail "codex hook: skipped merge does not cache stale config"
     fi
 
-    _codex_check_status=0
-    CODEX_HOME="$CODEX_DIR" CODEX_TEST_DOTSLASH_CACHE="$_CODEX_TEST_DOTSLASH_CACHE" python3 - "$CODEX_CONFIG" <<'PY' || _codex_check_status=$?
+    if [[ -n "${CI:-}" ]]; then
+      _pass "codex hook: installed Codex trust check skipped in CI"
+    elif [[ "${DOT_TEST_INSTALLED_CODEX:-0}" != "1" ]]; then
+      # The config merge behavior above is deterministic; this probe exercises the
+      # user's installed Codex binary, which may depend on host-specific wrappers,
+      # downloads, or cache permissions. Keep base dotfiles tests hermetic unless
+      # someone explicitly opts into that integration check.
+      _pass "codex hook: installed Codex trust check skipped (set DOT_TEST_INSTALLED_CODEX=1)"
+    elif command -v codex >/dev/null 2>&1; then
+      _CODEX_TEST_DOTSLASH_CACHE="${DOTSLASH_CACHE:-}"
+      if [[ -z "$_CODEX_TEST_DOTSLASH_CACHE" && "$(uname -s)" == "Darwin" && "$HOME" != "$REAL_HOME" ]]; then
+        _CODEX_TEST_DOTSLASH_CACHE="$REAL_HOME/Library/Caches/dotslash"
+      fi
+
+      _codex_check_status=0
+      CODEX_HOME="$CODEX_DIR" CODEX_TEST_DOTSLASH_CACHE="$_CODEX_TEST_DOTSLASH_CACHE" python3 - "$CODEX_CONFIG" <<'PY' || _codex_check_status=$?
 import json
 import os
 import pathlib
@@ -5117,21 +5122,21 @@ for hook in generated_hooks:
     if "currentHash" in hook:
         assert state[hook["key"]]["trusted_hash"] == hook["currentHash"], hook
 PY
-    if [[ "$_codex_check_status" -eq 0 ]]; then
-      _pass "codex hook: installed Codex reports generated hooks trusted"
-    elif [[ "$_codex_check_status" -eq 77 ]]; then
-      _pass "codex hook: installed Codex trust check skipped (macOS sandbox unavailable)"
+      if [[ "$_codex_check_status" -eq 0 ]]; then
+        _pass "codex hook: installed Codex reports generated hooks trusted"
+      elif [[ "$_codex_check_status" -eq 77 ]]; then
+        _pass "codex hook: installed Codex trust check skipped (macOS sandbox unavailable)"
+      else
+        _fail "codex hook: installed Codex reports generated hooks trusted"
+      fi
     else
-      _fail "codex hook: installed Codex reports generated hooks trusted"
+      _pass "codex hook: installed Codex trust check skipped (codex unavailable)"
     fi
-  else
-    _pass "codex hook: installed Codex trust check skipped (codex unavailable)"
-  fi
 
-  # Bootstrap: no existing config.toml
-  rm -f "$CODEX_CONFIG"
-  _run_codex_merge 2>/dev/null
-  if [[ -s "$CODEX_CONFIG" ]] && python3 -c "
+    # Bootstrap: no existing config.toml
+    rm -f "$CODEX_CONFIG"
+    _run_codex_merge 2>/dev/null
+    if [[ -s "$CODEX_CONFIG" ]] && python3 -c "
 import pathlib, sys, tomllib
 with open(sys.argv[1], 'rb') as f: data = tomllib.load(f)
 assert data['model'] == 'common-model'
@@ -5140,25 +5145,28 @@ assert data['projects']['/work/project']['trust_level'] == 'trusted'
 key = str(pathlib.Path(sys.argv[1]).resolve()) + ':pre_tool_use:0:0'
 assert data['hooks']['state'][key]['trusted_hash'].startswith('sha256:')
 " "$CODEX_CONFIG" 2>/dev/null; then
-    _pass "codex hook: bootstrap from scratch (no existing config) with trusted hooks"
-  else
-    _fail "codex hook: bootstrap from scratch (no existing config) with trusted hooks"
-  fi
+      _pass "codex hook: bootstrap from scratch (no existing config) with trusted hooks"
+    else
+      _fail "codex hook: bootstrap from scratch (no existing config) with trusted hooks"
+    fi
 
-  # Corrupt config recovery
-  printf 'this is [[[not valid toml' >"$CODEX_CONFIG"
-  _run_codex_merge 2>/dev/null
-  if [[ -s "$CODEX_CONFIG" ]] && python3 -c "
+    # Corrupt config recovery
+    printf 'this is [[[not valid toml' >"$CODEX_CONFIG"
+    _run_codex_merge 2>/dev/null
+    if [[ -s "$CODEX_CONFIG" ]] && python3 -c "
 import sys, tomllib
 with open(sys.argv[1], 'rb') as f: tomllib.load(f)
 " "$CODEX_CONFIG" 2>/dev/null; then
-    _pass "codex hook: recovers from corrupt config"
-  else
-    _fail "codex hook: recovers from corrupt config"
-  fi
+      _pass "codex hook: recovers from corrupt config"
+    else
+      _fail "codex hook: recovers from corrupt config"
+    fi
 
-  rm -rf "$CODEX_DIR"
-  rm -rf "$TEST_HOME/.config/dot/merge-hooks.d/codex"
+    rm -rf "$CODEX_DIR"
+    rm -rf "$TEST_HOME/.config/dot/merge-hooks.d/codex"
+  else
+    echo "  SKIP: Codex merge hook assertions (mikefarah/yq unavailable)"
+  fi
 
   # ---------------------------------------------------------------------------
   # Tests: hive-memory merge hook
