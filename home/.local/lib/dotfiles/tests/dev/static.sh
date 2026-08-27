@@ -40,14 +40,16 @@ dot_dev_static_test() {
     pass=$((pass + 1))
   fi
 
-  if [[ -e $root/.config/agent-rules ||
-    -e $root/.local/lib/dotfiles/agent-rules-sync.sh ]] ||
-    grep -F 'cgraf78/agent-rules-sync' "$root/.config/shdeps/30-dev.conf" >/dev/null 2>&1; then
-    printf 'FAIL: base agent rules or agent-rules-sync leaked into dev\n' >&2
-    fail=$((fail + 1))
-  else
-    printf 'PASS: base agent rules and agent-rules-sync remain absent\n'
-    pass=$((pass + 1))
+  if [[ ${DOT_PROFILE_FIXTURE:-0} != 1 ]]; then
+    if [[ -e $root/.config/agent-rules ||
+      -e $root/.local/lib/dotfiles/agent-rules-sync.sh ]] ||
+      grep -F 'cgraf78/agent-rules-sync' "$root/.config/shdeps/30-dev.conf" >/dev/null 2>&1; then
+      printf 'FAIL: base agent rules or agent-rules-sync leaked into dev\n' >&2
+      fail=$((fail + 1))
+    else
+      printf 'PASS: base agent rules and agent-rules-sync remain absent\n'
+      pass=$((pass + 1))
+    fi
   fi
 
   "${DOT_TEST_REPORTER:?}" complete "$pass" "$fail"

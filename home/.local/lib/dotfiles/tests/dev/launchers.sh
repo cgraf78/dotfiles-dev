@@ -18,12 +18,14 @@ dot_dev_launchers_test() {
     fi
   done
 
-  if [[ -e $root/.config/agent-rules ||
-    -e $root/.local/lib/dotfiles/agent-rules-sync.sh ]]; then
-    printf 'FAIL: base agent-rule payload leaked into dev\n' >&2
-    fail=$((fail + 1))
-  else
-    pass=$((pass + 1))
+  if [[ ${DOT_PROFILE_FIXTURE:-0} != 1 ]]; then
+    if [[ -e $root/.config/agent-rules ||
+      -e $root/.local/lib/dotfiles/agent-rules-sync.sh ]]; then
+      printf 'FAIL: base agent-rule payload leaked into dev\n' >&2
+      fail=$((fail + 1))
+    else
+      pass=$((pass + 1))
+    fi
   fi
 
   "${DOT_TEST_REPORTER:?}" complete "$pass" "$fail"

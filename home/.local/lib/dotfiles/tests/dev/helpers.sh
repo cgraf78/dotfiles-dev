@@ -166,6 +166,13 @@ _test_dot_root() {
 _dev_repo_root() {
   local tests_dir=${DOT_TEST_TESTS_DIR:-} helper_dir
 
+  if [[ ${DOT_PROFILE_FIXTURE:-0} == 1 &&
+    -n ${DOT_TEST_DEV_REPO_ROOT:-} &&
+    -d ${DOT_TEST_DEV_REPO_ROOT:-} ]]; then
+    (cd -P -- "$DOT_TEST_DEV_REPO_ROOT" && pwd -P)
+    return 0
+  fi
+
   case $tests_dir in
     */home/.local/lib/dotfiles/tests)
       printf '%s\n' "${tests_dir%/home/.local/lib/dotfiles/tests}"
@@ -229,6 +236,8 @@ _test_load_dot_doctor_api() {
   . "$dot_root/lib/dot/public/xdg.sh"
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/extension-trust.sh"
+  # shellcheck source=/dev/null
+  . "$dot_root/lib/dot/repos/overlays.sh"
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/doctor-api.sh"
   DOT_EXTENSIONS_DIR=$extension_home/.local/lib/dotfiles
