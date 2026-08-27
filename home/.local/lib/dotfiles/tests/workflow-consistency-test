@@ -418,8 +418,12 @@ if [[ $provider_scope == immutable ]]; then
     "$agentguard_classifier"
 fi
 
-SLEY_VSCODE_EXTENSION_PATH=${sley_extension%/extension.js} \
-  node - "$cap" "$settings" "$fixture" "$repo" <<'NODE'
+if command -v node >/dev/null 2>&1; then
+  if [[ -n ${DOT_TEST_NODE_PROJECTION_MARKER:-} ]]; then
+    printf 'executed\n' >"$DOT_TEST_NODE_PROJECTION_MARKER"
+  fi
+  SLEY_VSCODE_EXTENSION_PATH=${sley_extension%/extension.js} \
+    node - "$cap" "$settings" "$fixture" "$repo" <<'NODE'
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const Module = require("node:module");
@@ -460,7 +464,10 @@ try {
   Module._load = originalLoad;
 }
 NODE
-_assert_exit 'Provider Sley extension and generated VS Code settings match Checkrun' 0 "$?"
+  _assert_exit 'Provider Sley extension and generated VS Code settings match Checkrun' 0 "$?"
+else
+  printf '  SKIP: Provider Sley extension projection (Node unavailable)\n'
+fi
 
 nvim_command=("$nvim_bin")
 if [[ -n $checkrun_nvim_fixture ]]; then

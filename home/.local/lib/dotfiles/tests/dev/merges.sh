@@ -5411,6 +5411,7 @@ HM
     "relative/explicit.toml" "$_hive_explicit_config"
 
   _hive_empty_explicit_config=$(
+    # shellcheck disable=SC2030 # This fixture is intentionally subshell-local.
     HOME="$TEST_HOME"
     HIVE_MEMORY_CONFIG=""
     # shellcheck disable=SC2030 # This fixture is intentionally subshell-local.
@@ -5579,17 +5580,20 @@ GH
   )
   unset MISE_GITHUB_TOKEN GITHUB_TOKEN DOT_TEST_GH
   : >"$mise_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   PREFIX=/data/data/com.termux/files/usr HOME="$mise_home" PATH="$mise_bin:$PATH" \
     MISE_TEST_LOG="$mise_log" _run_mise_merge
   _assert_file_content 'Mise merge: Android skips unsupported release tooling' '' "$mise_log"
 
   : >"$mise_log"
   rm -f "$mise_home/.config/mise/config.toml"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" _run_mise_merge
   _assert_file_content 'Mise merge: absent config is a no-op' '' "$mise_log"
 
   printf '[tools]\n' >"$mise_home/.config/mise/config.toml"
   : >"$mise_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     GITHUB_TOKEN=actions-token _run_mise_merge
   _assert_contains 'Mise merge: trusts the tracked config' \
@@ -5601,6 +5605,7 @@ GH
 
   : >"$mise_log"
   rm -f "$mise_gh_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     MISE_GH_LOG="$mise_gh_log" MISE_GITHUB_TOKEN=existing-token \
     GITHUB_TOKEN=actions-token _run_mise_merge
@@ -5610,6 +5615,7 @@ GH
 
   : >"$mise_log"
   rm -f "$mise_gh_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     MISE_GH_LOG="$mise_gh_log" GITHUB_TOKEN=actions-token _run_mise_merge
   _assert_contains 'Mise merge: GitHub Actions token feeds Mise' \
@@ -5618,6 +5624,7 @@ GH
 
   : >"$mise_log"
   rm -f "$mise_gh_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   interactive_output=$(HOME="$mise_home" PATH="$mise_bin:$PATH" \
     MISE_TEST_LOG="$mise_log" MISE_GH_LOG="$mise_gh_log" \
     _run_mise_merge 1 2>&1 || true)
@@ -5628,6 +5635,7 @@ GH
 
   : >"$mise_log"
   rm -f "$mise_gh_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   interactive_output=$(DOT_TEST=0 HOME="$mise_home" PATH="$mise_bin:$PATH" \
     MISE_TEST_LOG="$mise_log" MISE_GH_LOG="$mise_gh_log" \
     _run_mise_merge 1 2>&1 || true)
@@ -5637,6 +5645,7 @@ GH
 
   : >"$mise_log"
   rm -f "$mise_gh_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     MISE_GH_LOG="$mise_gh_log" DOT_TEST_GH="$mise_bin/gh" \
     _run_mise_merge 1
@@ -5646,6 +5655,7 @@ GH
     'token=gh-token args=install --locked' "$(<"$mise_log")"
 
   : >"$mise_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     MISE_FAIL_INSTALL=1 _run_mise_merge || true
   _assert_not_contains 'Mise merge: failed install does not prune tool state' \

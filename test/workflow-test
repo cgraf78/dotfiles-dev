@@ -190,6 +190,11 @@ grep -F 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' \
   "$workflow" >/dev/null || fail 'yq compatibility checksum drifted'
 grep -F 'provider compatibility did not execute the real-yq merge block' \
   test/run >/dev/null || fail 'provider compatibility does not enforce real-yq merge coverage'
+grep -F 'provider compatibility did not execute the real-Node projection block' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce real-Node projection coverage'
+# shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
+grep -F 'CAPABILITY_TEST_NODE: ${{ runner.temp }}/node-provider' "$workflow" >/dev/null ||
+  fail 'provider compatibility does not receive an explicit Node runtime'
 while IFS='=' read -r provider sha; do
   case $provider in version) continue ;; esac
   repository=${provider//_/-}

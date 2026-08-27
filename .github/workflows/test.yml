@@ -90,6 +90,13 @@ jobs:
           printf '%s  %s\n' \
             2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1 \
             "$install_root/watchexec" | sha256sum --check --strict
+      - name: Expose provider Node runtime
+        shell: bash
+        run: |-
+          set -euo pipefail
+          node_bin=$(command -v node)
+          [[ $node_bin == /* && -x $node_bin && ! -d $node_bin ]]
+          ln -s "$node_bin" "$RUNNER_TEMP/node-provider"
       - name: Exercise real provider contracts
         env:
           DOT_TEST_CHECKRUN_ROOT: ${{ github.workspace }}/.provider-checkouts/checkrun
@@ -98,6 +105,7 @@ jobs:
           DOT_TEST_AGENTGUARD_ROOT: ${{ github.workspace }}/.provider-checkouts/agentguard
           DOT_TEST_WATCHEXEC_BIN: ${{ runner.temp }}/watchexec-2.7.0/watchexec
           CAPABILITY_TEST_YQ: ${{ runner.temp }}/yq-v4.53.6
+          CAPABILITY_TEST_NODE: ${{ runner.temp }}/node-provider
         run: test/run --provider-compatibility
 
   actions-sync:
