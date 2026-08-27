@@ -78,8 +78,9 @@ canonical_root="$test_root/canonical-root"
 mkdir -p "$canonical_root/real"
 touch "$canonical_root/real/file"
 ln -s "$canonical_root/real" "$canonical_root/alias"
+canonical_real=$(cd -P -- "$canonical_root/real" && pwd -P)
 _assert_eq "path helper canonicalizes through a symlink without realpath" \
-  "$canonical_root/real/file" \
+  "$canonical_real/file" \
   "$(PATH='' _test_realpath "$canonical_root/alias/file")"
 
 provider_root="$test_root/provider"
