@@ -83,8 +83,27 @@ _assert_eq() {
 # the exact spelling returned by macOS or libuv. In particular, temporary paths
 # under /var may be reported as /private/var by some tools.
 _test_realpath() {
-  local path="$1"
-  realpath "$path" 2>/dev/null || printf '%s\n' "$path"
+  local path="$1" directory basename canonical_directory
+
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$path" 2>/dev/null && return
+  fi
+  if [[ -d $path ]]; then
+    (cd -P -- "$path" 2>/dev/null && pwd -P) && return
+  fi
+
+  directory=${path%/*}
+  basename=${path##*/}
+  [[ $directory != "$path" ]] || directory=.
+  canonical_directory=$(cd -P -- "$directory" 2>/dev/null && pwd -P) || {
+    printf '%s\n' "$path"
+    return
+  }
+  if [[ $canonical_directory == / ]]; then
+    printf '/%s\n' "$basename"
+  else
+    printf '%s/%s\n' "$canonical_directory" "$basename"
+  fi
 }
 
 # Suites that start real editor/tool processes from a worktree HOME can reuse

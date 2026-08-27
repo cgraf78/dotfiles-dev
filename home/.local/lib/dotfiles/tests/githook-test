@@ -74,6 +74,14 @@ EOF
 }
 
 test_root=$(_tmpdir)
+canonical_root="$test_root/canonical-root"
+mkdir -p "$canonical_root/real"
+touch "$canonical_root/real/file"
+ln -s "$canonical_root/real" "$canonical_root/alias"
+_assert_eq "path helper canonicalizes through a symlink without realpath" \
+  "$canonical_root/real/file" \
+  "$(PATH='' _test_realpath "$canonical_root/alias/file")"
+
 provider_root="$test_root/provider"
 provider_log="$test_root/provider.log"
 cli_log="$test_root/cli.log"
