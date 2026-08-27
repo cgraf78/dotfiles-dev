@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 
 dot_dev_doctor_test() {
-  local result_file current_module sections failures
+  local result_file current_module sections failures extension_home path
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -11,7 +11,20 @@ dot_dev_doctor_test() {
     75-nvim-dev.sh
   )
 
-  _test_load_dot_doctor_api || {
+  extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-${DOT_TEST_SOURCE_HOME:-$HOME}}
+  if [[ ${DOT_PROFILE_FIXTURE:-0} == 1 ]]; then
+    extension_home=$(_tmpdir)/api-home
+    mkdir -p "$extension_home/.local/lib/dotfiles/doctor.d/lib"
+    for path in "${modules[@]}"; do
+      cp "$HOME/.local/lib/dotfiles/doctor.d/$path" \
+        "$extension_home/.local/lib/dotfiles/doctor.d/$path"
+    done
+    for path in "$HOME"/.local/lib/dotfiles/doctor.d/lib/*.sh; do
+      cp "$path" "$extension_home/.local/lib/dotfiles/doctor.d/lib/${path##*/}"
+    done
+  fi
+
+  _test_load_dot_doctor_api "$extension_home" || {
     _fail 'Standalone Dot doctor API loads for the dev overlay'
     return
   }
