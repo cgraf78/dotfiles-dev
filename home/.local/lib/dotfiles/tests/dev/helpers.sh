@@ -83,7 +83,15 @@ _assert_eq() {
 # the exact spelling returned by macOS or libuv. In particular, temporary paths
 # under /var may be reported as /private/var by some tools.
 _test_realpath() {
-  local path="$1" directory basename canonical_directory
+  local path="$1" target directory basename canonical_directory
+
+  if [[ -L $path ]]; then
+    target=$(readlink "$path") || return 1
+    case $target in
+      /*) path=$target ;;
+      *) path=${path%/*}/$target ;;
+    esac
+  fi
 
   if command -v realpath >/dev/null 2>&1; then
     realpath "$path" 2>/dev/null && return
@@ -164,14 +172,19 @@ _test_dot_root() {
 }
 
 _dev_repo_root() {
-  local tests_dir=${DOT_TEST_TESTS_DIR:-} helper_dir
+  local tests_dir=${DOT_TEST_TESTS_DIR:-} helper_source candidate helper_dir
 
-  if [[ ${DOT_PROFILE_FIXTURE:-0} == 1 &&
-    -n ${DOT_TEST_DEV_REPO_ROOT:-} &&
-    -d ${DOT_TEST_DEV_REPO_ROOT:-} ]]; then
-    (cd -P -- "$DOT_TEST_DEV_REPO_ROOT" && pwd -P)
-    return 0
-  fi
+  helper_source=$(_test_realpath "${BASH_SOURCE[0]}")
+  case $helper_source in
+    */home/.local/lib/dotfiles/tests/dev/helpers.sh)
+      candidate=${helper_source%/home/.local/lib/dotfiles/tests/dev/helpers.sh}
+      if [[ -f $candidate/.github/dotfiles-source.lock &&
+        -d $candidate/home ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+      ;;
+  esac
 
   case $tests_dir in
     */home/.local/lib/dotfiles/tests)

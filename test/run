@@ -158,6 +158,28 @@ if git -C "$HOME" rev-parse --show-toplevel >/dev/null 2>&1; then
 fi
 dot --version >/dev/null
 dot update >/dev/null
+# Keep Neovim out of PATH during convergence so the editor merge hook cannot
+# perform a real plugin update. The focused suites receive the audited binary
+# only after the composed payload is installed.
+nvim_path=${CAPABILITY_TEST_NVIM:-}
+if [[ -n $nvim_path ]]; then
+  [[ $nvim_path == /* && -x $nvim_path && ! -d $nvim_path ]] || {
+    echo 'CAPABILITY_TEST_NVIM must name an absolute executable' >&2
+    exit 1
+  }
+else
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/nvim && ! -d $command_root/nvim ]]; then
+      nvim_path=$command_root/nvim
+      break
+    fi
+  done
+fi
+[[ -n $nvim_path ]] || {
+  echo 'missing required fixture command: nvim' >&2
+  exit 1
+}
+ln -s "$nvim_path" "$controlled_bin/nvim"
 find "$repo_root/home" -type f -print | LC_ALL=C sort >"$tmp/overlay-payloads"
 linked_source=
 IFS= read -r linked_source <"$tmp/overlay-payloads" || true
@@ -170,12 +192,25 @@ linked_relative=${linked_source#"$repo_root/home"/}
   echo 'capability descriptor was not converged through standalone Dot' >&2
   exit 1
 }
+# The single-quoted script intentionally expands $1 in the child shell.
+# shellcheck disable=SC2016
+installed_dev_root=$(
+  env -u DOT_TEST_DEV_REPO_ROOT -u DOT_PROFILE_FIXTURE \
+    DOT_TEST_TESTS_DIR="$HOME/.local/lib/dotfiles/tests" \
+    bash -c '. "$1"; _dev_repo_root' _ \
+    "$HOME/.local/lib/dotfiles/tests/dev/helpers.sh"
+)
+[[ $installed_dev_root == "$repo_root" ]] || {
+  echo "installed dev helper resolved the wrong owner root: $installed_dev_root" >&2
+  echo "installed helper target: $(readlink "$HOME/.local/lib/dotfiles/tests/dev/helpers.sh")" >&2
+  exit 1
+}
 
 suite_root=$repo_root/home/.local/lib/dotfiles/tests
 validate_suite_inventory "$suite_root" .github/dot-test-suites.txt "$repo_root" >"$tmp/suites"
 mapfile -t suites <"$tmp/suites"
 
-if [[ ${DOTFILES_CAPABILITY_PHASE:-bootstrap} == final && ${#suites[@]} -eq 0 ]]; then
+if [[ ${DOTFILES_CAPABILITY_PHASE:-final} == final && ${#suites[@]} -eq 0 ]]; then
   echo 'final capability repository requires at least one focused suite' >&2
   exit 1
 fi

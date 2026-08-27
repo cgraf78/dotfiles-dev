@@ -11,8 +11,8 @@ dot_dev_doctor_test() {
     75-nvim-dev.sh
   )
 
-  extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-${DOT_TEST_SOURCE_HOME:-$HOME}}
-  if [[ ${DOT_PROFILE_FIXTURE:-0} == 1 ]]; then
+  extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-}
+  if [[ -z $extension_home ]]; then
     extension_home=$(_tmpdir)/api-home
     mkdir -p "$extension_home/.local/lib/dotfiles/doctor.d/lib"
     for path in "${modules[@]}"; do

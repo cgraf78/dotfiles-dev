@@ -45,10 +45,12 @@ case $repo_name in
   dotfiles-nvim)
     expected_cron='23 9 * * *'
     descriptor=20-nvim.conf
+    expected_profiles=base,jq,python,lua,neovim,tmux,ripgrep,fd,procps
     ;;
   dotfiles-dev)
     expected_cron='37 9 * * *'
     descriptor=30-dev.conf
+    expected_profiles=base,jq,python,lua,neovim,zsh,procps
     ;;
   *) fail "unexpected repository name: $repo_name" ;;
 esac
@@ -82,6 +84,7 @@ if [[ -n ${WORKFLOW_TEST_COUNT_FILE:-} ]]; then
 fi
 
 required_files=(
+  .selene.toml vim.yml
   .github/cgraf78-actions.lock .github/dependabot.yml .github/dot.lock
   .github/dot-test-suites.txt .github/dotfiles-source.lock
   .github/repository-settings-endpoints.txt .github/shellcheck-files.txt
@@ -119,6 +122,12 @@ if [[ -n ${DOTFILES_SOURCE_REPO:-} ]]; then
   cmp .github/dependabot.yml <(git -C "$DOTFILES_SOURCE_REPO" show 703e1aeea7286fccec56f65fa4314b8d57b46469:.github/dependabot.yml)
   cmp .github/workflows/retry-infrastructure.yml <(git -C "$DOTFILES_SOURCE_REPO" show 703e1aeea7286fccec56f65fa4314b8d57b46469:.github/workflows/retry-infrastructure.yml)
 fi
+selene_policy_hash=$(sha256sum home/.config/checkrun/selene.toml 2>/dev/null |
+  awk '{print $1}' || shasum -a 256 home/.config/checkrun/selene.toml | awk '{print $1}')
+[[ $selene_policy_hash == 4001d244c811c7f0c94dca6f77d3796c77f8d2fef8dede15d7831748b5f923b0 ]] ||
+  fail 'deployed Selene policy differs from the frozen source'
+grep -Fx 'std = "vim+lua51"' .selene.toml >/dev/null ||
+  fail 'repository-only Selene config does not select the Neovim standard library'
 [[ $(<.gitignore) == '.worktrees/' ]] || fail '.gitignore must contain only .worktrees/'
 manifest_hash=$(sha256sum .github/repository-settings-endpoints.txt 2>/dev/null | awk '{print $1}' || shasum -a 256 .github/repository-settings-endpoints.txt | awk '{print $1}')
 [[ $manifest_hash == 33b811658ba29f30dcebc77f1a10b4d37bac199c358831e1fa89af2bd8f18ac4 ]] || fail 'repository settings endpoint contract drifted'
@@ -128,7 +137,7 @@ grep -Fx 'name: Tests' "$workflow" >/dev/null || fail 'test workflow name drifte
 grep -Fx "    - cron: \"$expected_cron\"" "$workflow" >/dev/null || fail 'nightly schedule drifted'
 grep -Fx '      setup: none' "$workflow" >/dev/null || fail 'capability CI must use setup: none'
 grep -Fx '      matrix-set: full' "$workflow" >/dev/null || fail 'capability CI must use the full matrix'
-grep -Fx '      profiles: base,jq,python,lua,zsh,procps' "$workflow" >/dev/null || fail 'capability prerequisite profile drifted'
+grep -Fx "      profiles: $expected_profiles" "$workflow" >/dev/null || fail 'capability prerequisite profile drifted'
 grep -Fx '    name: cgraf78/actions sync' "$workflow" >/dev/null || fail 'actions-sync job is missing'
 grep -Fx '          persist-credentials: false' "$workflow" >/dev/null || fail 'checkout credentials must not persist'
 if grep -F 'setup: dotfiles' "$workflow" >/dev/null; then fail 'overlay CI must not bootstrap the base dotfiles repository'; fi
@@ -194,7 +203,7 @@ case $descriptor_path in
 esac
 
 suite_count=$(awk 'NF && $1 !~ /^#/ { count++ } END { print count+0 }' .github/dot-test-suites.txt)
-case ${DOTFILES_CAPABILITY_PHASE:-bootstrap} in
+case ${DOTFILES_CAPABILITY_PHASE:-final} in
   bootstrap) ;;
   final) ((suite_count > 0)) || fail 'final mode requires a non-empty suite inventory' ;;
   *) fail 'DOTFILES_CAPABILITY_PHASE must be bootstrap or final' ;;

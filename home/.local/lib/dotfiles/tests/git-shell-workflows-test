@@ -12,6 +12,7 @@ integrations=$(<"$HOME/.config/shell/interactive.d/80-dev-integrations.bash")
 _assert_contains 'git-tools is selected by dev' 'cgraf78/git-tools' "$deps"
 _assert_contains 'Lazygit is selected by dev' 'jesseduffield/lazygit' "$deps"
 _assert_contains 'Git log alias is dev-owned' "alias gl='git log" "$aliases"
+_assert_contains 'VS Code alias is dev-owned' "alias vs='code'" "$aliases"
 _assert_contains 'Lazygit wrapper is dev-owned' 'lg()' "$aliases"
 _assert_contains 'git-tools shell provider is loaded' '_tool_init git-tools' "$integrations"
 _test_summary

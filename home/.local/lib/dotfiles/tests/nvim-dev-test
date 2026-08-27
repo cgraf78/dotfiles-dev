@@ -2,6 +2,19 @@
 set -euo pipefail
 . "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
 
+NVIM_TEST_BIN=$(command -v nvim 2>/dev/null || true)
+if [[ -z $NVIM_TEST_BIN ]]; then
+  _fail 'Development Nvim tests require nvim'
+  _test_summary
+fi
+
+_nvim_lua() {
+  local lua_dir=$HOME/.config/nvim/lua
+  "$NVIM_TEST_BIN" --headless --noplugin -u NONE -i NONE \
+    -c "lua package.path='$lua_dir/?.lua;' .. package.path; $1" \
+    -c 'qa!' 2>&1
+}
+
 echo '=== Development Nvim boundary ==='
 _assert_contains 'Mason policy is dev-owned' 'lsp_server_packages' "$(<"$HOME/.config/nvim/lua/config/mason-policy.lua")"
 _assert_contains 'Diffview is dev-owned' 'sindrets/diffview.nvim' "$(<"$HOME/.config/nvim/lua/plugins/git-dev.lua")"
@@ -21,10 +34,13 @@ for plugin in \
     "{ \"$plugin\", enabled = true }" \
     "$(<"$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua")"
 done
+_assert_contains 'Dev layer preserves LazyVim dotfile support' \
+  '{ import = "lazyvim.plugins.extras.util.dot" }' \
+  "$(<"$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua")"
 
 output=$(
-  lua - "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua" <<'LUA'
-local path = assert(arg[1])
+  _nvim_lua '
+local later = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/zz-dev-extras.lua"))
 local earlier = {
   { "neovim/nvim-lspconfig", enabled = false },
   { "mason-org/mason.nvim", enabled = false },
@@ -33,17 +49,254 @@ local earlier = {
   { "mfussenegger/nvim-lint", enabled = false },
   { "folke/lazydev.nvim", enabled = false },
 }
+local expected = vim.deepcopy(earlier)
 local state = {}
-for _, spec in ipairs(earlier) do state[spec[1]] = spec.enabled end
-for _, spec in ipairs(dofile(path)) do
+for _, spec in ipairs(earlier) do
   if spec[1] then state[spec[1]] = spec.enabled end
 end
-for name, enabled in pairs(state) do
-  assert(enabled == true, name .. " was not re-enabled by the later dev spec")
+for _, spec in ipairs(later) do
+  if spec[1] then state[spec[1]] = spec.enabled end
+end
+for _, spec in ipairs(expected) do
+  assert(state[spec[1]] == true, spec[1] .. " was not re-enabled by the later dev spec")
 end
 print("effective-dev-state-ok")
-LUA
+'
 )
-_assert_eq 'Later dev spec overrides an earlier editor disable' \
+_assert_eq 'Later dev spec overrides the editor disable contract' \
   'effective-dev-state-ok' "$output"
+
+echo '=== Sley formatting and linting policy ==='
+output=$(_nvim_lua '
+  local capabilities = {
+    filetypes = {
+      format = { "bash", "lua", "python" },
+      lint = { "python", "bash" },
+      custom = { filename = { Dockerfile = "dockerfile" }, extension = {}, patterns = {} },
+    },
+  }
+  package.loaded["config.checkrun-nvim"] = {
+    module = function()
+      return { capabilities = function(opts) return opts.capabilities end }
+    end,
+    capability_opts = function() return { capabilities = capabilities } end,
+  }
+  local formatter = { owner = "sley-format" }
+  local linter = { owner = "sley-lint" }
+  package.loaded["config.sley-nvim"] = {
+    module = function()
+      return {
+        conform_formatter = function() return formatter end,
+        nvim_lint_linter = function(opts)
+          assert(type(opts.condition) == "function")
+          return linter
+        end,
+      }
+    end,
+  }
+  local policy = require("config.language-policy")
+  local formatting = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/formatting.lua"))[1].opts
+  local linting = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/linting.lua"))[1].opts
+  assert(formatting.formatters.sley == formatter)
+  assert(linting.linters.sley == linter)
+  assert(formatting.formatters_by_ft.lua[1] == "sley")
+  assert(linting.linters_by_ft.bash[1] == "sley")
+  assert(table.concat(linting.events, ",") == "BufReadPost,BufWritePost")
+  assert(table.concat(policy.sley_lint_filetypes(), ",") == "bash,python")
+  assert(policy.checkrun_capabilities().filetypes.custom.filename.Dockerfile == "dockerfile")
+  print("sley-policy-ok")
+')
+_assert_eq 'Sley format and lint policy follows Checkrun metadata' 'sley-policy-ok' "$output"
+
+echo '=== Checkrun metadata and schema resolution ==='
+checkrun_fixture=$(_tmpdir)
+cat >"$checkrun_fixture/nvim.lua" <<'LUA'
+local M = {}
+function M.editor_metadata(opts)
+  assert(type(opts.path) == "string" and opts.path:match("checkrun%-editor%-metadata%.json$"))
+  assert(opts.resolve_dependency("cgraf78/provider", "schema.json") == "/resolved/schema.json")
+  return {
+    capabilities = { filetypes = { format = { "lua" }, lint = {}, custom = {} } },
+    schemas = { json = { Provider = { url = "file:///resolved/schema.json" } }, yaml = {}, toml = {} },
+  }
+end
+function M.capabilities(opts) return opts.capabilities end
+function M.json_schemas(opts) return opts.config.json end
+function M.yaml_schemas(opts) return opts.config.yaml end
+function M.toml_schema_associations(opts) return opts.config.toml end
+function M.yaml_before_init() return function() end end
+return M
+LUA
+output=$(DOT_TEST_CHECKRUN_ADAPTER="$checkrun_fixture/nvim.lua" _nvim_lua '
+  package.loaded["config.dot-runtime"] = {
+    dep_file = function(dep, asset)
+      if dep == "cgraf78/checkrun" and asset == "lib/checkrun/nvim.lua" then
+        return vim.env.DOT_TEST_CHECKRUN_ADAPTER
+      end
+      if dep == "cgraf78/provider" and asset == "schema.json" then
+        return "/resolved/schema.json"
+      end
+    end,
+  }
+  local checkrun = require("config.checkrun-nvim")
+  assert(checkrun.capability_opts().capabilities.filetypes.format[1] == "lua")
+  assert(require("config.schema-policy").json_schemas().Provider.url == "file:///resolved/schema.json")
+  print("checkrun-schema-ok")
+')
+_assert_eq 'Checkrun metadata resolves provider schemas through the runtime adapter' \
+  'checkrun-schema-ok' "$output"
+
+echo '=== Language and LSP policy ==='
+output=$(_nvim_lua '
+  package.loaded["config.language-policy"] = {
+    add_filetypes = function() end,
+    critical_treesitter_parsers = function() return { "bash", "cpp", "lua", "rust" } end,
+  }
+  package.loaded["config.schema-policy"] = {
+    json_schemas = function() return { { name = "json" } } end,
+    yaml_schemas = function() return { yaml = { "*.yml" } } end,
+    yaml_before_init = function() end,
+    toml_schema_associations = function() return { ["*.toml"] = "schema" } end,
+  }
+  local specs = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/coding.lua"))
+  local treesitter, blink, servers
+  for _, spec in ipairs(specs) do
+    if spec[1] == "nvim-treesitter/nvim-treesitter" then treesitter = spec end
+    if spec[1] == "saghen/blink.cmp" then blink = spec end
+    if spec[1] == "neovim/nvim-lspconfig" then servers = spec.opts.servers end
+  end
+  assert(table.concat(treesitter.opts.ensure_installed, ",") == "bash,cpp,lua,rust")
+  assert(blink.version == "1.*")
+  for _, server in ipairs({ "bashls", "biome", "cssls", "dockerls", "jsonls", "superhtml", "taplo", "yamlls" }) do
+    assert(type(servers[server]) == "table", "missing " .. server)
+  end
+  assert(servers.jsonls.settings.json.schemas[1].name == "json")
+  assert(servers.taplo.settings.evenBetterToml.schema.associations["*.toml"] == "schema")
+  print("language-lsp-ok")
+')
+_assert_eq 'Language policy configures parsers, completion, and LSP servers' \
+  'language-lsp-ok' "$output"
+
+echo '=== Mason fallback policy ==='
+output=$(_nvim_lua '
+  local policy = require("config.mason-policy")
+  local original_path = vim.env.PATH
+  local bin = vim.fn.tempname()
+  vim.fn.mkdir(bin, "p")
+  for _, command in ipairs({ "stylua", "cmake-format", "cmake-lint", "rust-analyzer" }) do
+    local path = bin .. "/" .. command
+    vim.fn.writefile({ "#!/bin/sh" }, path)
+    vim.fn.setfperm(path, "rwx------")
+  end
+  vim.env.PATH = bin
+  local opts = { ensure_installed = { "stylua", "cmakelang", "cmakelint", "cmakelint", "codelldb" } }
+  policy.apply_mason_opts(opts)
+  assert(opts.PATH == "append")
+  assert(not vim.tbl_contains(opts.ensure_installed, "stylua"))
+  assert(not vim.tbl_contains(opts.ensure_installed, "cmakelang"))
+  assert(not vim.tbl_contains(opts.ensure_installed, "rust-analyzer"))
+  local count = 0
+  for _, package in ipairs(opts.ensure_installed) do if package == "cmakelint" then count = count + 1 end end
+  assert(count == 1 and vim.tbl_contains(opts.ensure_installed, "codelldb"))
+  local packages = policy.lsp_server_packages()
+  assert(packages.biome == "biome" and packages.cssls == "css-lsp" and packages.vtsls == "vtsls")
+  vim.env.PATH = original_path
+  vim.g.mason_disabled = true
+  assert(policy.mason_enabled() == false)
+  local lsp_opts = { servers = { available = { cmd = { "sh" } }, missing = { cmd = { "missing-lsp" } } }, setup = {} }
+  policy.apply_lsp_policy(lsp_opts)
+  assert(lsp_opts.servers.available.mason == false)
+  assert(lsp_opts.setup["*"]("missing", { cmd = { "missing-lsp" } }) == true)
+  vim.fn.delete(bin, "rf")
+  print("mason-policy-ok")
+')
+_assert_eq 'Mason remains a deduplicated fallback behind external tools' \
+  'mason-policy-ok' "$output"
+
+echo '=== Sley commands ==='
+output=$(_nvim_lua '
+  local callback
+  package.loaded["nvim_workspace"] = { current_file_repo_root = function() return "/tmp/project" end }
+  vim.api.nvim_create_user_command = function(name, fn)
+    if name == "SleyStatus" then callback = fn end
+  end
+  vim.cmd = function(command) print("cmd=" .. command) end
+  vim.fn.jobstart = function(command, opts)
+    print("job=" .. table.concat(command, " "))
+    print("cwd=" .. opts.cwd)
+    print("term=" .. tostring(opts.term))
+    return 1
+  end
+  dofile(vim.fn.expand("~/.config/nvim/lua/plugins/sley.lua"))[1].init()
+  assert(type(callback) == "function")
+  callback()
+')
+expected=$(printf 'cmd=botright split\njob=sley status\ncwd=/tmp/project\nterm=true\ncmd=startinsert')
+_assert_eq 'Sley commands execute in the active file repository' "$expected" "$output"
+
+echo '=== Dev workspace and Lazygit ==='
+workspace_tmp=$(_tmpdir)
+mkdir -p "$workspace_tmp/project/.git" "$workspace_tmp/home/.dotfiles"
+touch "$workspace_tmp/home/tracked"
+workspace_bin=$(_tmpdir)
+cat >"$workspace_bin/git" <<'SH'
+#!/usr/bin/env sh
+case "$*" in
+  *'ls-files --error-unmatch -- tracked') exit 0 ;;
+  *) exit 2 ;;
+esac
+SH
+chmod +x "$workspace_bin/git"
+output=$(PATH="$workspace_bin:$PATH" DOT_TEST_WORKSPACE="$workspace_tmp" _nvim_lua '
+  local spec_path = vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua")
+  vim.env.HOME = vim.env.DOT_TEST_WORKSPACE .. "/home"
+  local spec = dofile(spec_path)[1]
+  local opts = {}
+  spec.opts(nil, opts)
+  assert(opts.workspace.repo_root_detector(vim.env.DOT_TEST_WORKSPACE .. "/project") == vim.env.DOT_TEST_WORKSPACE .. "/project")
+  local ctx = {
+    default_root = vim.env.HOME,
+    relative_to_default_root = function(path)
+      if path == vim.env.HOME .. "/tracked" then return "tracked" end
+    end,
+  }
+  local lazygit = opts.lazygit.opts_for_path(vim.env.HOME .. "/tracked", ctx)
+  assert(lazygit.cwd == vim.env.HOME)
+  assert(table.concat(lazygit.args, " ") == "--work-tree " .. vim.env.HOME .. " --git-dir " .. vim.env.HOME .. "/.dotfiles")
+  print("workspace-lazygit-ok")
+')
+_assert_eq 'Dev workspace detects repository roots and supplies bare-repo Lazygit args' \
+  'workspace-lazygit-ok' "$output"
+
+echo '=== Diffview behavior ==='
+output=$(_nvim_lua '
+  local cycle = function() end
+  package.loaded["diffview.actions"] = { cycle_layout = cycle }
+  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/git-dev.lua"))[1]
+  local current_file
+  for _, key in ipairs(spec.keys) do
+    if key[1] == "<leader>df" then current_file = key[2] end
+  end
+  assert(type(current_file) == "function")
+  local commands = {}
+  local escaped_file = vim.fn.fnameescape("path with spaces.lua")
+  vim.fn.expand = function() return "path with spaces.lua" end
+  vim.cmd = function(command) table.insert(commands, command) end
+  current_file()
+  assert(commands[1] == "DiffviewOpen -- " .. escaped_file)
+  local opts = spec.opts()
+  assert(opts.view.default.layout == "diff2_vertical")
+  local function mapping(maps, lhs)
+    for _, map in ipairs(maps) do if map[2] == lhs then return map end end
+  end
+  assert(mapping(opts.keymaps.view, "<C-x>")[3] == cycle)
+  assert(mapping(opts.keymaps.view, "<leader>dx")[3] == cycle)
+  assert(mapping(opts.keymaps.file_panel, "<C-x>")[3] == cycle)
+  assert(mapping(opts.keymaps.file_history_panel, "<leader>dx")[3] == cycle)
+  assert(mapping(opts.keymaps.view, "<C-Up>")[3] == "[c")
+  assert(mapping(opts.keymaps.view, "<C-Down>")[3] == "]c")
+  print("diffview-behavior-ok")
+')
+_assert_eq 'Diffview preserves file diff, layout cycling, and local hunk mappings' \
+  'diffview-behavior-ok' "$output"
 _test_summary

@@ -10,14 +10,6 @@
 # files can set `std` explicitly when the project needs it.
 
 [rules]
-# This repository owns Neovim-only Lua but deliberately does not duplicate the
-# editor overlay's `vim+lua51` standard-library definition. Keep the standalone
-# owner-repository lint equivalent to that aggregate configuration.
-undefined_variable = "allow"
-unscoped_variables = "allow"
-mixed_table = "allow"
-global_usage = "allow"
-
 # Unused locals and callback parameters should fail the default lint gate.
 # Intentional placeholders can be named `_` or `_name`, which Selene ignores.
 unused_variable = "warn"

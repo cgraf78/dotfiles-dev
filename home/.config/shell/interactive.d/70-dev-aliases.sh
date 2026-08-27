@@ -3,6 +3,7 @@
 
 alias gl='git log --oneline --graph --decorate'
 alias gll='git log --oneline --all --graph --decorate'
+alias vs='code'
 
 lg() {
   local git_dir
