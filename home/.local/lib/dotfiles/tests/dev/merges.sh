@@ -1767,7 +1767,7 @@ JSON
     _assert_vscode_retirement_history() {
       local repo="$1"
       local rel=.config/dot/merge-hooks.d/vscode/keybindings
-      local head origin base base_sha path old_root
+      local git_root git_prefix git_rel head origin base base_sha path deploy_path old_root
       local source family report report_family
       local old_all current_all
       origin=""
@@ -1778,27 +1778,29 @@ JSON
       # development-time guard. It compares the proposed source with the event
       # base (or the last landed commit during local/main runs) and turns a
       # forgotten retirement into a failing test before the unsafe edit ships.
-      if ! git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if ! git_root=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null); then
         _pass "vscode keybindings: retirement history guard skipped outside Git"
         return
       fi
+      git_prefix=$(git -C "$repo" rev-parse --show-prefix 2>/dev/null) || return
+      git_rel=$git_prefix$rel
 
-      head=$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)
+      head=$(git -C "$git_root" rev-parse HEAD 2>/dev/null || true)
       base_sha="${DOT_VSCODE_KEYBINDING_BASE_SHA:-}"
       if [[ -n "$base_sha" && "$base_sha" != "0000000000000000000000000000000000000000" ]]; then
         if [[ "$base_sha" == "$head" ]] &&
-          git -C "$repo" diff --quiet HEAD -- "$rel" 2>/dev/null; then
+          git -C "$git_root" diff --quiet HEAD -- "$git_rel" 2>/dev/null; then
           _fail "vscode keybindings: event base must precede a clean checkout"
           return
         fi
-        if git -C "$repo" cat-file -e "$base_sha^{commit}" 2>/dev/null; then
+        if git -C "$git_root" cat-file -e "$base_sha^{commit}" 2>/dev/null; then
           base="$base_sha"
         else
           _fail "vscode keybindings: event base commit was not fetched"
           return
         fi
       else
-        origin=$(git -C "$repo" rev-parse origin/main 2>/dev/null || true)
+        origin=$(git -C "$git_root" rev-parse origin/main 2>/dev/null || true)
       fi
 
       if [[ -z "${base:-}" && -n "$origin" && "$origin" != "$head" ]]; then
@@ -1807,12 +1809,12 @@ JSON
         # longer be an ancestor of this checkout; comparing directly with that
         # unrelated future tip would invent removals and hide the immutable
         # predecessor generation. CI takes the event-SHA path above.
-        base=$(git -C "$repo" merge-base "$origin" "$head" 2>/dev/null || true)
+        base=$(git -C "$git_root" merge-base "$origin" "$head" 2>/dev/null || true)
       elif [[ -z "${base:-}" ]] &&
-        ! git -C "$repo" diff --quiet HEAD -- "$rel" 2>/dev/null; then
+        ! git -C "$git_root" diff --quiet HEAD -- "$git_rel" 2>/dev/null; then
         base="$head"
       elif [[ -z "${base:-}" ]]; then
-        base=$(git -C "$repo" rev-parse HEAD^ 2>/dev/null || true)
+        base=$(git -C "$git_root" rev-parse HEAD^ 2>/dev/null || true)
       fi
 
       if [[ -z "$base" ]]; then
@@ -1832,13 +1834,14 @@ JSON
       while IFS= read -r path; do
         [[ -n "$path" ]] || continue
         [[ "$path" == *.jsonc ]] || continue
-        mkdir -p "$old_root/$(dirname "$path")"
-        if ! git -C "$repo" show "$base:$path" >"$old_root/$path"; then
+        deploy_path=${path#"$git_prefix"}
+        mkdir -p "$old_root/$(dirname "$deploy_path")"
+        if ! git -C "$git_root" show "$base:$path" >"$old_root/$deploy_path"; then
           _fail "vscode keybindings: historical JSONC must be readable"
           return
         fi
       done < <(
-        git -C "$repo" ls-tree -r --name-only "$base" -- "$rel" |
+        git -C "$git_root" ls-tree -r --name-only "$base" -- "$git_rel" |
           LC_ALL=C sort
       )
 

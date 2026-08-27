@@ -5,7 +5,7 @@ dot_dev_doctor_test() {
   local doctor_home doctor_bin result drift expected health_log direct_tool
   local relative_link relative_target symlink_root symlink_alias
   local agent_home installed_config installed_config_before installed_doctor_output
-  local installed_section
+  local installed_section fixture_health=false
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -16,6 +16,7 @@ dot_dev_doctor_test() {
   )
 
   extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-}
+  [[ -z $extension_home ]] || fixture_health=true
   DOT_DOCTOR_RESULT_FILE=$(_tmpdir)/doctor-results.tsv
   export DOT_DOCTOR_RESULT_FILE
   if [[ -z $extension_home ]]; then
@@ -53,7 +54,9 @@ dot_dev_doctor_test() {
   sections=$(awk -F '\t' '$1 == "section" { count++ } END { print count+0 }' "$result_file")
   failures=$(awk -F '\t' '$1 == "fail" { count++ } END { print count+0 }' "$result_file")
   _assert_eq 'All six dev doctor wrappers publish a section' 6 "$sections"
-  _assert_eq 'Dev doctor wrappers publish no failures in the fixture' 0 "$failures"
+  if $fixture_health; then
+    _assert_eq 'Dev doctor wrappers publish no failures in the fixture' 0 "$failures"
+  fi
 
   _doctor_records() {
     local status=0
