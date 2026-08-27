@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development update inputs ==='
+repo_root=$(_dev_repo_root)
+_assert_contains 'Mise refresh workflow owns the dev lock' 'Mise lock' "$(<"$repo_root/.github/workflows/update-mise-lock.yml")"
+_assert_contains 'Schema refresh workflow owns Checkrun schemas' 'schemas' "$(<"$repo_root/.github/workflows/refresh-checkrun-schemas.yml")"
+_assert_contains 'Toolchains install before dev dependencies' 'toolchain' "$(<"$HOME/.config/shdeps/00-toolchains.conf")"
+_test_summary

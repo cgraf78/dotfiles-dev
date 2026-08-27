@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for path in \
+  "$HOME/.config/git/config" \
+  "$HOME/.config/shdeps/30-dev.conf" \
+  "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"; do
+  [[ -f $path ]] || {
+    printf 'android-dev-ci-smoke: missing %s\n' "$path" >&2
+    exit 1
+  }
+done
+
+printf 'android-dev-ci-smoke: development payload present\n'

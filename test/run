@@ -88,7 +88,7 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cut date dirname env find git grep head id jq ln mkdir mkfifo mktemp mv od ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee tr uname wc xargs)
+required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv od ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc xargs)
 for command_name in "${required_commands[@]}"; do
   command_path=
   for command_root in "${system_roots[@]}"; do
@@ -129,6 +129,28 @@ mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 mkdir -p "$HOME/.local/lib/dotfiles"
 chmod 700 "$HOME/.local/lib/dotfiles"
 
+# The dev overlay inherits the base doctor compatibility adapter. Build a
+# regular-file extension root so Dot's public trust boundary can validate and
+# load every dev-owned wrapper without authorizing sync=none payload symlinks.
+doctor_fixture_home=$tmp/doctor-extension-home
+mkdir -p "$doctor_fixture_home/.local/lib/dotfiles"
+chmod 700 "$doctor_fixture_home/.local/lib/dotfiles"
+cp -R "$repo_root/home/.local/lib/dotfiles/doctor.d" \
+  "$doctor_fixture_home/.local/lib/dotfiles/doctor.d"
+cat >"$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh" <<'EOF'
+# shellcheck shell=bash
+_dr_section() { dot_doctor_section "$@"; }
+_dr_ok() { dot_doctor_ok "$@"; }
+_dr_warn() { dot_doctor_warn "$@"; }
+_dr_fail() { dot_doctor_fail "$@"; }
+_dr_skip() { dot_doctor_skip "$@"; }
+_dr_tilde() { dot_doctor_display_path "$@"; }
+DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
+GIT="git --git-dir=$DOTFILES --work-tree=$HOME"
+_dr_is_dotfiles_checkout() { return 1; }
+EOF
+export DOT_TEST_DOCTOR_EXTENSION_HOME=$doctor_fixture_home
+
 if git -C "$HOME" rev-parse --show-toplevel >/dev/null 2>&1; then
   echo 'capability fixture unexpectedly contains a base Git repository' >&2
   exit 1
@@ -160,6 +182,12 @@ if ((${#suites[@]} > 0)); then
   DOT_TEST_TESTS_DIR=$suite_root DOT_TEST_INCLUDE_PROVIDER=0 \
     dot test -s "${suites[@]}"
 fi
+
+case ${PREFIX:-} in
+  /data/data/com.termux/*)
+    "$HOME/.local/lib/dotfiles/tests/android-dev-ci-smoke"
+    ;;
+esac
 
 # Prove a listed suite is linked from a sync=none overlay and executed by Dot,
 # independent of the bootstrap repository's intentionally empty inventory.

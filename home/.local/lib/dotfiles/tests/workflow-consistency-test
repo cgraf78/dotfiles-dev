@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Cross-surface consistency for dev-owned Checkrun and Sley integrations.
+set -euo pipefail
+export NO_COLOR=1
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development workflow consistency ==='
+git_config=$(<"$HOME/.config/git/config")
+deps=$(<"$HOME/.config/shdeps/30-dev.conf")
+vscode_local=$(<"$HOME/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv")
+
+_assert_contains 'Git activates the dev-owned hook directory' '.local/lib/dotfiles/git-hooks' "$git_config"
+_assert_contains 'Sley provider is installed by dev' 'cgraf78/sley' "$deps"
+_assert_contains 'Checkrun provider is installed by dev' 'cgraf78/checkrun' "$deps"
+_assert_contains 'VS Code activates the Sley provider asset' 'share/sley/vscode' "$vscode_local"
+_assert_file_exists 'Nvim Checkrun integration is dev-owned' "$HOME/.config/nvim/lua/config/checkrun-nvim.lua"
+_assert_file_exists 'Nvim Sley integration is dev-owned' "$HOME/.config/nvim/lua/config/sley-nvim.lua"
+_test_summary

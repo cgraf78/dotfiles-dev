@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development Nvim boundary ==='
+_assert_contains 'Mason policy is dev-owned' 'lsp_server_packages' "$(<"$HOME/.config/nvim/lua/config/mason-policy.lua")"
+_assert_contains 'Diffview is dev-owned' 'sindrets/diffview.nvim' "$(<"$HOME/.config/nvim/lua/plugins/git-dev.lua")"
+_assert_not_contains 'Basic Gitsigns stays in editor' 'lewis6991/gitsigns.nvim' "$(<"$HOME/.config/nvim/lua/plugins/git-dev.lua")"
+_assert_contains 'Workspace dev layer owns Lazygit' 'config.keymaps.workspace-dev' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
+_assert_contains 'Workspace dev layer owns Sley root detection' 'repo_root_detector' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
+_assert_contains 'Workspace dev layer owns Lazygit options' 'opts_for_path' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
+for plugin in \
+  neovim/nvim-lspconfig \
+  mason-org/mason.nvim \
+  mason-org/mason-lspconfig.nvim \
+  stevearc/conform.nvim \
+  mfussenegger/nvim-lint \
+  folke/lazydev.nvim; do
+  _assert_contains \
+    "Dev layer re-enables $plugin" \
+    "{ \"$plugin\", enabled = true }" \
+    "$(<"$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua")"
+done
+
+output=$(
+  lua - "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua" <<'LUA'
+local path = assert(arg[1])
+local earlier = {
+  { "neovim/nvim-lspconfig", enabled = false },
+  { "mason-org/mason.nvim", enabled = false },
+  { "mason-org/mason-lspconfig.nvim", enabled = false },
+  { "stevearc/conform.nvim", enabled = false },
+  { "mfussenegger/nvim-lint", enabled = false },
+  { "folke/lazydev.nvim", enabled = false },
+}
+local state = {}
+for _, spec in ipairs(earlier) do state[spec[1]] = spec.enabled end
+for _, spec in ipairs(dofile(path)) do
+  if spec[1] then state[spec[1]] = spec.enabled end
+end
+for name, enabled in pairs(state) do
+  assert(enabled == true, name .. " was not re-enabled by the later dev spec")
+end
+print("effective-dev-state-ok")
+LUA
+)
+_assert_eq 'Later dev spec overrides an earlier editor disable' \
+  'effective-dev-state-ok' "$output"
+_test_summary

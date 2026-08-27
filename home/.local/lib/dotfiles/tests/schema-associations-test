@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Validate the dev-owned Checkrun association registry and provider schemas.
+set -euo pipefail
+export NO_COLOR=1
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+policy="$HOME/.config/checkrun/associations.json"
+schema_dir="$HOME/.local/share/checkrun/schemas"
+
+set +e
+output=$(
+  python3 - "$policy" "$schema_dir" <<'PY' 2>&1
+import json
+import sys
+from pathlib import Path
+
+policy = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+schema_dir = Path(sys.argv[2])
+items = policy.get("associations")
+assert isinstance(items, list) and items
+names = set()
+for item in items:
+    name = item["name"]
+    assert name not in names
+    names.add(name)
+    assert isinstance(item.get("matches"), list) and item["matches"]
+    schema_name = item.get("schema")
+    if schema_name and "/" not in schema_name:
+        schema = schema_dir / schema_name
+        assert schema.is_file(), schema
+        json.loads(schema.read_text(encoding="utf-8"))
+print(len(items))
+PY
+)
+status=$?
+set -e
+_assert_exit 'Schema associations are structurally complete' 0 "$status"
+if [[ $status -eq 0 ]]; then
+  _pass "Schema associations enumerate $output policy entries"
+else
+  printf '%s\n' "$output" >&2
+fi
+_test_summary

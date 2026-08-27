@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Focused tests for the dev-owned commit-message policy adapter.
+set -euo pipefail
+export NO_COLOR=1
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+validator="$HOME/.local/lib/dotfiles/sley-hooks/validate-commit-msg"
+hook="$HOME/.local/lib/dotfiles/git-hooks/commit-msg"
+
+_assert_file_exists 'Commit-message validator is installed' "$validator"
+_assert_file_exists 'Git commit-msg hook is installed' "$hook"
+
+valid_message=$(_tmpfile)
+invalid_message=$(_tmpfile)
+cat >"$valid_message" <<'EOF'
+Document the development profile
+
+Summary
+- keep development configuration together
+
+Testing
+- run the focused suite
+EOF
+printf '%s\n' 'missing required sections' >"$invalid_message"
+
+set +e
+"$validator" --format git <"$valid_message" >/dev/null 2>&1
+valid_status=$?
+"$validator" --format git --strict <"$invalid_message" >/dev/null 2>&1
+invalid_status=$?
+set -e
+_assert_exit 'Valid Git message is accepted' 0 "$valid_status"
+if [[ $invalid_status -ne 0 ]]; then
+  _pass 'Invalid strict Git message is rejected'
+else
+  _fail 'Invalid strict Git message is rejected'
+fi
+
+_assert_contains 'Git hook selects the Sley provider boundary' 'sley-provider-hook' "$(<"$hook")"
+_test_summary

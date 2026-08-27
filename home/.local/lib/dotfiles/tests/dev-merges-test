@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/merges.sh"
+dot_dev_merges_test

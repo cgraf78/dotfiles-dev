@@ -14,11 +14,12 @@ capability_fixture_create() {
     echo 'capability fixture must not contain a base repository' >&2
     return 2
   }
-  mkdir -p "$config_dir/overlays.d"
+  mkdir -p "$config_dir/overlays.d" "$config_dir/extensions"
+  chmod 700 "$config_dir/extensions"
   cat >"$config_dir/config" <<'EOF'
 version=1
 extension_api=1
-extensions_dir=$HOME/.local/lib/dotfiles
+extensions_dir=$HOME/.config/dot/extensions
 dependency_provider=none
 EOF
   {
@@ -37,6 +38,10 @@ capability_fixture_self_test() {
   [[ ! -e $tmp/home/.git && ! -e $tmp/home/.dotfiles ]]
   [[ $(<"$tmp/home/.config/dot/overlays.d/30-dev.conf") == $'sync=none\npath='"$overlay" ]]
   [[ $(<"$tmp/home/.config/dot/config") == *'dependency_provider=none'* ]]
+  # shellcheck disable=SC2016  # verify the literal deferred HOME expansion
+  [[ $(<"$tmp/home/.config/dot/config") == *'extensions_dir=$HOME/.config/dot/extensions'* ]]
+  [[ -d $tmp/home/.config/dot/extensions ]]
+  [[ -z $(ls -A "$tmp/home/.config/dot/extensions") ]]
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

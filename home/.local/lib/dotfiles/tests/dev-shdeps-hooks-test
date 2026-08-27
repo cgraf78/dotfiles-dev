@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development Shdeps boundary ==='
+deps=$(<"$HOME/.config/shdeps/30-dev.conf")
+_assert_contains 'Checkrun dependency is selected' 'cgraf78/checkrun' "$deps"
+_assert_contains 'Git tooling dependency is selected' 'cgraf78/git-tools' "$deps"
+_assert_contains 'Mise dependency is selected' 'jdx/mise' "$deps"
+if awk '$1 == "cgraf78/agent-rules-sync" { found=1 } END { exit !found }' \
+  "$HOME/.config/shdeps/30-dev.conf"; then
+  _fail 'Agent rules sync stays in base'
+else
+  _pass 'Agent rules sync stays in base'
+fi
+for hook in "$HOME"/.config/shdeps/hooks.d/*.sh; do
+  if bash -n "$hook"; then _pass "Hook parses: ${hook#"$HOME/"}"; else _fail "Hook does not parse: ${hook#"$HOME/"}"; fi
+done
+_test_summary

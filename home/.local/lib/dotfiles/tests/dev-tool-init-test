@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development tool init adapter ==='
+work=$(_tmpdir)
+mkdir -p "$work/provider/share/example"
+printf 'export DEV_TOOL_INIT_PROBE=loaded\n' >"$work/provider/share/example/shell.sh"
+dot_shdeps_dep_file() { printf '%s\n' "$work/provider/$2"; }
+export -f dot_shdeps_dep_file
+printf '%s\n' '# test shim' >"$work/shdeps-assets.sh"
+SHDEPS_ASSETS_TEST=$work/shdeps-assets.sh
+content=$(sed "s#\$HOME/.local/lib/dotfiles/shdeps-assets.sh#$SHDEPS_ASSETS_TEST#" \
+  "$HOME/.config/shell/interactive.d/70-dev-tool-init.sh")
+eval "$content"
+output=$(_tool_shdeps_source_emit example share/example/shell.sh)
+_assert_eq 'Tool init reads the provider asset' 'export DEV_TOOL_INIT_PROBE=loaded' "$output"
+_test_summary
