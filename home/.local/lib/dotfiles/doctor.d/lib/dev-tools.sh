@@ -9,7 +9,7 @@ _dr_dev_shdeps_link_issue() {
 _dr_check_dev_shdeps_bin_group() {
   local level="$1" dependency="$2" rows cmd link expected extra actual
   local issue_count=0 command_count=0
-  if ! rows=$(SHDEPS_CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/shdeps" \
+  if ! rows=$(SHDEPS_CONF_DIR="$(_dot_shdeps_conf_dir)" \
     command shdeps dep-links "cgraf78/$dependency" 2>/dev/null); then
     _dr_dev_shdeps_link_issue "$level" "$dependency bin links unchecked" \
       "shdeps cannot resolve command links for cgraf78/$dependency"
@@ -28,6 +28,12 @@ _dr_check_dev_shdeps_bin_group() {
       continue
     fi
     command_count=$((command_count + 1))
+    if [[ ! -e $link && ! -L $link ]]; then
+      issue_count=$((issue_count + 1))
+      _dr_dev_shdeps_link_issue "$level" "$cmd not linked" \
+        "expected $(_dr_tilde "$link") -> $(_dr_tilde "$expected")"
+      continue
+    fi
     if [[ $link != "$expected" ]]; then
       if [[ ! -L $link ]]; then
         issue_count=$((issue_count + 1))
@@ -35,10 +41,9 @@ _dr_check_dev_shdeps_bin_group() {
           "expected $(_dr_tilde "$link") -> $(_dr_tilde "$expected")"
         continue
       fi
-      actual=$(readlink "$link" 2>/dev/null || true)
-      case $actual in /*) ;; *) actual=${link%/*}/$actual ;; esac
-      if [[ $actual != "$expected" ]]; then
+      if ! _dr_symlink_points_to "$link" "$expected"; then
         issue_count=$((issue_count + 1))
+        actual=$(_dr_symlink_target_path "$link" 2>/dev/null || echo '?')
         _dr_dev_shdeps_link_issue "$level" "$cmd link target drift" \
           "got $(_dr_tilde "$actual"), expected $(_dr_tilde "$expected")"
         continue

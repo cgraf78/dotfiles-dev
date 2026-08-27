@@ -1007,4 +1007,171 @@ output=$(_nvim_lua '
 ')
 _assert_eq 'Diffview preserves file diff, layout cycling, and local hunk mappings' \
   'diffview-behavior-ok' "$output"
+
+echo '=== Sley command refusal paths ==='
+output=$(_nvim_lua '
+  local callback
+  local started = false
+  package.loaded["nvim_workspace"] = { current_file_repo_root = function() return nil end }
+  vim.api.nvim_create_user_command = function(name, fn)
+    if name == "SleyStatus" then callback = fn end
+  end
+  vim.notify = function(message, level)
+    print("notify=" .. message)
+    print("warn=" .. tostring(level == vim.log.levels.WARN))
+  end
+  vim.fn.jobstart = function() started = true; return 1 end
+  dofile(vim.fn.expand("~/.config/nvim/lua/plugins/sley.lua"))[1].init()
+  callback()
+  print("started=" .. tostring(started))
+')
+expected=$(printf 'notify=Sley command needs a valid buffer repo root\nwarn=true\nstarted=false')
+_assert_eq 'Sley commands abort without a current-file repository' "$expected" "$output"
+
+nofile_root=$(_tmpdir)
+mkdir -p "$nofile_root/repo"
+output=$(DOT_TEST_NOFILE_ROOT="$nofile_root/repo" _nvim_lua '
+  local callback
+  local started = false
+  vim.cmd("cd " .. vim.env.DOT_TEST_NOFILE_ROOT)
+  vim.cmd("new")
+  vim.bo.buftype = "nofile"
+  package.loaded["nvim_workspace"] = { current_file_repo_root = function() return nil end }
+  vim.api.nvim_create_user_command = function(name, fn)
+    if name == "SleyStatus" then callback = fn end
+  end
+  vim.cmd = function() end
+  vim.notify = function(message, level)
+    print("notify=" .. message)
+    print("warn=" .. tostring(level == vim.log.levels.WARN))
+  end
+  vim.fn.jobstart = function() started = true; return 1 end
+  dofile(vim.fn.expand("~/.config/nvim/lua/plugins/sley.lua"))[1].init()
+  callback()
+  print("started=" .. tostring(started))
+')
+_assert_eq 'Sley commands abort from nofile buffers instead of inheriting cwd' \
+  "$expected" "$output"
+
+echo '=== Minimal child schema resolution ==='
+minimal_path=${PATH%%:*}
+output=$(DOT_TEST_CHECKRUN_ADAPTER="$checkrun_fixture/nvim.lua" \
+  DOT_TEST_MINIMAL_CHILD_PATH="$minimal_path:/usr/bin:/bin" _nvim_lua '
+  vim.env.PATH = vim.env.DOT_TEST_MINIMAL_CHILD_PATH
+  package.loaded["config.checkrun-nvim"] = nil
+  package.loaded["config.schema-policy"] = nil
+  package.loaded["config.dot-runtime"] = {
+    dep_file = function(dependency, asset)
+      if dependency == "cgraf78/checkrun" and asset == "lib/checkrun/nvim.lua" then
+        return vim.env.DOT_TEST_CHECKRUN_ADAPTER
+      end
+      if dependency == "cgraf78/provider" and asset == "schema.json" then
+        return "/resolved/schema.json"
+      end
+    end,
+  }
+  local schemas = require("config.schema-policy").json_schemas()
+  assert(schemas.Provider.url == "file:///resolved/schema.json")
+  print("minimal-schema-ok")
+')
+_assert_eq 'Checkrun schemas resolve with a minimal child PATH' \
+  'minimal-schema-ok' "$output"
+
+echo '=== Mason command and availability variants ==='
+output=$(_nvim_lua '
+  local policy = require("config.mason-policy")
+  local original_prefix = vim.env.PREFIX
+  vim.g.mason_disabled = true
+  print(tostring(policy.mason_enabled()))
+  vim.g.mason_disabled = false
+  print(tostring(policy.mason_enabled()))
+  vim.env.PREFIX = "/data/data/com.termux/files/usr"
+  print(tostring(policy.mason_enabled()))
+  vim.env.PREFIX = original_prefix
+')
+_assert_eq 'Mason policy honors explicit disable, enable, and Android states' \
+  $'false\ntrue\nfalse' "$output"
+
+output=$(_nvim_lua '
+  local policy = require("config.mason-policy")
+  local old_path = vim.env.PATH
+  vim.env.PATH = "/definitely/not/a/real/path"
+  vim.g.mason_disabled = true
+  local opts = { servers = {
+    missing = { cmd = { "definitely-not-a-real-lsp-binary" } },
+    biome = { cmd = function() return { "ignored" } end },
+  }, setup = {} }
+  policy.apply_lsp_policy(opts)
+  print(tostring(policy.server_command("biome", opts.servers.biome)))
+  print(tostring(opts.setup["*"]("missing", opts.servers.missing)))
+  vim.env.PATH = old_path
+')
+_assert_eq 'Disabled Mason resolves function commands and skips missing executables' \
+  $'biome\ntrue' "$output"
+
+output=$(_nvim_lua '
+  local policy = require("config.mason-policy")
+  vim.g.mason_disabled = false
+  local called = false
+  local opts = { setup = { missing = function() called = true end } }
+  policy.apply_lsp_policy(opts)
+  local result = opts.setup.missing("missing", { cmd = { "definitely-not-a-real-lsp-binary" } })
+  print(tostring(result))
+  print(tostring(called))
+')
+_assert_eq 'Enabled Mason leaves missing executable handling to Mason' \
+  $'nil\ntrue' "$output"
+
+output=$(_nvim_lua '
+  local policy = require("config.mason-policy")
+  vim.lsp.config("available_true", { cmd = { "sh" } })
+  local opts = { servers = { available_true = true }, setup = {} }
+  policy.apply_lsp_policy(opts)
+  print(type(opts.servers.available_true))
+  print(tostring(opts.servers.available_true.mason))
+')
+_assert_eq 'Mason shorthand servers honor externally available commands' \
+  $'table\nfalse' "$output"
+
+echo '=== Dev workspace callbacks ==='
+workspace_callback_root=$(_tmpdir)
+mkdir -p "$workspace_callback_root/project/.git" "$workspace_callback_root/outside"
+output=$(DOT_TEST_WORKSPACE_CALLBACK_ROOT="$workspace_callback_root" _nvim_lua '
+  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua"))[1]
+  local opts = {}
+  spec.opts(nil, opts)
+  local root = vim.env.DOT_TEST_WORKSPACE_CALLBACK_ROOT
+  assert(opts.workspace.repo_root_detector(root .. "/project") == root .. "/project")
+  local old_system = vim.system
+  vim.fn.executable = function(command) return command == "sley" and 1 or 0 end
+  vim.system = function(command, options)
+    assert(table.concat(command, " ") == "sley status --json")
+    assert(options.cwd == root .. "/outside")
+    assert(options.env.SLEY_SKIP_BARE_REPO_FALLBACK == "1")
+    return { wait = function() return { code = 0, stdout = vim.json.encode({ root = root }) } end }
+  end
+  assert(opts.workspace.repo_root_detector(root .. "/outside") == root)
+  vim.system = function() error("sley failure") end
+  assert(opts.workspace.repo_root_detector(root .. "/outside") == nil)
+  vim.system = old_system
+  print("workspace-callbacks-ok")
+')
+_assert_eq 'Workspace callback prefers markers, consumes Sley, and fails closed' \
+  'workspace-callbacks-ok' "$output"
+
+output=$(_nvim_lua '
+  local registered
+  local scheduled = false
+  vim.api.nvim_create_autocmd = function(event, opts)
+    assert(event == "User" and opts.pattern == "VeryLazy")
+    registered = opts.callback
+  end
+  vim.schedule = function(fn) scheduled = true; fn() end
+  package.loaded["config.keymaps.workspace-dev"] = { setup = function() print("setup") end }
+  dofile(vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua"))[1].init()
+  registered()
+  print("scheduled=" .. tostring(scheduled))
+')
+_assert_eq 'Workspace init schedules its dev keymap callback after VeryLazy' \
+  $'setup\nscheduled=true' "$output"
 _test_summary

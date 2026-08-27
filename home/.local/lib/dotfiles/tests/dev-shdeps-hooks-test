@@ -12,6 +12,106 @@ _assert_contains 'Git tooling dependency is selected' 'cgraf78/git-tools' "$deps
 _assert_contains 'Mise dependency is selected' 'jdx/mise' "$deps"
 _assert_not_contains 'Agent rules sync stays in base' 'cgraf78/agent-rules-sync' "$deps"
 
+_clippy_dep=$(awk '$1 == "clippy" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/00-toolchains.conf")
+_assert_eq 'clippy: uses package manager instead of cargo install' \
+  pkg "$(awk '{ print $2 }' <<<"$_clippy_dep")"
+_assert_eq 'clippy: command check uses cargo subcommand binary' \
+  cargo-clippy "$(awk '{ print $3 }' <<<"$_clippy_dep")"
+for mapping in apt:rust-clippy apk:rust-clippy pacman:rust brew:rust android:rust; do
+  _assert_contains "clippy: preserves $mapping package mapping" "$mapping" "$_clippy_dep"
+done
+_assert_not_contains 'clippy: Debian package is not the command name' \
+  apt:cargo-clippy "$_clippy_dep"
+
+_rust_src_dep=$(awk '$1 == "rust-src" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/00-toolchains.conf")
+_assert_contains 'rust-src: Termux rust package bundles sources' android:rust \
+  "$_rust_src_dep"
+
+_uv_pkg=$(awk '$1 == "uv" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/00-toolchains.conf")
+_uv_upstream=$(awk '$1 == "astral-sh/uv" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/00-toolchains.conf")
+_assert_contains 'uv: native route covers macOS and Android' \
+  'os:macos,os:android' "$_uv_pkg"
+_assert_contains 'uv: upstream route excludes macOS and Android' \
+  'os:!macos,os:!android' "$_uv_upstream"
+
+_ast_grep_pkg=$(awk '$1 == "ast-grep" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_ast_grep_release=$(awk '$1 == "ast-grep/ast-grep" && $2 == "github:release" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq 'ast-grep: native route checks the upstream command' ast-grep \
+  "$(awk '{ print $3 }' <<<"$_ast_grep_pkg")"
+_assert_contains 'ast-grep: native package route is catalog-scoped' \
+  'mgr:brew,mgr:pacman' "$_ast_grep_pkg"
+_assert_contains 'ast-grep: release fallback excludes native and Android targets' \
+  'mgr:!brew,mgr:!pacman,mgr:!apk,os:!android' "$_ast_grep_release"
+
+_duckdb_pkg=$(awk '$1 == "duckdb" && $2 == "pkg" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_duckdb_release=$(awk '$1 == "duckdb/duckdb" && $2 == "github:release" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq 'duckdb: native route checks the upstream command' duckdb \
+  "$(awk '{ print $3 }' <<<"$_duckdb_pkg")"
+_assert_contains 'duckdb: native package route is catalog-scoped' \
+  'mgr:brew,mgr:pacman' "$_duckdb_pkg"
+_assert_contains 'duckdb: release fallback excludes native and Android targets' \
+  'mgr:!brew,mgr:!pacman,os:!android' "$_duckdb_release"
+
+_bpftrace_deps=$(awk '$1 ~ /(^|\/)bpftrace$/ || \
+  $3 ~ /(^|,)([^,:]+:)?bpftrace(,|$)/ { print }' \
+  "$REAL_HOME/.config/shdeps/"*.conf)
+_assert_eq 'bpftrace: dependency stays disabled' '' "$_bpftrace_deps"
+
+_mise_config=$(<"$REAL_HOME/.config/mise/config.toml")
+_mise_lock=$(<"$REAL_HOME/.config/mise/mise.lock")
+_neocmakelsp_shdeps=$(awk '$1 == "Decodetalkers/neocmakelsp" || \
+  $1 == "neocmakelsp/neocmakelsp" || ($1 == "neocmakelsp" && $2 != "pkg") { print }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq 'neocmakelsp: Shdeps has no competing release provider' '' \
+  "$_neocmakelsp_shdeps"
+_assert_contains 'neocmakelsp: Mise owns the Linux release provider' \
+  '"github:neocmakelsp/neocmakelsp" = { version = "latest", os = ["linux"] }' \
+  "$_mise_config"
+_assert_contains 'neocmakelsp: macOS keeps the native package provider' os:macos \
+  "$(awk '$1 == "neocmakelsp" && $2 == "pkg" { print }' "$REAL_HOME/.config/shdeps/30-dev.conf")"
+_assert_contains 'neocmakelsp: lock records the release backend' \
+  'backend = "github:neocmakelsp/neocmakelsp"' "$_mise_lock"
+
+_superhtml_deps=$(awk '$1 == "superhtml" { print }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_contains 'superhtml: macOS keeps the native package provider' os:macos \
+  "$_superhtml_deps"
+_assert_contains 'superhtml: Mise owns the Linux release provider' \
+  '"github:kristoff-it/superhtml" = { version = "latest", os = ["linux"] }' \
+  "$_mise_config"
+_assert_not_contains 'superhtml: deprecated UBI provider is retired' \
+  '"ubi:kristoff-it/superhtml"' "$_mise_config"
+_assert_contains 'superhtml: lock records the release provider' \
+  '[[tools."github:kristoff-it/superhtml"]]' "$_mise_lock"
+
+_gitleaks_release=$(awk '$1 == "gitleaks/gitleaks" { print; exit }' \
+  "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq 'gitleaks: upstream fallback uses a release binary' github:release \
+  "$(awk '{ print $2 }' <<<"$_gitleaks_release")"
+_assert_contains 'gitleaks: upstream fallback excludes macOS and Android' \
+  'os:!macos,os:!android' "$_gitleaks_release"
+
+for _native_tool in difftastic direnv lazygit mise yq; do
+  _assert_contains "$_native_tool: native package route covers macOS and Android" \
+    'os:macos,os:android' \
+    "$(awk -v name="$_native_tool" '$1 == name && $2 == "pkg" { print; exit }' \
+      "$REAL_HOME/.config/shdeps/30-dev.conf")"
+done
+for _upstream_tool in Wilfred/difftastic direnv/direnv jesseduffield/lazygit jdx/mise mikefarah/yq; do
+  _assert_contains "$_upstream_tool: upstream route excludes macOS and Android" \
+    'os:!macos,os:!android' \
+    "$(awk -v name="$_upstream_tool" '$1 == name { print; exit }' \
+      "$REAL_HOME/.config/shdeps/30-dev.conf")"
+done
+
 echo "=== Python toolchain hook ==="
 
 _python_dep=$(

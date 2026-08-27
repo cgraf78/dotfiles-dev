@@ -5551,12 +5551,22 @@ TOML
 printf 'token=%s args=%s\n' "${MISE_GITHUB_TOKEN:-}" "$*" >>"$MISE_TEST_LOG"
 [[ "${MISE_FAIL_INSTALL:-0}" != 1 || "$1" != install ]]
 MISE
-  chmod +x "$mise_bin/mise"
+  cat >"$mise_bin/gh" <<'GH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MISE_GH_LOG"
+printf '%s\n' gh-token
+GH
+  chmod +x "$mise_bin/mise" "$mise_bin/gh"
+  mise_gh_log=$mise_home/gh.log
   _run_mise_merge() (
+    local interactive=${1:-0}
     unset -f merge 2>/dev/null
     . "$_MISE_HOOK"
+    # shellcheck disable=SC2329 # The sourced hook invokes this override.
+    _mise_interactive() { [[ $interactive -eq 1 ]]; }
     merge
   )
+  unset MISE_GITHUB_TOKEN GITHUB_TOKEN DOT_TEST_GH
   : >"$mise_log"
   PREFIX=/data/data/com.termux/files/usr HOME="$mise_home" PATH="$mise_bin:$PATH" \
     MISE_TEST_LOG="$mise_log" _run_mise_merge
@@ -5579,11 +5589,57 @@ MISE
     'args=prune --tools --yes ubi:kristoff-it/superhtml' "$(<"$mise_log")"
 
   : >"$mise_log"
+  rm -f "$mise_gh_log"
+  HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
+    MISE_GH_LOG="$mise_gh_log" MISE_GITHUB_TOKEN=existing-token \
+    GITHUB_TOKEN=actions-token _run_mise_merge
+  _assert_contains 'Mise merge: preserves an existing dedicated token' \
+    'token=existing-token args=install --locked' "$(<"$mise_log")"
+  _assert_file_missing 'Mise merge: an existing token skips gh' "$mise_gh_log"
+
+  : >"$mise_log"
+  rm -f "$mise_gh_log"
+  HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
+    MISE_GH_LOG="$mise_gh_log" GITHUB_TOKEN=actions-token _run_mise_merge
+  _assert_contains 'Mise merge: GitHub Actions token feeds Mise' \
+    'token=actions-token args=install --locked' "$(<"$mise_log")"
+  _assert_file_missing 'Mise merge: GitHub Actions token skips gh' "$mise_gh_log"
+
+  : >"$mise_log"
+  rm -f "$mise_gh_log"
+  interactive_output=$(HOME="$mise_home" PATH="$mise_bin:$PATH" \
+    MISE_TEST_LOG="$mise_log" MISE_GH_LOG="$mise_gh_log" \
+    _run_mise_merge 1 2>&1 || true)
+  _assert_contains 'Mise merge: interactive tests require an explicit gh double' \
+    'test gh' "$interactive_output"
+  _assert_file_missing 'Mise merge: missing interactive double cannot reach gh' \
+    "$mise_gh_log"
+
+  : >"$mise_log"
+  rm -f "$mise_gh_log"
+  interactive_output=$(DOT_TEST=0 HOME="$mise_home" PATH="$mise_bin:$PATH" \
+    MISE_TEST_LOG="$mise_log" MISE_GH_LOG="$mise_gh_log" \
+    _run_mise_merge 1 2>&1 || true)
+  _assert_contains 'Mise merge: interactive non-account HOME is rejected' \
+    "HOME is not the account home: $mise_home" "$interactive_output"
+  _assert_file_missing 'Mise merge: non-account HOME cannot reach gh' "$mise_gh_log"
+
+  : >"$mise_log"
+  rm -f "$mise_gh_log"
+  HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
+    MISE_GH_LOG="$mise_gh_log" DOT_TEST_GH="$mise_bin/gh" \
+    _run_mise_merge 1
+  _assert_file_content 'Mise merge: explicit interactive gh double is invoked' \
+    'auth token' "$mise_gh_log"
+  _assert_contains 'Mise merge: interactive gh token feeds Mise' \
+    'token=gh-token args=install --locked' "$(<"$mise_log")"
+
+  : >"$mise_log"
   HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
     MISE_FAIL_INSTALL=1 _run_mise_merge || true
   _assert_not_contains 'Mise merge: failed install does not prune tool state' \
     'args=prune' "$(<"$mise_log")"
 
-  unset -f _run_mise_merge merge 2>/dev/null
+  unset -f _run_mise_merge _mise_interactive merge 2>/dev/null
   _test_summary
 }

@@ -88,7 +88,7 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv od paste ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc xargs yq)
+required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv node od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs yq)
 for command_name in "${required_commands[@]}"; do
   command_path=
   if [[ $command_name == yq && -n ${CAPABILITY_TEST_YQ:-} ]]; then
@@ -97,6 +97,12 @@ for command_name in "${required_commands[@]}"; do
       exit 1
     }
     command_path=$CAPABILITY_TEST_YQ
+  elif [[ $command_name == node ]]; then
+    command_path=${CAPABILITY_TEST_NODE:-$(command -v node 2>/dev/null || true)}
+    [[ -z $command_path || $command_path == /* && -x $command_path && ! -d $command_path ]] || {
+      echo 'CAPABILITY_TEST_NODE must name an absolute executable' >&2
+      exit 1
+    }
   fi
   for command_root in "${system_roots[@]}"; do
     [[ -z $command_path ]] || break
@@ -153,6 +159,46 @@ _dr_warn() { dot_doctor_warn "$@"; }
 _dr_fail() { dot_doctor_fail "$@"; }
 _dr_skip() { dot_doctor_skip "$@"; }
 _dr_tilde() { dot_doctor_display_path "$@"; }
+_dr_physical_path() {
+  local path=$1 directory base
+  while [[ $path != / && $path == */ ]]; do path=${path%/}; done
+  case $path in
+    /) directory=/; base=/ ;;
+    */*)
+      directory=${path%/*}; base=${path##*/}
+      [[ -n $directory ]] || directory=/
+      ;;
+    *) directory=.; base=$path ;;
+  esac
+  [[ -d $directory ]] || return 1
+  directory=$(cd "$directory" && pwd -P) || return 1
+  printf '%s/%s\n' "$directory" "$base"
+}
+_dr_symlink_target_path() {
+  local link=$1 target link_directory
+  target=$(readlink "$link") || return 1
+  case $target in
+    /*) _dr_physical_path "$target" ;;
+    *)
+      case $link in
+        */*)
+          link_directory=${link%/*}
+          [[ -n $link_directory ]] || link_directory=/
+          ;;
+        *) link_directory=. ;;
+      esac
+      _dr_physical_path "$link_directory/$target"
+      ;;
+  esac
+}
+_dr_symlink_points_to() {
+  local link=$1 expected=$2 actual expected_physical
+  [[ -e $expected ]] || return 1
+  actual=$(_dr_symlink_target_path "$link") || return 1
+  expected_physical=$(_dr_physical_path "$expected") || return 1
+  [[ $actual == "$expected_physical" ]]
+}
+_dot_shdeps_conf_dir() { printf '%s\n' "$HOME/.config/shdeps"; }
 dot_agentguard_opencode_marker() { printf '%s\n' '// agentguard-managed:opencode-plugin'; }
 DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
 GIT="git --git-dir=$DOTFILES --work-tree=$HOME"

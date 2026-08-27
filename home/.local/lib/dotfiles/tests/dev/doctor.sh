@@ -3,6 +3,7 @@
 dot_dev_doctor_test() {
   local result_file current_module sections failures extension_home path
   local doctor_home doctor_bin result drift expected health_log direct_tool
+  local relative_link relative_target symlink_root symlink_alias
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -114,6 +115,8 @@ case ${2:-} in
   cgraf78/empty) exit 0 ;;
   cgraf78/malformed) printf 'bad\trow\n' ;;
   cgraf78/direct) printf 'tool\t%s\t%s\n' "$DOCTOR_DIRECT_TOOL" "$DOCTOR_DIRECT_TOOL" ;;
+  cgraf78/relative) printf 'tool\t%s\t%s\n' "$DOCTOR_RELATIVE_LINK" "$DOCTOR_RELATIVE_TARGET" ;;
+  cgraf78/symlink-parent) printf 'tool\t%s\t%s\n' "$DOCTOR_SYMLINK_LINK" "$DOCTOR_SYMLINK_TARGET" ;;
   *) exit 1 ;;
 esac
 SHDEPS
@@ -136,6 +139,37 @@ SHDEPS
     'direct bin links' "$result"
   _assert_not_contains 'Doctor does not require a direct target to be a symlink' \
     'tool not linked' "$result"
+
+  mkdir -p "$doctor_home/.local/share/tool/bin"
+  relative_target="$doctor_home/.local/share/tool/bin/tool"
+  relative_link="$doctor_home/.local/bin/relative-tool"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$relative_target"
+  chmod +x "$relative_target"
+  ln -s ../share/tool/bin/tool "$relative_link"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
+    DOCTOR_RELATIVE_LINK="$relative_link" \
+    DOCTOR_RELATIVE_TARGET="$relative_target" \
+    _doctor_records _dr_check_dev_shdeps_bin_group warn relative)
+  _assert_contains 'Doctor accepts relative Shdeps command links' \
+    'relative bin links' "$result"
+  _assert_not_contains 'Doctor canonicalizes relative Shdeps link targets' \
+    'link target drift' "$result"
+
+  symlink_root=$(_tmpdir)
+  symlink_alias=$(_tmpdir)/root
+  mkdir -p "$symlink_root/bin" "$symlink_root/share/tool"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$symlink_root/share/tool/tool"
+  chmod +x "$symlink_root/share/tool/tool"
+  ln -s ../share/tool/tool "$symlink_root/bin/tool"
+  ln -s "$symlink_root" "$symlink_alias"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
+    DOCTOR_SYMLINK_LINK="$symlink_alias/bin/tool" \
+    DOCTOR_SYMLINK_TARGET="$symlink_root/share/tool/tool" \
+    _doctor_records _dr_check_dev_shdeps_bin_group warn symlink-parent)
+  _assert_contains 'Doctor accepts Shdeps links through a symlinked parent' \
+    'symlink-parent bin links' "$result"
+  _assert_not_contains 'Doctor canonicalizes symlinked parent directories' \
+    'link target drift' "$result"
 
   cat >"$doctor_bin/hm" <<'HM'
 #!/usr/bin/env bash
