@@ -882,6 +882,32 @@ YAML
           and .command == "workbench.action.terminal.sendSequence"
           and .when == "terminalFocus && termnav.nvimFocused"
         )] | length' "$keybindings_file")"
+      _assert_eq "vscode $platform terminal: pane movement has exact escape transports" \
+        '[]' \
+        "$(jq -c '[
+          . as $bindings
+          | (
+              [
+                {key: "alt+shift+h", text: "\u001bH"},
+                {key: "alt+shift+j", text: "\u001bJ"},
+                {key: "alt+shift+k", text: "\u001bK"},
+                {key: "alt+shift+l", text: "\u001bL"}
+              ][]
+            ) as $wanted
+          | select(
+              [
+                $bindings[]
+                | select(
+                    .key == $wanted.key
+                    and .command == "workbench.action.terminal.sendSequence"
+                    and .args.text == $wanted.text
+                    and .when == "terminalFocus"
+                  )
+              ]
+              | length != 1
+            )
+          | $wanted.key
+        ]' "$keybindings_file")"
       _assert_eq "vscode $platform terminal: Ctrl+/ transport is extension-independent" \
         '[]' \
         "$(jq -c '[
