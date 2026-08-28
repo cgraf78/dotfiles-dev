@@ -44,7 +44,21 @@ cat >"$HOME/bin/shdeps" <<EOF
 [[ \${1:-} == dep-file && \${2:-} == cgraf78/agentguard ]]
 printf '%s/%s\n' '$HOME/provider' "\${3##*/}"
 EOF
-chmod 0755 "$HOME/bin/shdeps"
+cat >"$HOME/bin/yq" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 7 && $1 == eval && $2 == --input-format && $3 == toml &&
+  $4 == --output-format && $5 == json && $6 == . ]]
+python3 - "$7" <<'PY'
+import json
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    json.dump(tomllib.load(handle), sys.stdout)
+PY
+EOF
+chmod 0755 "$HOME/bin/shdeps" "$HOME/bin/yq"
 cat >"$HOME/provider/reconcile-hooks.jq" <<'EOF'
 def owned($agent): type == "string" and contains("AGENTGUARD_NAME=" + $agent + " ") and contains(" agent-hook-");
 ($d[0] // {}) | .hooks = ((.hooks // {}) | with_entries(
