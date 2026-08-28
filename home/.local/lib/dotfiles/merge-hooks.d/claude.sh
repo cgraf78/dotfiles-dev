@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 dot_hook_source merge-hooks.d/lib/compat.sh || return
+dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 
 # shellcheck shell=bash
 # Merge Claude Code settings into ~/.claude/settings.json.
@@ -84,7 +85,7 @@ merge() {
   _dot_tool_present claude || return 0
   dot_json_available || return 0
 
-  local dst="$HOME/.claude/settings.json"
+  local dst="$HOME/.claude/settings.json" managed_dir managed
   local -a src_files=()
   local src
 
@@ -94,13 +95,46 @@ merge() {
 
   dot_hook_log "  Claude Code"
 
+  _dev_profile_state_tempdir || return 1
+  managed_dir=$REPLY
+  managed=$managed_dir/claude.json
+  printf '{}\n' >"$managed"
+  _merge_hook_agentguard_json_layer "Claude settings" claude "$managed" || {
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  }
+  for src in "${src_files[@]}"; do
+    _merge_claude_settings "$src" "$managed" || {
+      _dev_profile_state_tempdir_remove "$managed_dir" || true
+      return 1
+    }
+  done
+  if ! dev_profile_state_begin claude json "$dst" "$managed"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  _dev_profile_state_tempdir_remove "$managed_dir" || {
+    dev_profile_state_abort || true
+    return 1
+  }
+
   # AgentGuard supplies the complete current generation and its generic
   # ownership-aware reconciler. Do not apply later policy layers unless that
   # required base refresh succeeds; this preserves the entire last-known-good
   # target during a dependency or coordinated-rollout gap.
-  _merge_hook_agentguard_json_layer "Claude settings" claude "$dst" || return 1
+  if ! _merge_hook_agentguard_json_layer "Claude settings" claude "$dst"; then
+    dev_profile_state_abort || true
+    return 1
+  fi
 
   for src in "${src_files[@]}"; do
-    _merge_claude_settings "$src" "$dst"
+    if ! _merge_claude_settings "$src" "$dst"; then
+      dev_profile_state_abort || true
+      return 1
+    fi
   done
+  dev_profile_state_commit || {
+    dev_profile_state_abort || true
+    return 1
+  }
 }

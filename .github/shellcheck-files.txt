@@ -1,4 +1,5 @@
 # type<TAB>path
+program	dot/profile-deactivate
 program	home/.config/shdeps/hooks.d/cargo.sh
 program	home/.config/shdeps/hooks.d/clangd.sh
 program	home/.config/shdeps/hooks.d/cmake-language-server.sh
@@ -42,6 +43,7 @@ program	home/.local/lib/dotfiles/merge-hooks.d/git.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gstack.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/codex/api.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/mise.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/muse.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/opencode.sh
@@ -69,6 +71,8 @@ program	home/.local/lib/dotfiles/tests/gstack-register-test
 program	home/.local/lib/dotfiles/tests/lua-dev-test
 program	home/.local/lib/dotfiles/tests/mise-refresh-workflow-test
 program	home/.local/lib/dotfiles/tests/nvim-dev-test
+program	home/.local/lib/dotfiles/tests/profile-deactivate-test
+program	home/.local/lib/dotfiles/tests/profile-state-test
 program	home/.local/lib/dotfiles/tests/schema-associations-test
 program	home/.local/lib/dotfiles/tests/schema-refresh-workflow-test
 program	home/.local/lib/dotfiles/tests/validate-commit-msg-test

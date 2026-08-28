@@ -3,6 +3,7 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 
 # shellcheck shell=bash
 # Merge Codex CLI config into ~/.codex/config.toml.
+dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 # Runs during standalone Dot client convergence.
 # Requires mikefarah/yq from shdeps and python3.
 #

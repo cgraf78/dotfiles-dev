@@ -3043,6 +3043,25 @@ JSON
       }
       merge
     '
+    vscode_receipt_root=$vscode_home/.local/state/dot/overlays/dev/merge-receipts-v1
+    vscode_settings_path=$vscode_home/.config/Code/User/settings.json
+    vscode_settings_key=$(printf '%s\n%s\n' vscode-settings \
+      "$vscode_settings_path" | git hash-object --stdin)
+    _assert_file_exists "vscode settings: records reversible ownership" \
+      "$vscode_receipt_root/$vscode_settings_key.json"
+    vscode_keybindings_path=$vscode_home/.config/Code/User/keybindings.json
+    vscode_keybindings_key=$(printf '%s\n%s\n' vscode-keybindings \
+      "$vscode_keybindings_path" | git hash-object --stdin)
+    _assert_file_exists "vscode keybindings: records reversible ownership" \
+      "$vscode_receipt_root/$vscode_keybindings_key.json"
+    vscode_extensions_path=$vscode_home/.vscode/extensions/extensions.json
+    vscode_extensions_key=$(printf '%s\n%s\n' vscode-extensions \
+      "$vscode_extensions_path" | git hash-object --stdin)
+    _assert_file_exists "vscode extensions: records reversible ownership" \
+      "$vscode_receipt_root/$vscode_extensions_key.json"
+    _assert_eq "vscode extensions: receipt records each managed link" '2' \
+      "$(jq '.links | length' \
+        "$vscode_receipt_root/$vscode_extensions_key.json")"
     _assert_vscode_focus_keybinding_migration \
       "$vscode_home/.config/Code/User/keybindings.json" \
       "linux"
@@ -3264,8 +3283,7 @@ JSON
       # shellcheck source=/dev/null
       . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
       _vscode_install_declared_extensions() { :; }
-      _merge_vscode_remote_window_titles() { :; }
-      _merge_vscode_remote_mcp_auth() { :; }
+      _merge_vscode_remote_configs_tracked() { :; }
       _vscode_local_extensions() { :; }
       _vscode_variants() {
         printf "%s\t%s\t%s\n" \
@@ -3277,7 +3295,7 @@ JSON
       _prune_vscode_local_extensions() {
         printf "extension\t%s\n" "$1" >>"$VSCODE_SHARED_CONFIG_LOG"
       }
-      _merge_vscode_config() {
+      _merge_vscode_config_tracked() {
         printf "config\t%s\t%s\n" "$1" "$2" >>"$VSCODE_SHARED_CONFIG_LOG"
       }
       merge
@@ -3667,7 +3685,8 @@ JSON
     _assert_contains "vscode settings: smart commit is enabled" \
       '"git.enableSmartCommit":true' "$vscode_settings"
     _assert_not_contains "vscode settings: personal remote SSH platform is absent" \
-      '"remote.SSH.remotePlatform":{"example-host":"linux"}' "$vscode_settings"
+      '"remote.SSH.remotePlatform":{"private-host.example":"linux"}' \
+      "$vscode_settings"
     _assert_contains "vscode settings: search smart case is enabled" \
       '"search.smartCase":true' "$vscode_settings"
     _assert_contains "vscode settings: search respects global ignores" \
@@ -4520,6 +4539,7 @@ JSON
   _assert_not_contains "claude hook: stale read wildcard normalized" "Read(*)" "$claude_allow"
 
   rm -rf "$CLAUDE_DIR"
+  rm -rf "$TEST_HOME/.local/state/dot/overlays/dev"
   rm -rf "$TEST_HOME/.config/dot/merge-hooks.d/claude/settings.d"
   mkdir -p "$TEST_HOME/.config/dot/merge-hooks.d/claude/settings.d"
 
@@ -4560,13 +4580,18 @@ JSON
     {hooks: [{command: "agent-hook-prompt-submit", timeout: 10, type: "command"}], matcher: ""},
     {hooks: [{command: "agent-hook-prompt-submit", timeout: 10, type: "command"}], matcher: ""}
   ]}}' >"$CLAUDE_SETTINGS"
-  _run_claude_merge 2>/dev/null
+  claude_self_heal_output=$(_run_claude_merge 2>&1)
+  claude_self_heal_status=$?
+  _assert_exit "claude hook: duplicate self-heal merge succeeds" \
+    0 "$claude_self_heal_status"
+  [[ $claude_self_heal_status -eq 0 ]] || printf '%s\n' "$claude_self_heal_output"
   claude_ups_count=$(jq '.hooks.UserPromptSubmit | length' "$CLAUDE_SETTINGS")
   _assert_eq "claude hook: an already-duplicated settings.json self-heals to one copy" \
     "1" "$claude_ups_count"
 
   # Genuinely distinct groups for the same event (different matcher) must both
   # survive — dedup is by identity, not a blunt "collapse everything" pass.
+  rm -rf "$TEST_HOME/.local/state/dot/overlays/dev"
   printf '{}\n' >"$CLAUDE_SETTINGS"
   cat >"$TEST_HOME/.config/dot/merge-hooks.d/claude/settings.d/10-settings.json" <<'JSON'
 {
@@ -4585,6 +4610,7 @@ JSON
 
   # A config-only change (new timeout, same matcher+command) must replace the
   # stale group in place, not sit duplicated alongside it.
+  rm -rf "$TEST_HOME/.local/state/dot/overlays/dev"
   jq -n '{hooks: {UserPromptSubmit: [
     {hooks: [{command: "agent-hook-prompt-submit", timeout: 10, type: "command"}], matcher: ""}
   ]}}' >"$CLAUDE_SETTINGS"
@@ -4795,6 +4821,14 @@ TOML
 
     _run_codex_merge 2>/dev/null
     _assert_file_exists "codex hook: config created" "$CODEX_CONFIG"
+    codex_receipt_root=$TEST_HOME/.local/state/dot/overlays/dev/merge-receipts-v1
+    codex_receipt_key=$(printf '%s\n%s\n' codex "$CODEX_CONFIG" | git hash-object --stdin)
+    _assert_file_exists "codex hook: records reversible main config ownership" \
+      "$codex_receipt_root/$codex_receipt_key.json"
+    layered_receipt_key=$(printf '%s\n%s\n' codex \
+      "$CODEX_DIR/layered.config.toml" | git hash-object --stdin)
+    _assert_file_exists "codex hook: records reversible named-profile ownership" \
+      "$codex_receipt_root/$layered_receipt_key.json"
     _assert_file_missing "codex hook: merge does not probe installed Codex version" "$_CODEX_VERSION_PROBE"
     codex_content=$(cat "$CODEX_CONFIG")
     _assert_contains "codex hook: emits hook array tables" "[[hooks.PreToolUse]]" "$codex_content"

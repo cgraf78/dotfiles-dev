@@ -1,0 +1,177 @@
+# shellcheck shell=bash
+dot_hook_source merge-hooks.d/lib/compat.sh || return
+_DEV_DEACTIVATE_DOT_DIR=${BASH_SOURCE[0]%/*}
+_DEV_DEACTIVATE_REPO_ROOT=${_DEV_DEACTIVATE_DOT_DIR%/*}
+declare -F dot_retiring_overlay_file >/dev/null 2>&1 || return 1
+dot_retiring_overlay_file \
+  home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh || return
+_DEV_DEACTIVATE_PROFILE_STATE_LIBRARY=$REPLY
+dot_retiring_overlay_file \
+  home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.py || return
+_DEV_PROFILE_STATE_ENGINE=$REPLY
+dot_retiring_overlay_file \
+  home/.local/lib/dotfiles/merge-hooks.d/lib/codex/toml-render.py || return
+_DEV_PROFILE_STATE_TOML_RENDERER=$REPLY
+# shellcheck source=/dev/null
+. "$_DEV_DEACTIVATE_PROFILE_STATE_LIBRARY" ||
+  return
+
+# Resolve provider assets against the retiring overlay's declaration set. By
+# the time deactivation runs, the newly linked lower profile no longer exposes
+# dev's Shdeps fragment, but the validated retiring checkout and cached
+# provider remain available for cleanup.
+_dev_deactivate_agentguard_file() {
+  local shdeps_bin=''
+  shdeps_bin=$(command -v shdeps 2>/dev/null) || shdeps_bin=''
+  if [[ -z $shdeps_bin && -x $HOME/.local/bin/shdeps ]]; then
+    shdeps_bin=$HOME/.local/bin/shdeps
+  fi
+  [[ -n $shdeps_bin ]] || return 127
+  SHDEPS_CONF_DIR=$_DEV_DEACTIVATE_REPO_ROOT/home/.config/shdeps \
+    "$shdeps_bin" dep-file cgraf78/agentguard \
+    "share/agentguard/integrations/$1/$2"
+}
+
+_dev_deactivate_git_include() {
+  _dot_tool_present git || return 0
+  # shellcheck disable=SC2088 # Git stores this portable include literally.
+  local managed='~/.config/git/config' value found=0
+  while IFS= read -r value; do
+    [[ $value == "$managed" ]] && found=1
+  done < <(git config --global --get-all include.path 2>/dev/null || true)
+  [[ $found -eq 1 ]] || return 0
+  git config --global --fixed-value --unset-all include.path "$managed"
+}
+
+_dev_deactivate_sapling() {
+  local destination=$HOME/.hgrc current updated marker
+  [[ -f $destination && ! -L $destination ]] || return 0
+  current=$(<"$destination")
+  updated=$current
+  for marker in \
+    '# dot-managed:hgrc:sley' \
+    '# dot-managed:hgrc:sley-legacy' \
+    '# dot-managed:hgrc:repo-check'; do
+    updated=$(dot_managed_block_strip "$marker" "$updated") || return 1
+  done
+  [[ $updated == "$current" ]] ||
+    dot_write_text_if_changed "$destination" "$updated"
+}
+
+_dev_deactivate_opencode() {
+  local plugin=$HOME/.config/opencode/plugins/dotfiles-agentguard.js first=''
+  [[ -e $plugin || -L $plugin ]] || return 0
+  [[ -f $plugin && ! -L $plugin ]] || return 0
+  IFS= read -r first <"$plugin" || true
+  [[ $first == "$(dot_agentguard_opencode_marker)" ]] || return 0
+  rm -f -- "$plugin"
+}
+
+_dev_deactivate_agent_json() {
+  local agent=$1 destination=$2 reconciler source output
+  [[ -e $destination || -L $destination ]] || return 0
+  [[ -f $destination && ! -L $destination ]] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  jq empty "$destination" >/dev/null 2>&1 || return 1
+  if ! jq -e --arg agent "$agent" \
+    '[.. | strings | select(contains("AGENTGUARD_NAME=" + $agent + " ") and contains(" agent-hook-"))] | length > 0' \
+    "$destination" >/dev/null; then
+    return 0
+  fi
+  reconciler=$(_dev_deactivate_agentguard_file _shared reconcile-hooks.jq) ||
+    return 1
+  [[ -r $reconciler ]] || return 1
+  source=$(mktemp) || return 1
+  printf '{"hooks":{}}\n' >"$source" || {
+    rm -f "$source"
+    return 1
+  }
+  dot_sibling_tmp_for "$destination" || {
+    rm -f "$source"
+    return 1
+  }
+  output=$REPLY
+  if ! jq -n --sort-keys --indent 2 --arg agent "$agent" \
+    --slurpfile d "$destination" --slurpfile s "$source" \
+    -f "$reconciler" >"$output"; then
+    rm -f "$source" "$output"
+    return 1
+  fi
+  rm -f "$source"
+  if dot_config_files_equal "$output" "$destination"; then
+    rm -f "$output"
+    return 0
+  fi
+  dot_commit_tmp "$output" "$destination"
+}
+
+_dev_deactivate_codex() {
+  local destination=$HOME/.codex/config.toml reconciler yq_bin
+  local destination_json source_json merged_json output renderer
+  [[ -e $destination || -L $destination ]] || return 0
+  [[ -f $destination && ! -L $destination ]] || return 1
+  case $(<"$destination") in
+    *'AGENTGUARD_NAME=codex '*' agent-hook-'*) ;;
+    *) return 0 ;;
+  esac
+  yq_bin=$(_merge_hook_mikefarah_yq) || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  reconciler=$(_dev_deactivate_agentguard_file _shared reconcile-hooks.jq) ||
+    return 1
+  renderer=$_DEV_DEACTIVATE_REPO_ROOT/home/.local/lib/dotfiles/merge-hooks.d/lib/codex/toml-render.py
+  [[ -r $reconciler && -r $renderer ]] || return 1
+  destination_json=$(mktemp) || return 1
+  source_json=$(mktemp) || {
+    rm -f "$destination_json"
+    return 1
+  }
+  merged_json=$(mktemp) || {
+    rm -f "$destination_json" "$source_json"
+    return 1
+  }
+  dot_sibling_tmp_for "$destination" || {
+    rm -f "$destination_json" "$source_json" "$merged_json"
+    return 1
+  }
+  output=$REPLY
+  printf '{"hooks":{}}\n' >"$source_json"
+  if ! "$yq_bin" eval --input-format toml --output-format json '.' \
+    "$destination" >"$destination_json" ||
+    ! jq -n --sort-keys --indent 2 --arg agent codex \
+      --slurpfile d "$destination_json" --slurpfile s "$source_json" \
+      -f "$reconciler" >"$merged_json" ||
+    ! python3 "$renderer" render-json "$merged_json" >"$output"; then
+    rm -f "$destination_json" "$source_json" "$merged_json" "$output"
+    return 1
+  fi
+  rm -f "$destination_json" "$source_json" "$merged_json"
+  if dot_config_files_equal "$output" "$destination"; then
+    rm -f "$output"
+    return 0
+  fi
+  dot_commit_tmp "$output" "$destination" || return 1
+  rm -f -- "$HOME/.codex/.dotfiles-config-merge-cache-v1"
+}
+
+_dev_deactivate_gstack() {
+  command -v gstack-register >/dev/null 2>&1 || return 0
+  gstack-register uninstall
+}
+
+deactivate() {
+  local status=0
+  # Receipt retirement is the only operation that can restore overwritten
+  # user values. If it conflicts or cannot roll back atomically, stop before
+  # legacy cleanup mutates any of the same destinations and invalidates retry.
+  dev_profile_state_retire_all || return 1
+  _dev_deactivate_git_include || status=1
+  _dev_deactivate_sapling || status=1
+  _dev_deactivate_opencode || status=1
+  _dev_deactivate_gstack || status=1
+  _dev_deactivate_agent_json claude "$HOME/.claude/settings.json" || status=1
+  _dev_deactivate_agent_json gemini "$HOME/.gemini/settings.json" || status=1
+  _dev_deactivate_agent_json muse "$HOME/.config/muse/settings.json" || status=1
+  _dev_deactivate_codex || status=1
+  return "$status"
+}

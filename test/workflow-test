@@ -104,7 +104,7 @@ single_sha() {
   [[ $value == "$expected" ]] || fail "$file contains an unexpected commit SHA"
 }
 single_sha .github/cgraf78-actions.lock de3f6086e36a77eec8ee62f2c9871266e4b5c05c
-single_sha .github/dot.lock 5c01f1ff7532630c6586773af8d396408259a668
+single_sha .github/dot.lock 3278c54e3535017c5fb48477fac3710c8172b9d8
 
 expected_source=$'version=1\nrepository=cgraf78/dotfiles\ncommit=4b54ca3f6442a435c652a159da658c5249a34bd8\nlicense_path=.github/LICENSE'
 [[ $(<.github/dotfiles-source.lock) == "$expected_source" ]] || fail 'source lock is not canonical'
@@ -131,7 +131,7 @@ grep -Fx 'std = "vim+lua51"' .selene.toml >/dev/null ||
   fail 'repository-only Selene config does not select the Neovim standard library'
 [[ $(<.gitignore) == '.worktrees/' ]] || fail '.gitignore must contain only .worktrees/'
 manifest_hash=$(sha256sum .github/repository-settings-endpoints.txt 2>/dev/null | awk '{print $1}' || shasum -a 256 .github/repository-settings-endpoints.txt | awk '{print $1}')
-[[ $manifest_hash == 33b811658ba29f30dcebc77f1a10b4d37bac199c358831e1fa89af2bd8f18ac4 ]] || fail 'repository settings endpoint contract drifted'
+[[ $manifest_hash == 1014be04ef3f99d20570369cdc0831d4f75571882d2d4797b7d817cd43ff21c7 ]] || fail 'repository settings endpoint contract drifted'
 
 workflow=.github/workflows/test.yml
 grep -Fx 'name: Tests' "$workflow" >/dev/null || fail 'test workflow name drifted'
@@ -232,6 +232,9 @@ declare -a expected_shell_files=()
 declare -a actual_shell_files=()
 while IFS= read -r -d '' path; do
   case $path in
+    dot/*)
+      expected_shell_files+=("$path")
+      ;;
     *.sh | *.bash | *.bats | *.dash | *.ksh)
       expected_shell_files+=("$path")
       ;;
@@ -242,7 +245,7 @@ while IFS= read -r -d '' path; do
       esac
       ;;
   esac
-done < <(find home test -type f -print0)
+done < <(find dot home test -type f -print0)
 while IFS=$'\t' read -r type path extra; do
   case $type in '' | \#*) continue ;; esac
   [[ $type == program && -n $path && -z ${extra:-} ]] || fail 'invalid typed ShellCheck inventory record'

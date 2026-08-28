@@ -223,9 +223,9 @@ _test_load_dot_merge_api() {
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/merge-hooks.sh"
   # shellcheck source=/dev/null
-  . "$dot_root/lib/dot/extension-trust.sh"
-  # shellcheck source=/dev/null
   . "$dot_root/lib/dot/repos/overlays.sh"
+  # shellcheck source=/dev/null
+  . "$dot_root/lib/dot/extension-trust.sh"
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/hook-api.sh"
 }
@@ -248,9 +248,9 @@ _test_load_dot_doctor_api() {
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/public/xdg.sh"
   # shellcheck source=/dev/null
-  . "$dot_root/lib/dot/extension-trust.sh"
-  # shellcheck source=/dev/null
   . "$dot_root/lib/dot/repos/overlays.sh"
+  # shellcheck source=/dev/null
+  . "$dot_root/lib/dot/extension-trust.sh"
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/doctor-api.sh"
   DOT_EXTENSIONS_DIR=$extension_home/.local/lib/dotfiles

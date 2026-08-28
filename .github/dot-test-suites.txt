@@ -12,6 +12,8 @@ home/.local/lib/dotfiles/tests/gstack-register-test
 home/.local/lib/dotfiles/tests/lua-dev-test
 home/.local/lib/dotfiles/tests/mise-refresh-workflow-test
 home/.local/lib/dotfiles/tests/nvim-dev-test
+home/.local/lib/dotfiles/tests/profile-deactivate-test
+home/.local/lib/dotfiles/tests/profile-state-test
 home/.local/lib/dotfiles/tests/schema-associations-test
 home/.local/lib/dotfiles/tests/schema-refresh-workflow-test
 home/.local/lib/dotfiles/tests/validate-commit-msg-test

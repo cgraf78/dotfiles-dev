@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # Test-only loader for client hooks sourced in fresh Bash subprocesses.
 
-_dot_test_api_source_home=${DOT_TEST_SOURCE_HOME:-${REAL_HOME:-$HOME}}
-_dot_test_api_host_home=${DOT_TEST_HOST_HOME:-$HOME}
+_dot_test_api_source_home=${DOT_TEST_SOURCE_HOME:-${REAL_HOME:-${HOME:-}}}
+_dot_test_api_host_home=${DOT_TEST_HOST_HOME:-${HOME:-}}
 _dot_test_api_root=${DOT_TEST_DOT_ROOT:-}
 
 if [[ -z $_dot_test_api_root ]]; then
@@ -33,6 +33,10 @@ export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR DOT_EXTENSION_API
 . "$_dot_test_api_root/lib/dot/families.sh"
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/merge-hooks.sh"
+# shellcheck source=/dev/null
+. "$_dot_test_api_root/lib/dot/repos/config.sh"
+# shellcheck source=/dev/null
+. "$_dot_test_api_root/lib/dot/repos/overlays.sh"
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/extension-trust.sh"
 # shellcheck source=/dev/null
@@ -320,6 +324,16 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
     return 1
   }
 
+  # Mirror the base compatibility contract without requiring diffutils in the
+  # standalone overlay fixture.
+  dot_config_files_equal() {
+    local left_hash right_hash
+
+    left_hash=$(git hash-object --no-filters -- "$1" 2>/dev/null) || return 1
+    right_hash=$(git hash-object --no-filters -- "$2" 2>/dev/null) || return 1
+    [[ $left_hash == "$right_hash" ]]
+  }
+
   _dot_account_home() {
     local account entry name _password _uid _gid _gecos home _shell
     local candidate id_command="" getent_command=""
@@ -546,10 +560,18 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
   }
 
   # Hooks source the same base-owned compatibility layer after this standalone
-  # fixture has installed its equivalent functions. Treat that one request as
-  # satisfied; all other extension lookup still belongs to the public Dot API.
+  # fixture has installed its equivalent functions. The dev-owned reversible
+  # state helper is sourced from this checkout; all other extension lookup
+  # still belongs to the public Dot API.
   dot_hook_source() {
-    [[ ${1:-} == merge-hooks.d/lib/compat.sh ]]
+    case ${1:-} in
+      merge-hooks.d/lib/compat.sh) return 0 ;;
+      merge-hooks.d/lib/profile-state.sh)
+        # shellcheck source=/dev/null
+        . "$DOT_EXTENSIONS_DIR/merge-hooks.d/lib/profile-state.sh"
+        ;;
+      *) return 1 ;;
+    esac
   }
 fi
 

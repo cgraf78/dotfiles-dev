@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 dot_hook_source merge-hooks.d/lib/compat.sh || return
+dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 
 # shellcheck shell=bash
 # Merge Muse Code settings into ~/.config/muse/settings.json.
@@ -84,7 +85,7 @@ merge() {
   _dot_tool_present muse || return 0
   dot_json_available || return 0
 
-  local dst="$HOME/.config/muse/settings.json"
+  local dst="$HOME/.config/muse/settings.json" managed_dir managed
   local -a src_files=()
   local src
 
@@ -94,13 +95,46 @@ merge() {
 
   dot_hook_log "  Muse Code"
 
+  _dev_profile_state_tempdir || return 1
+  managed_dir=$REPLY
+  managed=$managed_dir/muse.json
+  printf '{}\n' >"$managed"
+  _merge_hook_agentguard_json_layer "Muse settings" muse "$managed" || {
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  }
+  for src in "${src_files[@]}"; do
+    _merge_muse_settings "$src" "$managed" || {
+      _dev_profile_state_tempdir_remove "$managed_dir" || true
+      return 1
+    }
+  done
+
   # The provider reconciler knows which historical Muse hooks it owns, so an
   # unsupported event can be retired without encoding Muse vocabulary here.
   # It also stages symlink migration transactionally and reports a missing
   # dependency as a failed refresh instead of silently installing bare policy.
-  _merge_hook_agentguard_json_layer "Muse settings" muse "$dst" || return 1
+  if ! dev_profile_state_begin muse json "$dst" "$managed"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  _dev_profile_state_tempdir_remove "$managed_dir" || {
+    dev_profile_state_abort || true
+    return 1
+  }
+  if ! _merge_hook_agentguard_json_layer "Muse settings" muse "$dst"; then
+    dev_profile_state_abort || true
+    return 1
+  fi
 
   for src in "${src_files[@]}"; do
-    _merge_muse_settings "$src" "$dst"
+    if ! _merge_muse_settings "$src" "$dst"; then
+      dev_profile_state_abort || true
+      return 1
+    fi
   done
+  dev_profile_state_commit || {
+    dev_profile_state_abort || true
+    return 1
+  }
 }

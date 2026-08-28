@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 dot_hook_source merge-hooks.d/lib/compat.sh || return
+dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 
 # shellcheck shell=bash
 # Merge VS Code settings and keybindings from dotfiles into local config.
@@ -51,7 +52,7 @@ _vscode_is_wsl() {
 _vscode_commit_tmp() {
   local tmp="$1" dst="$2" size
 
-  if [[ -f "$dst" ]] && cmp -s -- "$tmp" "$dst"; then
+  if [[ -f "$dst" ]] && _dev_profile_state_files_equal "$tmp" "$dst"; then
     rm -f -- "$tmp"
     return 0
   fi
@@ -775,11 +776,12 @@ _vscode_keybinding_families() {
   printf 'vscode/keybindings/%s.d\n' "$platform"
 }
 
-# Merge both settings and keybindings into a VS Code config dir.
+# Merge settings into a VS Code config dir.
 # $1 = target config dir (e.g., ~/Library/Application Support/Code/User)
 # $2 = optional comma-separated variant options.
-_merge_vscode_config() {
-  local cfg_dir="$1" opts="${2:-}"
+# $3 = optional logical config dir when rendering into a temporary projection.
+_merge_vscode_settings_config() {
+  local cfg_dir="$1" opts="${2:-}" logical_cfg_dir="${3:-$1}"
 
   local settings_src
   while IFS= read -r settings_src; do
@@ -800,7 +802,14 @@ _merge_vscode_config() {
   fi
   rm -f "$checkrun_settings"
   _merge_vscode_window_title "$cfg_dir/settings.json"
-  _merge_vscode_mcp_auth "$cfg_dir/settings.json"
+  if _vscode_mcp_auth_applicable "$logical_cfg_dir/settings.json"; then
+    _merge_vscode_mcp_auth "$cfg_dir/settings.json"
+  fi
+}
+
+# Merge keybindings into a VS Code config dir.
+_merge_vscode_keybindings_config() {
+  local cfg_dir=$1
 
   # Aggregate every applicable source before reconciliation. This keeps
   # two current fragments with the same action but distinct conditions from
@@ -839,6 +848,65 @@ _merge_vscode_config() {
     return 1
   fi
   rm -f "$kb_aggregate"
+}
+
+_merge_vscode_config() {
+  local cfg_dir=$1 opts=${2:-}
+  _merge_vscode_settings_config "$cfg_dir" "$opts" "$cfg_dir" || return 1
+  _merge_vscode_keybindings_config "$cfg_dir"
+}
+
+_vscode_profile_state_publisher() {
+  local destination=$1
+  if _vscode_is_wsl && {
+    [[ $destination != "$HOME/"* ]] ||
+      { [[ -n ${DOT_TEST_WINDOWS_APPDATA:-} ]] &&
+        [[ $destination == "$DOT_TEST_WINDOWS_APPDATA/"* ]]; }
+  }; then
+    printf 'verified-in-place\n'
+  else
+    printf 'atomic\n'
+  fi
+}
+
+_merge_vscode_config_tracked() {
+  local cfg_dir=$1 opts=${2:-} managed_dir publisher
+  _dev_profile_state_tempdir || return 1
+  managed_dir=$REPLY
+  if ! _merge_vscode_settings_config "$managed_dir" "$opts" "$cfg_dir" ||
+    ! _merge_vscode_keybindings_config "$managed_dir"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  publisher=$(_vscode_profile_state_publisher "$cfg_dir/settings.json") || {
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  }
+
+  if ! dev_profile_state_begin vscode-settings jsonc \
+    "$cfg_dir/settings.json" "$managed_dir/settings.json" "$publisher"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if ! _merge_vscode_settings_config "$cfg_dir" "$opts" "$cfg_dir" ||
+    ! dev_profile_state_commit; then
+    dev_profile_state_abort || true
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+
+  if ! dev_profile_state_begin vscode-keybindings jsonc \
+    "$cfg_dir/keybindings.json" "$managed_dir/keybindings.json" "$publisher"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if ! _merge_vscode_keybindings_config "$cfg_dir" ||
+    ! dev_profile_state_commit; then
+    dev_profile_state_abort || true
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  _dev_profile_state_tempdir_remove "$managed_dir"
 }
 
 # Ensure a local extension is registered in an extensions.json.
@@ -884,6 +952,7 @@ _ensure_vscode_extension() {
     _vscode_commit_tmp "$tmp" "$ext_json"
   else
     rm -f "$tmp"
+    return 1
   fi
 }
 
@@ -893,7 +962,7 @@ _remove_vscode_extension() {
   local ext_base
   ext_base="$(dirname "$ext_json")"
   if [[ -L "$ext_base/$ext_dir" ]]; then
-    rm -f "$ext_base/$ext_dir"
+    rm -f "$ext_base/$ext_dir" || return 1
   fi
 
   [[ -f "$ext_json" ]] || return 0
@@ -905,6 +974,7 @@ _remove_vscode_extension() {
     _vscode_commit_tmp "$tmp" "$ext_json"
   else
     rm -f "$tmp"
+    return 1
   fi
 }
 
@@ -939,7 +1009,7 @@ _prune_vscode_extension_versions() {
       version_suffix="${target_name#"$extension_name"-}"
       [[ "$version_suffix" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)*$ ]] || continue
     fi
-    rm -f "$candidate"
+    rm -f "$candidate" || return 1
   done
 }
 
@@ -956,7 +1026,7 @@ _prune_vscode_local_extensions() {
     [[ -n "$ext_id" && -n "$ext_dir" ]] || continue
     [[ "$ext_dir" == "${ext_dir##*/}" && "$ext_dir" != "." && "$ext_dir" != ".." ]] || continue
     if [[ -L "$ext_base/$ext_dir" && ! -e "$ext_base/$ext_dir" ]]; then
-      _remove_vscode_extension "$ext_id" "$ext_dir" "$ext_json"
+      _remove_vscode_extension "$ext_id" "$ext_dir" "$ext_json" || return 1
     fi
   done < <(jq -r '.[] | select(.metadata.source == "local") |
     [(.identifier.id // ""), (.relativeLocation // "")] | @tsv' "$ext_json")
@@ -1221,6 +1291,49 @@ _merge_vscode_remote_mcp_auth() {
   done < <(_vscode_remote_settings_dirs)
 }
 
+_merge_vscode_remote_settings_tracked() {
+  local cfg_dir=$1 managed_dir publisher
+  local destination=$cfg_dir/settings.json
+  _dev_profile_state_tempdir || return 1
+  managed_dir=$REPLY
+  printf '{}\n' >"$managed_dir/settings.json"
+  if ! _merge_vscode_window_title "$managed_dir/settings.json"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if _vscode_mcp_auth_applicable "$destination" &&
+    ! _merge_vscode_mcp_auth "$managed_dir/settings.json"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  publisher=$(_vscode_profile_state_publisher "$destination") || {
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  }
+  if ! dev_profile_state_begin vscode-settings jsonc \
+    "$destination" "$managed_dir/settings.json" "$publisher"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if ! _merge_vscode_window_title "$destination" ||
+    { _vscode_mcp_auth_applicable "$destination" &&
+      ! _merge_vscode_mcp_auth "$destination"; } ||
+    ! dev_profile_state_commit; then
+    dev_profile_state_abort || true
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  _dev_profile_state_tempdir_remove "$managed_dir"
+}
+
+_merge_vscode_remote_configs_tracked() {
+  local remote_settings_dir status=0
+  while IFS= read -r remote_settings_dir; do
+    _merge_vscode_remote_settings_tracked "$remote_settings_dir" || status=1
+  done < <(_vscode_remote_settings_dirs)
+  return "$status"
+}
+
 _vscode_variant_file_records() {
   local current
   current="$(_vscode_platform)"
@@ -1323,6 +1436,181 @@ _vscode_config_variants() {
   done
 }
 
+_vscode_build_managed_extensions() {
+  local ext_dir=$1 opts=$2 output=$3 work projection
+  local ext_id ext_src disabled_opts ext_name
+  _dev_profile_state_tempdir || return 1
+  work=$REPLY
+  projection=$work/extensions/extensions.json
+  mkdir -p "${projection%/*}" || {
+    _dev_profile_state_tempdir_remove "$work" || true
+    return 1
+  }
+  printf '[]\n' >"$projection"
+  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+    _vscode_opts_intersect "$opts" "$disabled_opts" && continue
+    [[ -d $ext_src ]] || continue
+    ext_name=${ext_src##*/}
+    ln -s "$ext_src" "$work/extensions/$ext_name" || {
+      _dev_profile_state_tempdir_remove "$work" || true
+      return 1
+    }
+    _ensure_vscode_extension \
+      "$ext_id" "$ext_name" "$projection" "$ext_dir/$ext_name" || {
+      _dev_profile_state_tempdir_remove "$work" || true
+      return 1
+    }
+  done < <(_vscode_local_extensions)
+  cp "$projection" "$output" || {
+    _dev_profile_state_tempdir_remove "$work" || true
+    return 1
+  }
+  _dev_profile_state_tempdir_remove "$work"
+}
+
+_vscode_merge_extensions_tracked() {
+  local line=$1 ext_dir rest cfg_dir opts work managed links next_links
+  local ext_id ext_src disabled_opts ext_name ext_link ext_target legacy_ext_src
+  local index status=0 rollback_status=0
+  local -a changed_paths=() changed_kinds=() old_targets=() new_targets=()
+
+  ext_dir=${line%%	*}
+  rest=${line#*	}
+  cfg_dir=${rest%%	*}
+  opts=${rest#*	}
+  [[ $opts == "$cfg_dir" ]] && opts=
+
+  # Broken and explicitly disabled generations are permanent hygiene, not
+  # active-profile ownership. Remove them before capturing the reversible
+  # baseline so a later downgrade cannot resurrect stale registrations.
+  _prune_vscode_local_extensions "$ext_dir/extensions.json" || return 1
+  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+    ext_name=${ext_src##*/}
+    if _vscode_opts_intersect "$opts" "$disabled_opts"; then
+      _prune_vscode_extension_versions \
+        "$ext_id" "$ext_src" "" "$ext_dir/extensions.json" || return 1
+      _remove_vscode_extension \
+        "$ext_id" "$ext_name" "$ext_dir/extensions.json" || return 1
+      continue
+    fi
+    [[ -d $ext_src ]] || continue
+    _prune_vscode_extension_versions \
+      "$ext_id" "$ext_src" "$ext_name" "$ext_dir/extensions.json" || return 1
+  done < <(_vscode_local_extensions)
+
+  _dev_profile_state_tempdir || return 1
+  work=$REPLY
+  managed=$work/managed.json
+  links=$work/links.json
+  _vscode_build_managed_extensions "$ext_dir" "$opts" "$managed" || {
+    _dev_profile_state_tempdir_remove "$work" || true
+    return 1
+  }
+  printf '[]\n' >"$links"
+  if jq -e 'length == 0' "$managed" >/dev/null &&
+    ! dev_profile_state_tracked \
+      vscode-extensions json "$ext_dir/extensions.json"; then
+    _dev_profile_state_tempdir_remove "$work"
+    return 0
+  fi
+  dev_profile_state_begin \
+    vscode-extensions json "$ext_dir/extensions.json" "$managed" || {
+    _dev_profile_state_tempdir_remove "$work" || true
+    return 1
+  }
+
+  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+    _vscode_opts_intersect "$opts" "$disabled_opts" && continue
+    [[ -d $ext_src ]] || continue
+    ext_name=${ext_src##*/}
+    mkdir -p "$ext_dir" || {
+      status=1
+      break
+    }
+    ext_link=$ext_dir/$ext_name
+    legacy_ext_src=$HOME/.local/share/dot-vscode-extensions/$ext_name
+    if [[ -L $ext_link && -e $ext_link ]] && ext_target=$(readlink "$ext_link"); then
+      [[ $ext_target == /* ]] || ext_target=$ext_dir/$ext_target
+      if [[ $ext_target == "$legacy_ext_src" && $ext_target != "$ext_src" ]]; then
+        changed_paths+=("$ext_link")
+        changed_kinds+=(symlink)
+        old_targets+=("$(readlink "$ext_link")")
+        new_targets+=("$ext_src")
+        rm -f -- "$ext_link" || {
+          status=1
+          break
+        }
+        ln -s "$ext_src" "$ext_link" || {
+          status=1
+          break
+        }
+      fi
+    elif [[ -L $ext_link && ! -e $ext_link ]]; then
+      changed_paths+=("$ext_link")
+      changed_kinds+=(symlink)
+      old_targets+=("$(readlink "$ext_link")")
+      new_targets+=("$ext_src")
+      rm -f -- "$ext_link" || {
+        status=1
+        break
+      }
+      ln -s "$ext_src" "$ext_link" || {
+        status=1
+        break
+      }
+    elif [[ ! -e $ext_link && ! -L $ext_link ]]; then
+      changed_paths+=("$ext_link")
+      changed_kinds+=(absent)
+      old_targets+=("")
+      new_targets+=("$ext_src")
+      ln -s "$ext_src" "$ext_link" || {
+        status=1
+        break
+      }
+    fi
+    _ensure_vscode_extension \
+      "$ext_id" "$ext_name" "$ext_dir/extensions.json" || {
+      status=1
+      break
+    }
+    if [[ -L $ext_link && $(readlink "$ext_link") == "$ext_src" ]]; then
+      next_links=$work/links.next.json
+      if ! jq --arg path "$ext_link" --arg target "$ext_src" \
+        '. + [{path: $path, target: $target}]' "$links" >"$next_links" ||
+        ! mv -f "$next_links" "$links"; then
+        status=1
+        break
+      fi
+    fi
+  done < <(_vscode_local_extensions)
+
+  if ((status == 0)) && dev_profile_state_commit "$links"; then
+    _dev_profile_state_tempdir_remove "$work"
+    return 0
+  fi
+  dev_profile_state_abort || rollback_status=1
+  for ((index = ${#changed_paths[@]} - 1; index >= 0; index--)); do
+    ext_link=${changed_paths[index]}
+    ext_target=${new_targets[index]}
+    if [[ -L $ext_link && $(readlink "$ext_link") == "$ext_target" ]]; then
+      rm -f -- "$ext_link" || {
+        rollback_status=1
+        continue
+      }
+    elif [[ -e $ext_link || -L $ext_link ]]; then
+      rollback_status=1
+      continue
+    fi
+    if [[ ${changed_kinds[index]} == symlink ]]; then
+      ln -s "${old_targets[index]}" "$ext_link" || rollback_status=1
+    fi
+  done
+  _dev_profile_state_tempdir_remove "$work" || true
+  ((rollback_status == 0)) ||
+    dot_hook_warn "    warning: VS Code extension rollback left recovery state"
+  return 1
+}
+
 # Main: deploy extensions, settings, and keybindings to all VS Code variants.
 merge() {
   _dot_tool_present vscode || return 0
@@ -1337,8 +1625,7 @@ merge() {
     variants+=("$line")
   done < <(_vscode_variants)
 
-  _merge_vscode_remote_window_titles
-  _merge_vscode_remote_mcp_auth
+  _merge_vscode_remote_configs_tracked || return 1
 
   ((${#variants[@]} > 0)) || return 0
 
@@ -1349,59 +1636,10 @@ merge() {
     config_variants+=("$line")
   done < <(_vscode_config_variants "${variants[@]}")
 
-  local _ext_spec _ext_id _ext_src _ext_disabled_opts _ext_name
-  local _ext_link _ext_target _legacy_ext_src
   local ext_dir cfg_dir opts rest merge_rc=0
   for line in "${variants[@]}"; do
-    ext_dir="${line%%	*}"
-    _prune_vscode_local_extensions "$ext_dir/extensions.json"
+    _vscode_merge_extensions_tracked "$line" || merge_rc=1
   done
-
-  while IFS=$'\t' read -r _ext_id _ext_src _ext_disabled_opts; do
-    _ext_name="${_ext_src##*/}"
-
-    for line in "${variants[@]}"; do
-      ext_dir="${line%%	*}"
-      rest="${line#*	}"
-      cfg_dir="${rest%%	*}"
-      opts="${rest#*	}"
-      [[ "$opts" == "$cfg_dir" ]] && opts=""
-      if _vscode_opts_intersect "$opts" "$_ext_disabled_opts"; then
-        _prune_vscode_extension_versions \
-          "$_ext_id" "$_ext_src" "" "$ext_dir/extensions.json"
-        _remove_vscode_extension "$_ext_id" "$_ext_name" "$ext_dir/extensions.json"
-        continue
-      fi
-      # An unavailable payload cannot be installed, but it must not prevent a
-      # different variant's explicit opt-out above from cleaning stale copies.
-      [[ -d "$_ext_src" ]] || continue
-      _prune_vscode_extension_versions \
-        "$_ext_id" "$_ext_src" "$_ext_name" "$ext_dir/extensions.json"
-      mkdir -p "$ext_dir"
-      _ext_link="$ext_dir/$_ext_name"
-
-      # A provider extraction can retain the package basename while changing
-      # its ownership root. In that case version pruning deliberately keeps the
-      # current basename, and a live old symlink also makes the missing-path
-      # install guard a no-op. Retarget only the exact historical dotfiles
-      # payload root: arbitrary live same-name links and regular directories
-      # remain user-owned, while fleet upgrades stop executing the removed copy.
-      _legacy_ext_src="$HOME/.local/share/dot-vscode-extensions/$_ext_name"
-      if [[ -L "$_ext_link" && -e "$_ext_link" ]] &&
-        _ext_target=$(readlink "$_ext_link"); then
-        [[ "$_ext_target" == /* ]] || _ext_target="$ext_dir/$_ext_target"
-        if [[ "$_ext_target" == "$_legacy_ext_src" &&
-          "$_ext_target" != "$_ext_src" ]]; then
-          rm -f -- "$_ext_link"
-        fi
-      fi
-
-      if [[ ! -e "$_ext_link" ]]; then
-        ln -sf "$_ext_src" "$_ext_link"
-      fi
-      _ensure_vscode_extension "$_ext_id" "$_ext_name" "$ext_dir/extensions.json"
-    done
-  done < <(_vscode_local_extensions)
 
   # Merge settings and keybindings. Config destinations are independent, so
   # keep processing after one fails. Preserve the aggregate failure explicitly:
@@ -1415,7 +1653,7 @@ merge() {
     opts="${rest#*	}"
     [[ "$opts" == "$cfg_dir" ]] && opts=""
     if [[ -n "$cfg_dir" ]]; then
-      _merge_vscode_config "$cfg_dir" "$opts" || merge_rc=1
+      _merge_vscode_config_tracked "$cfg_dir" "$opts" || merge_rc=1
     fi
   done
   return "$merge_rc"

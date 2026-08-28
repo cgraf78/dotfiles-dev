@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+repo_root=$(_dev_repo_root)
+fixture=$(_tmpdir)
+HOME=$fixture
+GIT_CONFIG_GLOBAL=$HOME/.gitconfig
+XDG_CONFIG_HOME=$HOME/.config
+XDG_DATA_HOME=$HOME/.local/share
+XDG_STATE_HOME=$HOME/.local/state
+XDG_CACHE_HOME=$HOME/.cache
+export HOME GIT_CONFIG_GLOBAL XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME \
+  XDG_CACHE_HOME
+mkdir -p "$HOME/.config/opencode/plugins" "$HOME/.claude" "$HOME/.gemini" \
+  "$HOME/.config/muse" "$HOME/.codex" "$HOME/bin" "$HOME/provider"
+
+git config --global user.name 'Fixture User'
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+git config --global --add include.path '~/.config/git/config'
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+git config --global --add include.path '~/.config/other/config'
+cat >"$HOME/.hgrc" <<'EOF'
+[ui]
+username = fixture
+# dot-managed:hgrc:sley begin
+[hooks]
+pretxncommit.sley = sley
+# dot-managed:hgrc:sley end
+EOF
+printf '%s\n%s\n' '// agentguard-managed:opencode-plugin' 'managed' \
+  >"$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
+cat >"$HOME/bin/gstack-register" <<'EOF'
+#!/usr/bin/env bash
+[[ ${1:-} == uninstall ]]
+printf 'uninstalled\n' >"$HOME/gstack-uninstalled"
+EOF
+chmod 0755 "$HOME/bin/gstack-register"
+cat >"$HOME/bin/shdeps" <<EOF
+#!/usr/bin/env bash
+[[ \${SHDEPS_CONF_DIR:-} == '$repo_root/home/.config/shdeps' ]]
+[[ \${1:-} == dep-file && \${2:-} == cgraf78/agentguard ]]
+printf '%s/%s\n' '$HOME/provider' "\${3##*/}"
+EOF
+chmod 0755 "$HOME/bin/shdeps"
+cat >"$HOME/provider/reconcile-hooks.jq" <<'EOF'
+def owned($agent): type == "string" and contains("AGENTGUARD_NAME=" + $agent + " ") and contains(" agent-hook-");
+($d[0] // {}) | .hooks = ((.hooks // {}) | with_entries(
+  .value = [.value[] | .hooks = [.hooks[] | select((.command | owned($agent)) | not)] | select((.hooks | length) > 0)] |
+  select((.value | length) > 0))) | if (.hooks | length) == 0 then del(.hooks) else . end
+EOF
+for agent in claude gemini muse; do
+  case $agent in
+    claude) target=$HOME/.claude/settings.json ;;
+    gemini) target=$HOME/.gemini/settings.json ;;
+    muse) target=$HOME/.config/muse/settings.json ;;
+  esac
+  printf '{"keep":true,"hooks":{"Event":[{"hooks":[{"command":"env AGENTGUARD_NAME=%s x agent-hook-run"},{"command":"user-hook"}]}]}}\n' \
+    "$agent" >"$target"
+done
+cat >"$HOME/.codex/config.toml" <<'EOF'
+[keep]
+value = true
+
+[[hooks.Event]]
+[[hooks.Event.hooks]]
+command = "env AGENTGUARD_NAME=codex x agent-hook-run"
+
+[[hooks.Event]]
+[[hooks.Event.hooks]]
+command = "user-hook"
+EOF
+PATH="$HOME/bin:$PATH"
+export PATH
+
+dot_hook_source() { return 0; }
+dot_retiring_overlay_file() {
+  REPLY=$repo_root/$1
+  [[ -f $REPLY && ! -L $REPLY ]]
+}
+dot_hook_warn() { printf '%s\n' "$*" >&2; }
+_dot_tool_present() { command -v "$1" >/dev/null 2>&1; }
+dot_agentguard_opencode_marker() {
+  printf '%s\n' '// agentguard-managed:opencode-plugin'
+}
+dot_sibling_tmp_for() { REPLY=$(mktemp "$1.tmp.XXXXXX"); }
+dot_commit_tmp() { mv "$1" "$2"; }
+dot_config_files_equal() {
+  local left_hash right_hash
+  left_hash=$(git hash-object --no-filters -- "$1" 2>/dev/null) || return 1
+  right_hash=$(git hash-object --no-filters -- "$2" 2>/dev/null) || return 1
+  [[ $left_hash == "$right_hash" ]]
+}
+_merge_hook_mikefarah_yq() { command -v yq; }
+dot_write_text_if_changed() { printf '%s\n' "$2" >"$1"; }
+dot_managed_block_strip() {
+  local marker=$1 text=$2
+  printf '%s\n' "$text" | awk -v marker="$marker" '
+    $0 == marker " begin" { skipping=1; next }
+    $0 == marker " end" { skipping=0; next }
+    !skipping { print }
+  '
+}
+
+# shellcheck disable=SC1090 # Repository entry point is the subject under test.
+. "$repo_root/dot/profile-deactivate"
+deactivate
+
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+if git config --global --get-all include.path | grep -Fxq '~/.config/git/config'; then
+  _fail 'profile deactivation retained the dev Git include'
+else
+  _pass 'profile deactivation removes the exact dev Git include'
+fi
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+_assert_eq 'profile deactivation preserves unrelated Git includes' \
+  '~/.config/other/config' \
+  "$(git config --global --get-all include.path)"
+if grep -Fq '# dot-managed:hgrc:sley' "$HOME/.hgrc"; then
+  _fail 'profile deactivation retained the managed Sapling block'
+else
+  _pass 'profile deactivation removes the managed Sapling block'
+fi
+_assert_eq 'profile deactivation preserves unrelated Sapling config' \
+  'fixture' "$(git config -f "$HOME/.hgrc" ui.username)"
+if [[ ! -e $HOME/.config/opencode/plugins/dotfiles-agentguard.js ]]; then
+  _pass 'profile deactivation removes the marked OpenCode plugin'
+else
+  _fail 'profile deactivation retained the marked OpenCode plugin'
+fi
+if [[ -f $HOME/gstack-uninstalled ]]; then
+  _pass 'profile deactivation unregisters gstack integrations'
+else
+  _fail 'profile deactivation did not unregister gstack integrations'
+fi
+for target in "$HOME/.claude/settings.json" "$HOME/.gemini/settings.json" \
+  "$HOME/.config/muse/settings.json"; do
+  if grep -Fq 'AGENTGUARD_NAME=' "$target"; then
+    _fail "profile deactivation retained AgentGuard hooks in $target"
+  else
+    _pass "profile deactivation removes AgentGuard hooks from $target"
+  fi
+  _assert_eq "profile deactivation preserves unrelated state in $target" \
+    true "$(jq -r .keep "$target")"
+  _assert_eq "profile deactivation preserves user hooks in $target" \
+    user-hook "$(jq -r '.hooks.Event[0].hooks[0].command' "$target")"
+done
+if grep -Fq 'AGENTGUARD_NAME=codex' "$HOME/.codex/config.toml"; then
+  _fail 'profile deactivation retained Codex AgentGuard hooks'
+else
+  _pass 'profile deactivation removes Codex AgentGuard hooks'
+fi
+codex_json=$(yq eval --input-format toml --output-format json '.' \
+  "$HOME/.codex/config.toml")
+_assert_eq 'profile deactivation preserves unrelated Codex state' true \
+  "$(jq -r .keep.value <<<"$codex_json")"
+_assert_eq 'profile deactivation preserves user Codex hooks' user-hook \
+  "$(jq -r '.hooks.Event[0].hooks[0].command' <<<"$codex_json")"
+
+printf 'unmanaged\n' >"$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
+before_repeat=$(git hash-object --no-filters -- \
+  "$HOME/.gitconfig" "$HOME/.hgrc" "$HOME/.claude/settings.json" \
+  "$HOME/.gemini/settings.json" "$HOME/.config/muse/settings.json" \
+  "$HOME/.codex/config.toml")
+deactivate
+after_repeat=$(git hash-object --no-filters -- \
+  "$HOME/.gitconfig" "$HOME/.hgrc" "$HOME/.claude/settings.json" \
+  "$HOME/.gemini/settings.json" "$HOME/.config/muse/settings.json" \
+  "$HOME/.codex/config.toml")
+_assert_eq 'profile deactivation is idempotent' "$before_repeat" "$after_repeat"
+_assert_eq 'profile deactivation preserves an unmanaged OpenCode file' \
+  unmanaged "$(<"$HOME/.config/opencode/plugins/dotfiles-agentguard.js")"
+
+receipt_root=$XDG_STATE_HOME/dot/overlays/dev/merge-receipts-v1
+mkdir -p "$receipt_root"
+chmod 0700 "$receipt_root"
+printf 'not-json\n' >"$receipt_root/0000000000000000000000000000000000000000.json"
+chmod 0600 "$receipt_root/0000000000000000000000000000000000000000.json"
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+git config --global --add include.path '~/.config/git/config'
+if deactivate 2>/dev/null; then
+  _fail 'profile deactivation stops when receipt retirement fails'
+else
+  _pass 'profile deactivation stops when receipt retirement fails'
+fi
+# shellcheck disable=SC2088 # Git stores this portable include literally.
+if git config --global --get-all include.path | grep -Fxq '~/.config/git/config'; then
+  _pass 'profile deactivation failure preserves later legacy-managed state'
+else
+  _fail 'profile deactivation failure preserves later legacy-managed state'
+fi
+
+_test_summary

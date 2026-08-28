@@ -409,6 +409,63 @@ _inject_codex_home_trust() {
   rm -f "$toml" "$tmp"
 }
 
+_codex_prune_legacy_inline_profiles() {
+  local dst=$1 yq_bin json out
+  [[ -s $dst ]] || return 0
+  yq_bin=$(_codex_yq) || return 1
+  "$yq_bin" eval --input-format toml '.' "$dst" >/dev/null 2>&1 || return 0
+  json=$(mktemp) || return 1
+  if ! "$yq_bin" eval --input-format toml --output-format json \
+    'del(.profiles) | del(.profile)' "$dst" >"$json"; then
+    rm -f "$json"
+    return 1
+  fi
+  dot_sibling_tmp_for "$dst" || {
+    rm -f "$json"
+    return 1
+  }
+  out=$REPLY
+  if ! python3 "$(_codex_toml_renderer)" render-json "$json" >"$out"; then
+    rm -f "$json" "$out"
+    return 1
+  fi
+  rm -f "$json"
+  mv -f "$out" "$dst" || {
+    rm -f "$out"
+    return 1
+  }
+}
+
+_codex_build_managed_main() {
+  local destination=$1 agentguard_src=$2 agentguard_reconciler=$3
+  shift 3
+  local source
+  : >"$destination" || return 1
+  _merge_codex_agentguard_config \
+    "$agentguard_src" "$destination" "$agentguard_reconciler" || return 1
+  for source in "$@"; do
+    _merge_codex_config "$source" "$destination" || return 1
+  done
+  _inject_codex_home_trust "$destination"
+}
+
+_codex_build_managed_profile() {
+  local profile=$1 destination=$2 source
+  : >"$destination" || return 1
+  while IFS= read -r source; do
+    _merge_codex_config "$source" "$destination" || return 1
+  done < <(_codex_profile_sources "$profile")
+}
+
+_codex_receipts_current() {
+  local dst=$1 profile
+  dev_profile_state_tracked codex toml "$dst" || return 1
+  while IFS= read -r profile; do
+    dev_profile_state_tracked \
+      codex toml "$HOME/.codex/$profile.config.toml" || return 1
+  done < <(_codex_profiles)
+}
+
 dot_codex_config_merge() {
   local dst="$HOME/.codex/config.toml"
   local trust_helper agentguard_src="" agentguard_reconciler=""
@@ -417,6 +474,7 @@ dot_codex_config_merge() {
   # Run it before both provider preflight and the cache fast path so stale
   # policy cannot survive an otherwise skipped or partially unavailable update.
   _codex_prune_retired_profiles || return 1
+  _codex_prune_legacy_inline_profiles "$dst" || return 1
 
   trust_helper="$(dot_hook_family codex/refresh-trust.py)"
 
@@ -442,23 +500,49 @@ dot_codex_config_merge() {
   # edit changes the destination checksum and falls back to the full merge, so
   # this fast path only skips the common no-op update where nothing changed
   # since the last successful merge+trust pass.
-  if _codex_config_cache_current "$dst" "$trust_helper"; then
+  if _codex_receipts_current "$dst" &&
+    _codex_config_cache_current "$dst" "$trust_helper"; then
     return 0
   fi
 
   dot_hook_log "  Codex"
 
+  local managed_dir managed
+  _dev_profile_state_tempdir || return 1
+  managed_dir=$REPLY
+  managed=$managed_dir/main.toml
+  if ! _codex_build_managed_main "$managed" "$agentguard_src" \
+    "$agentguard_reconciler" "${config_sources[@]}" ||
+    ! dev_profile_state_begin codex toml "$dst" "$managed"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  _dev_profile_state_tempdir_remove "$managed_dir" || {
+    dev_profile_state_abort || true
+    return 1
+  }
+
   # The provider pass reads through a legacy symlink and renames a fully
   # rendered sibling temp over it only after success, preserving Codex-owned
   # state without an unlink-before-refresh failure window.
   _merge_codex_agentguard_config \
-    "$agentguard_src" "$dst" "$agentguard_reconciler" || return 1
+    "$agentguard_src" "$dst" "$agentguard_reconciler" || {
+    dev_profile_state_abort || true
+    return 1
+  }
 
   for source in "${config_sources[@]}"; do
-    _merge_codex_config "$source" "$dst" || return 1
+    _merge_codex_config "$source" "$dst" || {
+      dev_profile_state_abort || true
+      return 1
+    }
   done
 
   _inject_codex_home_trust "$dst"
+  if ! _trust_codex_dotfile_hooks "$dst" || ! dev_profile_state_commit; then
+    dev_profile_state_abort || true
+    return 1
+  fi
 
   # Render each named profile into its own ~/.codex/<name>.config.toml overlay.
   # config.toml (built above) had stale [profiles.*] tables and the old selector
@@ -468,11 +552,29 @@ dot_codex_config_merge() {
   local profile profile_dst
   while IFS= read -r profile; do
     profile_dst="$HOME/.codex/$profile.config.toml"
+    _dev_profile_state_tempdir || return 1
+    managed_dir=$REPLY
+    managed=$managed_dir/profile.toml
+    if ! _codex_build_managed_profile "$profile" "$managed" ||
+      ! dev_profile_state_begin codex toml "$profile_dst" "$managed"; then
+      _dev_profile_state_tempdir_remove "$managed_dir" || true
+      return 1
+    fi
+    _dev_profile_state_tempdir_remove "$managed_dir" || {
+      dev_profile_state_abort || true
+      return 1
+    }
     while IFS= read -r source; do
-      _merge_codex_config "$source" "$profile_dst" || return 1
+      _merge_codex_config "$source" "$profile_dst" || {
+        dev_profile_state_abort || true
+        return 1
+      }
     done < <(_codex_profile_sources "$profile")
+    dev_profile_state_commit || {
+      dev_profile_state_abort || true
+      return 1
+    }
   done < <(_codex_profiles)
 
-  _trust_codex_dotfile_hooks "$dst" || return 1
   _codex_write_config_cache "$dst" "$trust_helper" || true
 }
