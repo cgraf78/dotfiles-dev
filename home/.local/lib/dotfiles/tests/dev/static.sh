@@ -60,6 +60,10 @@ dot_dev_static_test() {
   check_contains 'development checks are selected' .config/shdeps/30-dev.conf cgraf78/checkrun
   check_contains 'development Nvim plugins are additive' .config/nvim/lua/plugins/git-dev.lua diffview.nvim
   check_contains 'development Nvim extras load after editor policy' .config/nvim/lua/plugins/zz-dev-extras.lua lazyvim.plugins.extras.dap.core
+  check_contains 'Lazygit docs use the native Termnav editor command' \
+    .config/lazygit/README.md 'termnav nvim open'
+  check_not_contains 'Lazygit docs retire the compatibility launcher name' \
+    .config/lazygit/README.md 'nvim-tmux-open'
   check_contains 'VS Code shell alias remains dev-owned' .config/shell/interactive.d/70-dev-aliases.sh "alias vs='code'"
   check_contains 'Claude wrapper keeps explicit unsafe-mode policy' .config/shell/interactive.d/70-dev-aliases.sh dangerously-skip-permissions
   check_contains 'Codex wrapper keeps explicit unsafe-mode policy' .config/shell/interactive.d/70-dev-aliases.sh dangerously-bypass-approvals-and-sandbox
