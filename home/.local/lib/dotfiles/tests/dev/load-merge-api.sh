@@ -4,6 +4,7 @@
 _dot_test_api_source_home=${DOT_TEST_SOURCE_HOME:-${REAL_HOME:-${HOME:-}}}
 _dot_test_api_host_home=${DOT_TEST_HOST_HOME:-${HOME:-}}
 _dot_test_api_root=${DOT_TEST_DOT_ROOT:-}
+_dot_test_api_composed=0
 
 if [[ -z $_dot_test_api_root ]]; then
   for _dot_test_api_candidate in \
@@ -23,6 +24,19 @@ export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR DOT_EXTENSION_API
 
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/public/xdg.sh"
+# An installed profile test runs outside Dot's isolated extension worker. Load
+# the same profile resolver in that case so the production hook API can verify
+# overlay-owned support symlinks against the active checkout set. A regular
+# base-owned compatibility module distinguishes that composition from a
+# standalone capability fixture, which continues to use the frozen adapter
+# below instead of inventing an overlay authority context.
+if [[ -f $_dot_test_api_source_home/.local/lib/dotfiles/merge-hooks.d/lib/compat.sh &&
+  ! -L $_dot_test_api_source_home/.local/lib/dotfiles/merge-hooks.d/lib/compat.sh &&
+  -n $_dot_test_api_host_home &&
+  -f $_dot_test_api_host_home/.config/dot/config &&
+  ! -L $_dot_test_api_host_home/.config/dot/config ]]; then
+  _dot_test_api_composed=1
+fi
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/log.sh"
 # shellcheck source=/dev/null
@@ -37,6 +51,18 @@ export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR DOT_EXTENSION_API
 . "$_dot_test_api_root/lib/dot/repos/config.sh"
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/repos/overlays.sh"
+if [[ $_dot_test_api_composed -eq 1 ]]; then
+  # shellcheck source=/dev/null
+  . "$_dot_test_api_root/lib/dot/config.sh"
+  # shellcheck source=/dev/null
+  . "$_dot_test_api_root/lib/dot/platform.sh"
+  # shellcheck source=/dev/null
+  . "$_dot_test_api_root/lib/dot/profiles.sh"
+  # shellcheck source=/dev/null
+  . "$_dot_test_api_root/lib/dot/overlays.sh"
+  dot_config_load || return
+  _dot_resolve_overlays inspect || return
+fi
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/extension-trust.sh"
 # shellcheck source=/dev/null
@@ -576,4 +602,4 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
 fi
 
 unset _dot_test_api_candidate _dot_test_api_host_home
-unset _dot_test_api_root _dot_test_api_source_home
+unset _dot_test_api_composed _dot_test_api_root _dot_test_api_source_home
