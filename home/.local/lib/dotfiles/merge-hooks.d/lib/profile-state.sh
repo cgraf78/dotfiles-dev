@@ -611,7 +611,11 @@ dev_profile_state_begin() {
       _dev_profile_state_tempdir_remove "$transaction_dir" || true
       return 1
     }
-    if ! cp "$original" "$temporary" || ! mv -f "$temporary" "$original_state"; then
+    # BusyBox cp replaces the mode of an existing destination with the source
+    # mode. Reassert privacy after copying so recovery accepts the staged state
+    # consistently across GNU and BusyBox implementations.
+    if ! cp "$original" "$temporary" || ! chmod 0600 "$temporary" ||
+      ! mv -f "$temporary" "$original_state"; then
       rm -f "$temporary"
       _dev_profile_state_tempdir_remove "$transaction_dir" || true
       return 1
