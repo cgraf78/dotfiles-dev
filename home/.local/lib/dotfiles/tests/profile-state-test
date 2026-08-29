@@ -250,12 +250,19 @@ if [[ $destination == "$DOT_TEST_CRASH_DESTINATION" &&
   ! -e $DOT_TEST_CRASH_MARKER ]]; then
   "$DOT_TEST_REAL_MV" "$@"
   : >"$DOT_TEST_CRASH_MARKER"
-  kill -KILL "$PPID"
+  kill -KILL "${DOT_TEST_CRASH_PARENT_PID:?}"
   exit 137
 fi
 exec "$DOT_TEST_REAL_MV" "$@"
 EOF
 chmod +x "$fixture/crashing-bin/mv"
+_run_crashing_retirement() {
+  bash --noprofile --norc -c '
+    export DOT_TEST_CRASH_PARENT_PID=$$
+    . "$1"
+    dev_profile_state_retire_all >/dev/null 2>&1
+  ' _ "$library"
+}
 export DOT_TEST_FAIL_DESTINATION=$fail_destination
 export DOT_TEST_FAIL_MARKER=$fixture/publish-failed
 export DOT_TEST_REAL_MV=$real_mv
@@ -340,7 +347,7 @@ _assert_eq 'preparation recovery preserves active receipts' '1' \
 export DOT_TEST_CRASH_DESTINATION=$retirement_crash_destination
 export DOT_TEST_CRASH_MARKER=$fixture/config-publish-crashed
 PATH=$fixture/crashing-bin:$PATH
-if { (dev_profile_state_retire_all >/dev/null 2>&1); } 2>/dev/null; then
+if _run_crashing_retirement 2>/dev/null; then
   _fail 'profile state simulates interruption after config publication'
 else
   _pass 'profile state simulates interruption after config publication'
@@ -535,7 +542,7 @@ extension_quarantine=${extensions_destination%/*}/.dot-profile-retire.$extension
 export DOT_TEST_CRASH_DESTINATION=$extension_quarantine
 export DOT_TEST_CRASH_MARKER=$fixture/link-quarantine-crashed
 PATH=$fixture/crashing-bin:$PATH
-if { (dev_profile_state_retire_all >/dev/null 2>&1); } 2>/dev/null; then
+if _run_crashing_retirement 2>/dev/null; then
   _fail 'profile state simulates interruption after link quarantine'
 else
   _pass 'profile state simulates interruption after link quarantine'
