@@ -101,6 +101,30 @@ dot_agentguard_opencode_marker() {
 }
 dot_sibling_tmp_for() { REPLY=$(mktemp "$1.tmp.XXXXXX"); }
 dot_commit_tmp() { mv "$1" "$2"; }
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_file_generation() {
+  if [[ -f $1 && ! -L $1 ]]; then
+    printf 'file:%s\n' "$(git hash-object --no-filters -- "$1")"
+  elif [[ ! -e $1 && ! -L $1 ]]; then
+    printf 'absent\n'
+  else
+    return 1
+  fi
+}
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_commit_tmp_if_generation() {
+  local current
+  current=$(dot_file_generation "$2") || return 1
+  [[ $current == "$3" ]] || return 1
+  mv "$1" "$2"
+}
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_remove_if_generation() {
+  local current
+  current=$(dot_file_generation "$1") || return 1
+  [[ $current == "$2" ]] || return 1
+  rm -f -- "$1"
+}
 dot_config_files_equal() {
   local left_hash right_hash
   left_hash=$(git hash-object --no-filters -- "$1" 2>/dev/null) || return 1
@@ -186,6 +210,155 @@ after_repeat=$(git hash-object --no-filters -- \
 _assert_eq 'profile deactivation is idempotent' "$before_repeat" "$after_repeat"
 _assert_eq 'profile deactivation preserves an unmanaged OpenCode file' \
   unmanaged "$(<"$HOME/.config/opencode/plugins/dotfiles-agentguard.js")"
+
+commit_definition=$(declare -f dot_commit_tmp_if_generation)
+eval "${commit_definition/dot_commit_tmp_if_generation/dot_commit_tmp_if_generation_original}"
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_commit_tmp_if_generation() {
+  printf 'user sapling replacement\n' >"$2"
+  dot_commit_tmp_if_generation_original "$@"
+}
+cat >"$HOME/.hgrc" <<'EOF'
+[ui]
+username = fixture
+# dot-managed:hgrc:sley begin
+[hooks]
+pretxncommit.sley = sley
+# dot-managed:hgrc:sley end
+EOF
+if _dev_deactivate_sapling; then
+  _fail 'Sapling retirement accepted a late user replacement'
+else
+  _pass 'Sapling retirement rejects a late user replacement'
+fi
+_assert_eq 'Sapling retirement preserves a late user replacement' \
+  'user sapling replacement' "$(<"$HOME/.hgrc")"
+eval "$commit_definition"
+unset -f dot_commit_tmp_if_generation_original
+
+remove_definition=$(declare -f dot_remove_if_generation)
+eval "${remove_definition/dot_remove_if_generation/dot_remove_if_generation_original}"
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_remove_if_generation() {
+  printf 'user OpenCode replacement\n' >"$1"
+  dot_remove_if_generation_original "$@"
+}
+printf '%s\n%s\n' '// agentguard-managed:opencode-plugin' 'managed' \
+  >"$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
+if _dev_deactivate_opencode; then
+  _fail 'OpenCode retirement accepted a late user replacement'
+else
+  _pass 'OpenCode retirement rejects a late user replacement'
+fi
+_assert_eq 'OpenCode retirement preserves a late user replacement' \
+  'user OpenCode replacement' \
+  "$(<"$HOME/.config/opencode/plugins/dotfiles-agentguard.js")"
+eval "$remove_definition"
+unset -f dot_remove_if_generation_original
+
+generation_definition=$(declare -f dot_file_generation)
+eval "${generation_definition/dot_file_generation/dot_file_generation_original}"
+printf '0\n' >"$HOME/generation-calls"
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_file_generation() {
+  local generation_calls
+  generation_calls=$(<"$HOME/generation-calls")
+  generation_calls=$((generation_calls + 1))
+  printf '%s\n' "$generation_calls" >"$HOME/generation-calls"
+  if [[ $generation_calls -eq 2 ]]; then
+    printf 'replacement during no-op\n' >"$1"
+  fi
+  dot_file_generation_original "$@"
+}
+printf 'unmanaged before no-op\n' \
+  >"$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
+if _dev_deactivate_opencode; then
+  _fail 'OpenCode no-op accepted a concurrent replacement'
+else
+  _pass 'OpenCode no-op revalidates its captured generation'
+fi
+_assert_eq 'OpenCode no-op preserves a concurrent replacement' \
+  'replacement during no-op' \
+  "$(<"$HOME/.config/opencode/plugins/dotfiles-agentguard.js")"
+eval "$generation_definition"
+unset -f dot_file_generation_original
+
+commit_definition=$(declare -f dot_commit_tmp_if_generation)
+eval "${commit_definition/dot_commit_tmp_if_generation/dot_commit_tmp_if_generation_original}"
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_commit_tmp_if_generation() {
+  printf '{"user":"replacement"}\n' >"$2"
+  dot_commit_tmp_if_generation_original "$@"
+}
+printf '{"hooks":{"Event":[{"hooks":[{"command":"env AGENTGUARD_NAME=claude x agent-hook-run"}]}]}}\n' \
+  >"$HOME/.claude/settings.json"
+if _dev_deactivate_agent_json claude "$HOME/.claude/settings.json"; then
+  _fail 'JSON retirement accepted a late user replacement'
+else
+  _pass 'JSON retirement rejects a late user replacement'
+fi
+_assert_eq 'JSON retirement preserves a late user replacement' replacement \
+  "$(jq -r .user "$HOME/.claude/settings.json")"
+eval "$commit_definition"
+unset -f dot_commit_tmp_if_generation_original
+
+commit_definition=$(declare -f dot_commit_tmp_if_generation)
+eval "${commit_definition/dot_commit_tmp_if_generation/dot_commit_tmp_if_generation_original}"
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_commit_tmp_if_generation() {
+  printf '[user]\nvalue = "replacement"\n' >"$2"
+  dot_commit_tmp_if_generation_original "$@"
+}
+cat >"$HOME/.codex/config.toml" <<'EOF'
+[[hooks.Event]]
+[[hooks.Event.hooks]]
+command = "env AGENTGUARD_NAME=codex x agent-hook-run"
+EOF
+if _dev_deactivate_codex; then
+  _fail 'Codex retirement accepted a late user replacement'
+else
+  _pass 'Codex retirement rejects a late user replacement'
+fi
+_assert_eq 'Codex retirement preserves a late user replacement' replacement \
+  "$(yq eval --input-format toml --output-format json '.' \
+    "$HOME/.codex/config.toml" | jq -r .user.value)"
+eval "$commit_definition"
+unset -f dot_commit_tmp_if_generation_original
+
+cat >"$HOME/.codex/config.toml" <<'EOF'
+[[hooks.Event]]
+[[hooks.Event.hooks]]
+command = "env AGENTGUARD_NAME=codex x agent-hook-run"
+EOF
+printf 'stale cache\n' >"$HOME/.codex/.dotfiles-config-merge-cache-v1"
+commit_definition=$(declare -f dot_commit_tmp_if_generation)
+# shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
+dot_commit_tmp_if_generation() {
+  mv "$1" "$2"
+  return 1
+}
+if _dev_deactivate_codex; then
+  _fail 'Codex retirement hid a post-publication cleanup failure'
+else
+  _pass 'Codex retirement reports a post-publication cleanup failure'
+fi
+[[ -f $HOME/.codex/.dotfiles-config-merge-cache-v1 ]] ||
+  _fail 'Codex cleanup-failure fixture removed the retry marker too early'
+eval "$commit_definition"
+_dev_deactivate_codex
+if [[ ! -e $HOME/.codex/.dotfiles-config-merge-cache-v1 ]]; then
+  _pass 'Codex retirement retry removes the stale merge cache'
+else
+  _fail 'Codex retirement retry retained the stale merge cache'
+fi
+rm "$HOME/.codex/config.toml"
+printf 'stale cache\n' >"$HOME/.codex/.dotfiles-config-merge-cache-v1"
+_dev_deactivate_codex
+if [[ ! -e $HOME/.codex/.dotfiles-config-merge-cache-v1 ]]; then
+  _pass 'Codex retirement removes stale cache without a config file'
+else
+  _fail 'Codex retirement retained stale cache without a config file'
+fi
 
 receipt_root=$XDG_STATE_HOME/dot/overlays/dev/merge-receipts-v1
 mkdir -p "$receipt_root"

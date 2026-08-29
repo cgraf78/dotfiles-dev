@@ -44,8 +44,9 @@ _dev_deactivate_git_include() {
 }
 
 _dev_deactivate_sapling() {
-  local destination=$HOME/.hgrc current updated marker
+  local destination=$HOME/.hgrc current updated marker generation output
   [[ -f $destination && ! -L $destination ]] || return 0
+  generation=$(dot_file_generation "$destination") || return 1
   current=$(<"$destination")
   updated=$current
   for marker in \
@@ -54,29 +55,48 @@ _dev_deactivate_sapling() {
     '# dot-managed:hgrc:repo-check'; do
     updated=$(dot_managed_block_strip "$marker" "$updated") || return 1
   done
-  [[ $updated == "$current" ]] ||
-    dot_write_text_if_changed "$destination" "$updated"
+  if [[ $updated == "$current" ]]; then
+    [[ $(dot_file_generation "$destination") == "$generation" ]]
+    return
+  fi
+  dot_sibling_tmp_for "$destination" || return 1
+  output=$REPLY
+  printf '%s\n' "$updated" >"$output" || {
+    rm -f "$output"
+    return 1
+  }
+  if ! dot_commit_tmp_if_generation "$output" "$destination" "$generation"; then
+    rm -f "$output"
+    return 1
+  fi
 }
 
 _dev_deactivate_opencode() {
   local plugin=$HOME/.config/opencode/plugins/dotfiles-agentguard.js first=''
+  local generation
   [[ -e $plugin || -L $plugin ]] || return 0
   [[ -f $plugin && ! -L $plugin ]] || return 0
+  generation=$(dot_file_generation "$plugin") || return 1
   IFS= read -r first <"$plugin" || true
-  [[ $first == "$(dot_agentguard_opencode_marker)" ]] || return 0
-  rm -f -- "$plugin"
+  if [[ $first != "$(dot_agentguard_opencode_marker)" ]]; then
+    [[ $(dot_file_generation "$plugin") == "$generation" ]]
+    return
+  fi
+  dot_remove_if_generation "$plugin" "$generation"
 }
 
 _dev_deactivate_agent_json() {
-  local agent=$1 destination=$2 reconciler source output
+  local agent=$1 destination=$2 reconciler source output generation
   [[ -e $destination || -L $destination ]] || return 0
   [[ -f $destination && ! -L $destination ]] || return 1
+  generation=$(dot_file_generation "$destination") || return 1
   command -v jq >/dev/null 2>&1 || return 1
   jq empty "$destination" >/dev/null 2>&1 || return 1
   if ! jq -e --arg agent "$agent" \
     '[.. | strings | select(contains("AGENTGUARD_NAME=" + $agent + " ") and contains(" agent-hook-"))] | length > 0' \
     "$destination" >/dev/null; then
-    return 0
+    [[ $(dot_file_generation "$destination") == "$generation" ]]
+    return
   fi
   reconciler=$(_dev_deactivate_agentguard_file _shared reconcile-hooks.jq) ||
     return 1
@@ -100,19 +120,35 @@ _dev_deactivate_agent_json() {
   rm -f "$source"
   if dot_config_files_equal "$output" "$destination"; then
     rm -f "$output"
-    return 0
+    [[ $(dot_file_generation "$destination") == "$generation" ]]
+    return
   fi
-  dot_commit_tmp "$output" "$destination"
+  if ! dot_commit_tmp_if_generation "$output" "$destination" "$generation"; then
+    rm -f "$output"
+    return 1
+  fi
+}
+
+_dev_deactivate_codex_cache() {
+  rm -f -- "$HOME/.codex/.dotfiles-config-merge-cache-v1"
 }
 
 _dev_deactivate_codex() {
   local destination=$HOME/.codex/config.toml reconciler yq_bin
-  local destination_json source_json merged_json output renderer
-  [[ -e $destination || -L $destination ]] || return 0
+  local destination_json source_json merged_json output renderer generation
+  if [[ ! -e $destination && ! -L $destination ]]; then
+    _dev_deactivate_codex_cache
+    return
+  fi
   [[ -f $destination && ! -L $destination ]] || return 1
+  generation=$(dot_file_generation "$destination") || return 1
   case $(<"$destination") in
     *'AGENTGUARD_NAME=codex '*' agent-hook-'*) ;;
-    *) return 0 ;;
+    *)
+      [[ $(dot_file_generation "$destination") == "$generation" ]] || return 1
+      _dev_deactivate_codex_cache
+      return
+      ;;
   esac
   yq_bin=$(_merge_hook_mikefarah_yq) || return 1
   command -v jq >/dev/null 2>&1 || return 1
@@ -148,10 +184,15 @@ _dev_deactivate_codex() {
   rm -f "$destination_json" "$source_json" "$merged_json"
   if dot_config_files_equal "$output" "$destination"; then
     rm -f "$output"
-    return 0
+    [[ $(dot_file_generation "$destination") == "$generation" ]] || return 1
+    _dev_deactivate_codex_cache
+    return
   fi
-  dot_commit_tmp "$output" "$destination" || return 1
-  rm -f -- "$HOME/.codex/.dotfiles-config-merge-cache-v1"
+  if ! dot_commit_tmp_if_generation "$output" "$destination" "$generation"; then
+    rm -f "$output"
+    return 1
+  fi
+  _dev_deactivate_codex_cache
 }
 
 _dev_deactivate_gstack() {
