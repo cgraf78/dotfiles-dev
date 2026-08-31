@@ -61,7 +61,7 @@ _dr_check_dev_tools() {
   local command_name
   _dr_section 'Development tools'
 
-  for command_name in gh delta difft gitleaks lazygit sley checkrun agentguard; do
+  for command_name in gh delta difft gitleaks lazygit sley checkrun; do
     if command -v "$command_name" >/dev/null 2>&1; then
       _dr_ok "$command_name" 'available'
     else
