@@ -126,6 +126,11 @@ case ${2:-} in
 esac
 SHDEPS
   chmod +x "$doctor_bin/shdeps"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_dev_tools || true)
+  _assert_not_contains \
+    'Doctor does not require a nonexistent AgentGuard umbrella command' \
+    'agentguard missing' "$result"
   direct_tool="$doctor_home/.local/bin/tool"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$direct_tool"
   chmod +x "$direct_tool"
