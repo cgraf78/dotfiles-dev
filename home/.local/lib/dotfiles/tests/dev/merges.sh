@@ -1832,7 +1832,8 @@ JSON
           return
         fi
       else
-        origin=$(git -C "$git_root" rev-parse origin/main 2>/dev/null || true)
+        origin=$(git -C "$git_root" rev-parse --verify --quiet \
+          'origin/main^{commit}' 2>/dev/null || true)
       fi
 
       if [[ -z "${base:-}" && -n "$origin" && "$origin" != "$head" ]]; then
@@ -4865,7 +4866,7 @@ TOML
     codex_content=$(cat "$CODEX_CONFIG")
     _assert_contains "codex hook: emits hook array tables" "[[hooks.PreToolUse]]" "$codex_content"
 
-    if python3 - "$CODEX_CONFIG" <<'PY'; then
+    if python3 - "$CODEX_CONFIG" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -4952,6 +4953,7 @@ assert state[post_edit_key]["trusted_hash"] == current_hash(
     data["hooks"]["PostToolUse"][0]["hooks"][0],
 )
 PY
+    then
       _pass "codex hook: merges common/work, preserves local state, and trusts managed hooks"
     else
       _fail "codex hook: merges common/work, preserves local state, and trusts managed hooks"
@@ -4996,7 +4998,7 @@ PY
     # Profile overlays: common + work fragments merge into the per-profile file,
     # later layers win, source layers override pre-existing local keys, and local
     # CLI-owned keys without a source counterpart survive.
-    if python3 - "$CODEX_DIR/layered.config.toml" <<'PY'; then
+    if python3 - "$CODEX_DIR/layered.config.toml" <<'PY'
 import sys
 import tomllib
 
@@ -5008,12 +5010,13 @@ assert data["approval_policy"] == "never", data            # source beats local 
 assert data["model"] == "local-allow", data                # local-only key preserved
 assert data["features"]["web_search_request"] is True, data  # nested profile tables survive
 PY
+    then
       _pass "codex hook: renders profile overlays, layering work over common and preserving local state"
     else
       _fail "codex hook: renders profile overlays, layering work over common and preserving local state"
     fi
 
-    if python3 - "$CODEX_DIR/experimental.config.toml" <<'PY'; then
+    if python3 - "$CODEX_DIR/experimental.config.toml" <<'PY'
 import sys
 import tomllib
 
@@ -5022,13 +5025,14 @@ with open(sys.argv[1], "rb") as f:
 assert data["model"] == "experimental-model", data
 assert data["model_reasoning_effort"] == "high", data
 PY
+    then
       _pass "codex hook: renders dynamically discovered profile families"
     else
       _fail "codex hook: renders dynamically discovered profile families"
     fi
 
     _run_codex_merge 2>/dev/null
-    if python3 - "$CODEX_CONFIG" <<'PY'; then
+    if python3 - "$CODEX_CONFIG" <<'PY'
 import sys
 import tomllib
 
@@ -5036,6 +5040,7 @@ with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
 assert "profiles" not in data, "new Codex config should not keep legacy inline profiles"
 PY
+    then
       _pass "codex hook: keeps config.toml free of legacy inline profiles"
     else
       _fail "codex hook: keeps config.toml free of legacy inline profiles"
@@ -5066,7 +5071,7 @@ TOML
     PATH="$_codex_no_yq_bin:/usr/bin:/bin" _run_codex_merge 2>/dev/null
     PATH=$saved_path
     _run_codex_merge 2>/dev/null
-    if python3 - "$CODEX_CONFIG" <<'PY'; then
+    if python3 - "$CODEX_CONFIG" <<'PY'
 import sys
 import tomllib
 
@@ -5074,6 +5079,7 @@ with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
 assert data["projects"]["/cache-source-change"]["trust_level"] == "trusted"
 PY
+    then
       _pass "codex hook: skipped merge does not cache stale config"
     else
       _fail "codex hook: skipped merge does not cache stale config"
