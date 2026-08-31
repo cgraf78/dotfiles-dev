@@ -3,7 +3,7 @@
 set -o pipefail
 export NO_COLOR=1
 . "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
-REAL_HOME="$HOME"
+REAL_HOME=$(_dev_repo_root)/home
 
 echo "=== Development Shdeps boundary ==="
 deps=$(<"$REAL_HOME/.config/shdeps/30-dev.conf")
