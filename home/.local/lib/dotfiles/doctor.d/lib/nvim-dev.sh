@@ -94,7 +94,10 @@ _dr_check_nvim_dev() {
 
   for path in \
     "$HOME/.config/nvim/lua/config/mason-policy.lua" \
-    "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua" \
+    "$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua" \
+    "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua" \
+    "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua" \
+    "$HOME/.config/nvim/lua/dotfiles/final_policy/mason.lua" \
     "$HOME/.config/nvim/lua/plugins/formatting.lua" \
     "$HOME/.config/nvim/lua/plugins/linting.lua"; do
     if [[ -r $path ]]; then

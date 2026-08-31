@@ -1,15 +1,7 @@
--- Sort after dotfiles-nvim's editor policy so these explicit re-enables win.
+-- LazyVim validates that extras load after its core specs and before the
+-- custom `plugins` namespace. Keep capability-owned extras in this earlier
+-- editor extension point while ordinary overrides remain under `plugins`.
 return {
-  -- dotfiles-nvim keeps its editor-only profile free of development services.
-  -- Re-enable the LazyVim core specs that this capability owns before the
-  -- language and debugger extras extend them.
-  { "neovim/nvim-lspconfig", enabled = true },
-  { "mason-org/mason.nvim", enabled = true },
-  { "mason-org/mason-lspconfig.nvim", enabled = true },
-  { "stevearc/conform.nvim", enabled = true },
-  { "mfussenegger/nvim-lint", enabled = true },
-  { "folke/lazydev.nvim", enabled = true },
-
   { import = "lazyvim.plugins.extras.dap.core" },
   { import = "lazyvim.plugins.extras.lang.clangd" },
   { import = "lazyvim.plugins.extras.lang.cmake" },

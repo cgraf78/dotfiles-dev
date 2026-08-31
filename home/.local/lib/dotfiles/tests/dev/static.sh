@@ -43,6 +43,17 @@ dot_dev_static_test() {
     fi
   }
 
+  check_absent() {
+    local description=$1 path=$2
+    if [[ ! -e $root/$path ]]; then
+      printf 'PASS: %s\n' "$description"
+      pass=$((pass + 1))
+    else
+      printf 'FAIL: %s (%s still exists)\n' "$description" "$path" >&2
+      fail=$((fail + 1))
+    fi
+  }
+
   check_equal() {
     local description=$1 expected=$2 actual=$3
     if [[ $actual == "$expected" ]]; then
@@ -59,7 +70,20 @@ dot_dev_static_test() {
   check_contains 'advanced Git tooling is selected' .config/shdeps/30-dev.conf cgraf78/git-tools
   check_contains 'development checks are selected' .config/shdeps/30-dev.conf cgraf78/checkrun
   check_contains 'development Nvim plugins are additive' .config/nvim/lua/plugins/git-dev.lua diffview.nvim
-  check_contains 'development Nvim extras load after editor policy' .config/nvim/lua/plugins/zz-dev-extras.lua lazyvim.plugins.extras.dap.core
+  check_contains 'development Nvim extras use the ordered capability extension' \
+    .config/nvim/lua/dotfiles/lazyvim_extras/dev.lua lazyvim.plugins.extras.dap.core
+  check_contains 'development Nvim overrides use the ordered capability extension' \
+    .config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua neovim/nvim-lspconfig
+  check_contains 'workspace policy uses the ordered capability extension' \
+    .config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua opts_for_path
+  check_contains 'Mason policy uses the final policy extension' \
+    .config/nvim/lua/dotfiles/final_policy/mason.lua apply_lsp_policy
+  check_absent 'filename-ordered dev overrides are retired' \
+    .config/nvim/lua/plugins/zz-dev-extras.lua
+  check_absent 'filename-ordered Mason policy is retired' \
+    .config/nvim/lua/plugins/zz-mason-policy.lua
+  check_absent 'filename-ordered workspace policy is retired' \
+    .config/nvim/lua/plugins/workspace-dev.lua
   check_contains 'Lazygit docs use the native Termnav editor command' \
     .config/lazygit/README.md 'termnav nvim open'
   check_not_contains 'Lazygit docs retire the compatibility launcher name' \
@@ -170,7 +194,7 @@ SH
     fail=$((fail + 1))
   fi
 
-  if python3 - "$root/.config/claude/settings.d" <<'PY'; then
+  if python3 - "$root/.config/claude/settings.d" <<'PY'
 import json
 import pathlib
 import sys
@@ -184,6 +208,7 @@ for path in pathlib.Path(sys.argv[1]).glob("*.json"):
 if invalid:
     raise SystemExit("\n".join(invalid))
 PY
+  then
     printf 'PASS: Claude permission allow rules use the supported schema spelling\n'
     pass=$((pass + 1))
   else

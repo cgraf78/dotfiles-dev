@@ -28,9 +28,18 @@ echo '=== Development Nvim boundary ==='
 _assert_contains 'Mason policy is dev-owned' 'lsp_server_packages' "$(<"$HOME/.config/nvim/lua/config/mason-policy.lua")"
 _assert_contains 'Diffview is dev-owned' 'sindrets/diffview.nvim' "$(<"$HOME/.config/nvim/lua/plugins/git-dev.lua")"
 _assert_not_contains 'Basic Gitsigns stays in editor' 'lewis6991/gitsigns.nvim' "$(<"$HOME/.config/nvim/lua/plugins/git-dev.lua")"
-_assert_contains 'Workspace dev layer owns Lazygit' 'config.keymaps.workspace-dev' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
-_assert_contains 'Workspace dev layer owns Sley root detection' 'repo_root_detector' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
-_assert_contains 'Workspace dev layer owns Lazygit options' 'opts_for_path' "$(<"$HOME/.config/nvim/lua/plugins/workspace-dev.lua")"
+workspace_overrides=$HOME/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua
+_assert_contains 'Workspace dev layer owns Lazygit' 'config.keymaps.workspace-dev' \
+  "$(<"$workspace_overrides")"
+_assert_contains 'Workspace dev layer owns Sley root detection' 'repo_root_detector' \
+  "$(<"$workspace_overrides")"
+_assert_contains 'Workspace dev layer owns Lazygit options' 'opts_for_path' \
+  "$(<"$workspace_overrides")"
+dev_overrides=$HOME/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua
+_assert_file_exists 'Dev plugin overrides use the post-plugin extension point' \
+  "$dev_overrides"
+dev_overrides_content=
+[[ ! -f $dev_overrides ]] || dev_overrides_content=$(<"$dev_overrides")
 for plugin in \
   neovim/nvim-lspconfig \
   mason-org/mason.nvim \
@@ -41,15 +50,28 @@ for plugin in \
   _assert_contains \
     "Dev layer re-enables $plugin" \
     "{ \"$plugin\", enabled = true }" \
-    "$(<"$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua")"
+    "$dev_overrides_content"
 done
+dev_extras=$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua
+_assert_file_exists 'Dev LazyVim extras use the pre-plugin extension point' "$dev_extras"
+dev_extras_content=
+[[ ! -f $dev_extras ]] || dev_extras_content=$(<"$dev_extras")
 _assert_contains 'Dev layer preserves LazyVim dotfile support' \
   '{ import = "lazyvim.plugins.extras.util.dot" }' \
-  "$(<"$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua")"
+  "$dev_extras_content"
+_assert_not_contains 'Custom plugin specs do not import LazyVim extras too late' \
+  'lazyvim.plugins.extras.' \
+  "$(rg --follow -n 'lazyvim\.plugins\.extras\.' "$HOME/.config/nvim/lua/plugins" || true)"
+_assert_file_missing 'Retired filename-ordered dev overrides are absent' \
+  "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"
+_assert_file_missing 'Retired filename-ordered Mason policy is absent' \
+  "$HOME/.config/nvim/lua/plugins/zz-mason-policy.lua"
+_assert_file_missing 'Retired filename-ordered workspace policy is absent' \
+  "$HOME/.config/nvim/lua/plugins/workspace-dev.lua"
 
 output=$(
   _nvim_lua '
-local later = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/zz-dev-extras.lua"))
+local later = dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua"))
 local earlier = {
   { "neovim/nvim-lspconfig", enabled = false },
   { "mason-org/mason.nvim", enabled = false },
@@ -957,7 +979,7 @@ esac
 SH
 chmod +x "$workspace_bin/git"
 output=$(PATH="$workspace_bin:$PATH" DOT_TEST_WORKSPACE="$workspace_tmp" _nvim_lua '
-  local spec_path = vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua")
+  local spec_path = vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua")
   vim.env.HOME = vim.env.DOT_TEST_WORKSPACE .. "/home"
   local spec = dofile(spec_path)[1]
   local opts = {}
@@ -1138,7 +1160,7 @@ echo '=== Dev workspace callbacks ==='
 workspace_callback_root=$(_tmpdir)
 mkdir -p "$workspace_callback_root/project/.git" "$workspace_callback_root/outside"
 output=$(DOT_TEST_WORKSPACE_CALLBACK_ROOT="$workspace_callback_root" _nvim_lua '
-  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua"))[1]
+  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))[1]
   local opts = {}
   spec.opts(nil, opts)
   local root = vim.env.DOT_TEST_WORKSPACE_CALLBACK_ROOT
@@ -1169,7 +1191,7 @@ output=$(_nvim_lua '
   end
   vim.schedule = function(fn) scheduled = true; fn() end
   package.loaded["config.keymaps.workspace-dev"] = { setup = function() print("setup") end }
-  dofile(vim.fn.expand("~/.config/nvim/lua/plugins/workspace-dev.lua"))[1].init()
+  dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))[1].init()
   registered()
   print("scheduled=" .. tostring(scheduled))
 ')

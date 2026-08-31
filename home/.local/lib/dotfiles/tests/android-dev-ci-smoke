@@ -5,7 +5,10 @@ for path in \
   "$HOME/.config/git/config" \
   "$HOME/.config/shdeps/00-toolchains.conf" \
   "$HOME/.config/shdeps/30-dev.conf" \
-  "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"; do
+  "$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/final_policy/mason.lua"; do
   [[ -f $path ]] || {
     printf 'android-dev-ci-smoke: missing %s\n' "$path" >&2
     exit 1
