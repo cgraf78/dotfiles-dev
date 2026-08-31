@@ -456,6 +456,8 @@ GIT_CONFIG
     cat >"$gh_home/.config/gh/config.yml" <<'YAML'
 git_protocol: https
 local_only: keep
+browser:
+http_unix_socket:
 aliases:
   old: old command
 YAML
@@ -502,6 +504,10 @@ GH
       '"git_protocol": "ssh"' "$gh_output"
     _assert_contains "gh merge: preserves local-only key" \
       '"local_only": "keep"' "$gh_output"
+    _assert_not_contains "gh merge: removes null browser defaults" \
+      '"browser"' "$gh_output"
+    _assert_not_contains "gh merge: removes null Unix-socket defaults" \
+      '"http_unix_socket"' "$gh_output"
     _assert_contains "gh merge: first config layer applied" \
       '"co": "pr checkout"' "$gh_output"
     _assert_contains "gh merge: later config layer applied" \
