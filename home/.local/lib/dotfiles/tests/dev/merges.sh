@@ -830,6 +830,65 @@ YAML
         ' "$keybindings_file")"
     }
 
+    _assert_vscode_macos_pane_move_keybindings() {
+      local keybindings_file="$1"
+
+      _assert_eq "vscode mac terminal: Karabiner pane transports send exact escape sequences" \
+        '[]' \
+        "$(jq -c '[
+          . as $bindings
+          | (
+              [
+                {key: "f16", text: "\u001bH"},
+                {key: "f17", text: "\u001bJ"},
+                {key: "f18", text: "\u001bK"},
+                {key: "f19", text: "\u001bL"}
+              ][]
+            ) as $wanted
+          | select(
+              [
+                $bindings[]
+                | select(
+                    .key == $wanted.key
+                    and .command == "workbench.action.terminal.sendSequence"
+                    and .args.text == $wanted.text
+                    and .when == "terminalFocus"
+                  )
+              ]
+              | length != 1
+            )
+          | $wanted.key
+        ]' "$keybindings_file")"
+      _assert_eq "vscode mac editor: Karabiner pane transports move editor groups" \
+        '[]' \
+        "$(jq -c '[
+          . as $bindings
+          | (
+              [
+                {key: "f16", command: "workbench.action.moveActiveEditorGroupLeft"},
+                {key: "f17", command: "workbench.action.moveActiveEditorGroupDown"},
+                {key: "f18", command: "workbench.action.moveActiveEditorGroupUp"},
+                {key: "f19", command: "workbench.action.moveActiveEditorGroupRight"}
+              ][]
+            ) as $wanted
+          | select(
+              [
+                $bindings[]
+                | select(
+                    .key == $wanted.key
+                    and .command == $wanted.command
+                    and .when == "editorFocus && !terminalFocus"
+                  )
+              ]
+              | length != 1
+            )
+          | $wanted.key
+        ]' "$keybindings_file")"
+      _assert_eq "vscode mac: F16-F19 have only terminal and editor pane routes" \
+        "8" \
+        "$(jq '[.[] | select(.key == "f16" or .key == "f17" or .key == "f18" or .key == "f19")] | length' "$keybindings_file")"
+    }
+
     _assert_vscode_focus_fallback_keybindings() {
       local keybindings_file="$1"
       local platform="$2"
@@ -914,6 +973,13 @@ YAML
             )
           | $wanted.key
         ]' "$keybindings_file")"
+      if [[ $platform == "macOS" ]]; then
+        _assert_vscode_macos_pane_move_keybindings "$keybindings_file"
+      else
+        _assert_eq "vscode $platform: macOS pane transport keys stay absent" \
+          "0" \
+          "$(jq '[.[] | select(.key == "f16" or .key == "f17" or .key == "f18" or .key == "f19")] | length' "$keybindings_file")"
+      fi
       _assert_eq "vscode $platform terminal: Ctrl+/ transport is extension-independent" \
         '[]' \
         "$(jq -c '[
