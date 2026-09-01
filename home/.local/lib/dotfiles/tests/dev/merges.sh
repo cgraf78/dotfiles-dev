@@ -2682,6 +2682,95 @@ EOF
       "$vscode_expected_linux_variants" \
       "$vscode_default_linux_variants"
 
+    vscode_variants_macos_home=$(_tmpdir)
+    mkdir -p \
+      "$vscode_variants_macos_home/Applications/Visual Studio Code.app" \
+      "$vscode_variants_macos_home/Applications/Visual Studio Code - Insiders.app" \
+      "$vscode_variants_macos_home/Applications/VS Code @ FB.app" \
+      "$vscode_variants_macos_home/Applications/VS Code @ FB - Insiders.app" \
+      "$vscode_variants_macos_home/Applications/Cursor.app" \
+      "$vscode_variants_macos_home/Library/Application Support/Code/User" \
+      "$vscode_variants_macos_home/Library/Application Support/Code - Insiders/User" \
+      "$vscode_variants_macos_home/Library/Application Support/VS Code @ FB/User" \
+      "$vscode_variants_macos_home/Library/Application Support/VS Code @ FB - Insiders/User" \
+      "$vscode_variants_macos_home/Library/Application Support/Cursor/User" \
+      "$vscode_variants_macos_home/.config/dot/merge-hooks.d"
+    cp -R "$REAL_HOME/.config/dot/merge-hooks.d/vscode" \
+      "$vscode_variants_macos_home/.config/dot/merge-hooks.d/vscode"
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    vscode_default_macos_variants=$(env HOME="$vscode_variants_macos_home" \
+      REAL_HOME="$REAL_HOME" \
+      DOT_TEST_VSCODE_APPLICATIONS_DIR="$vscode_variants_macos_home/Applications" \
+      bash -c '
+      set -euo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      dot_hook_platform_match() { return 1; }
+      uname() { printf "Darwin\n"; }
+      _warn() { :; }
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      _vscode_variants | sort
+    ')
+    vscode_expected_macos_variants=$(printf '%s\n' \
+      "$vscode_variants_macos_home/.cursor/extensions	$vscode_variants_macos_home/Library/Application Support/Cursor/User" \
+      "$vscode_variants_macos_home/.vscode/extensions	$vscode_variants_macos_home/Library/Application Support/Code/User" \
+      "$vscode_variants_macos_home/.vscode-fb-insiders-mkt/extensions	$vscode_variants_macos_home/Library/Application Support/VS Code @ FB - Insiders/User" \
+      "$vscode_variants_macos_home/.vscode-fb-mkt/extensions	$vscode_variants_macos_home/Library/Application Support/VS Code @ FB/User" \
+      "$vscode_variants_macos_home/.vscode-insiders/extensions	$vscode_variants_macos_home/Library/Application Support/Code - Insiders/User" |
+      sort)
+    _assert_eq "vscode variants: default macOS variants include Code, FB Code, and Cursor" \
+      "$vscode_expected_macos_variants" \
+      "$vscode_default_macos_variants"
+
+    vscode_variant_override_home=$(_tmpdir)
+    mkdir -p \
+      "$vscode_variant_override_home/Applications/Editor A.app" \
+      "$vscode_variant_override_home/Applications/Editor B.app" \
+      "$vscode_variant_override_home/shared/User" \
+      "$vscode_variant_override_home/variants.d"
+    cat >"$vscode_variant_override_home/variants.d/10-defaults.tsv" <<'EOF'
+# platform	marker	extensions_dir	config_dir	options
+Darwin	${VSCODE_APPLICATIONS_DIR}/Editor A.app	$HOME/editor-a/extensions	$HOME/shared/User	initial-policy
+Darwin	${VSCODE_APPLICATIONS_DIR}/Editor B.app	$HOME/editor-b/extensions	$HOME/shared/User	middle-policy
+EOF
+    cat >"$vscode_variant_override_home/variants.d/80-local.tsv" <<'EOF'
+# platform	marker	extensions_dir	config_dir	options
+Darwin	${VSCODE_APPLICATIONS_DIR}/Editor A.app	$HOME/editor-a/extensions	$HOME/shared/User	final-policy
+EOF
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    vscode_variant_override_output=$(env HOME="$vscode_variant_override_home" \
+      REAL_HOME="$REAL_HOME" \
+      DOT_TEST_VSCODE_APPLICATIONS_DIR="$vscode_variant_override_home/Applications" \
+      VSCODE_VARIANT_DIR="$vscode_variant_override_home/variants.d" \
+      bash -c '
+      set -euo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      dot_hook_platform_match() { return 1; }
+      uname() { printf "Darwin\n"; }
+      _warn() { :; }
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      _vscode_variant_sources() {
+        printf "%s\n" "$VSCODE_VARIANT_DIR/10-defaults.tsv" \
+          "$VSCODE_VARIANT_DIR/80-local.tsv"
+      }
+      variants=()
+      while IFS= read -r variant; do
+        variants+=("$variant")
+        printf "variant\t%s\n" "$variant"
+      done < <(_vscode_variants)
+      while IFS= read -r variant; do
+        printf "config\t%s\n" "$variant"
+      done < <(_vscode_config_variants "${variants[@]}")
+    ')
+    vscode_expected_variant_override_output=$(printf '%s\n' \
+      "variant	$vscode_variant_override_home/editor-b/extensions	$vscode_variant_override_home/shared/User	middle-policy" \
+      "variant	$vscode_variant_override_home/editor-a/extensions	$vscode_variant_override_home/shared/User	final-policy" \
+      "config	$vscode_variant_override_home/editor-a/extensions	$vscode_variant_override_home/shared/User	final-policy")
+    _assert_eq "vscode variants: later duplicate keeps final ordering and config policy" \
+      "$vscode_expected_variant_override_output" \
+      "$vscode_variant_override_output"
+
     partial_mv_bin=$(_tmpdir)/bin
     partial_commit_dir=$(_tmpdir)
     mkdir -p "$partial_mv_bin"

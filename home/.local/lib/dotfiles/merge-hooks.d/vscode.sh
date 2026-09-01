@@ -67,7 +67,7 @@ _vscode_commit_tmp() {
     # while leaving a short byte stream behind. Write through an already-open
     # handle, truncate only after all bytes are written, then verify the final
     # content before deleting the temp file.
-    if python3 - "$tmp" "$dst" <<'PY'; then
+    if python3 - "$tmp" "$dst" <<'PY'
 import os
 import sys
 
@@ -111,6 +111,7 @@ except BaseException:
         pass
     raise
 PY
+    then
       rm -f -- "$tmp"
       return 0
     fi
@@ -1374,7 +1375,25 @@ _vscode_variant_file_records() {
 # extension-host profiles that need local extensions registered but do not own a
 # user settings/keybindings file on this machine.
 _vscode_variants() {
-  _vscode_variant_file_records
+  # A later overlay may refine an existing target with local capability
+  # options. Collapse matching extension/config directory pairs here so the
+  # final policy wins without processing the same installation twice.
+  _vscode_variant_file_records | awk -F '\t' '
+    {
+      key = $1 SUBSEP $2
+      order[NR] = key
+      last[key] = NR
+      record[key] = $0
+    }
+    END {
+      for (i = 1; i <= NR; i++) {
+        key = order[i]
+        if (last[key] == i) {
+          print record[key]
+        }
+      }
+    }
+  '
 }
 
 _vscode_opts_intersect() {
