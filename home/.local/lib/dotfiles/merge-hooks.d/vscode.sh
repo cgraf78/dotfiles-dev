@@ -1430,8 +1430,7 @@ _vscode_local_extensions() {
 # single user config directory (for example, stable and insiders builds). Each
 # _merge_vscode_config call fully reconciles that directory, so replaying every
 # host does duplicate work and makes the final result depend on the last call
-# anyway. Keep that existing last-declaration-wins policy explicitly while
-# leaving the full variant list intact for extension registration below.
+# anyway. Keep that existing last-declaration-wins policy explicit.
 _vscode_config_variants() {
   local -a variants=("$@")
   local i j line rest cfg_dir later_rest later_cfg_dir superseded
@@ -1455,9 +1454,47 @@ _vscode_config_variants() {
   done
 }
 
+# Extension reconciliation depends only on the extension directory and its
+# effective options; the associated config directory is irrelevant. Some
+# editor installations expose the same extension host through multiple config
+# targets, so collapse exact extension-policy duplicates at their last
+# occurrence while retaining distinct policies for the same directory.
+_vscode_extension_variants() {
+  local -a variants=("$@")
+  local i j line rest cfg_dir opts later_line later_rest later_cfg_dir
+  local later_opts superseded
+
+  for ((i = 0; i < ${#variants[@]}; i++)); do
+    line="${variants[$i]}"
+    rest="${line#*	}"
+    cfg_dir="${rest%%	*}"
+    opts="${rest#*	}"
+    [[ $opts == "$cfg_dir" ]] && opts=
+
+    superseded=0
+    for ((j = i + 1; j < ${#variants[@]}; j++)); do
+      later_line="${variants[$j]}"
+      later_rest="${later_line#*	}"
+      later_cfg_dir="${later_rest%%	*}"
+      later_opts="${later_rest#*	}"
+      [[ $later_opts == "$later_cfg_dir" ]] && later_opts=
+      if [[ "${later_line%%	*}" == "${line%%	*}" &&
+        "$later_opts" == "$opts" ]]; then
+        superseded=1
+        break
+      fi
+    done
+    ((superseded)) || printf '%s\n' "$line"
+  done
+}
+
+# Build from the caller's declaration snapshot so every extension target sees
+# one consistent policy without rescanning the declaration sources.
 _vscode_build_managed_extensions() {
-  local ext_dir=$1 opts=$2 output=$3 work projection
+  local ext_dir=$1 opts=$2 output=$3 work projection local_extension
   local ext_id ext_src disabled_opts ext_name
+  shift 3
+  local -a local_extensions=("$@")
   _dev_profile_state_tempdir || return 1
   work=$REPLY
   projection=$work/extensions/extensions.json
@@ -1466,7 +1503,8 @@ _vscode_build_managed_extensions() {
     return 1
   }
   printf '[]\n' >"$projection"
-  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+  for local_extension in ${local_extensions[@]+"${local_extensions[@]}"}; do
+    IFS=$'\t' read -r ext_id ext_src disabled_opts <<<"$local_extension"
     _vscode_opts_intersect "$opts" "$disabled_opts" && continue
     [[ -d $ext_src ]] || continue
     ext_name=${ext_src##*/}
@@ -1479,7 +1517,7 @@ _vscode_build_managed_extensions() {
       _dev_profile_state_tempdir_remove "$work" || true
       return 1
     }
-  done < <(_vscode_local_extensions)
+  done
   cp "$projection" "$output" || {
     _dev_profile_state_tempdir_remove "$work" || true
     return 1
@@ -1489,8 +1527,24 @@ _vscode_build_managed_extensions() {
 
 _vscode_merge_extensions_tracked() {
   local line=$1 ext_dir rest cfg_dir opts work managed links next_links
+  shift
   local ext_id ext_src disabled_opts ext_name ext_link ext_target legacy_ext_src
+  local local_extension cached_extensions=0
   local index status=0 rollback_status=0
+  local -a local_extensions=()
+
+  # merge() passes an explicit snapshot after --. Preserve the historical
+  # direct-call contract for focused lifecycle tests and other internal users.
+  if (($# > 0)) && [[ $1 == -- ]]; then
+    cached_extensions=1
+    shift
+    local_extensions=("$@")
+  fi
+  if ((cached_extensions == 0)); then
+    while IFS= read -r local_extension; do
+      local_extensions+=("$local_extension")
+    done < <(_vscode_local_extensions)
+  fi
   local -a changed_paths=() changed_kinds=() old_targets=() new_targets=()
 
   ext_dir=${line%%	*}
@@ -1503,7 +1557,8 @@ _vscode_merge_extensions_tracked() {
   # active-profile ownership. Remove them before capturing the reversible
   # baseline so a later downgrade cannot resurrect stale registrations.
   _prune_vscode_local_extensions "$ext_dir/extensions.json" || return 1
-  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+  for local_extension in ${local_extensions[@]+"${local_extensions[@]}"}; do
+    IFS=$'\t' read -r ext_id ext_src disabled_opts <<<"$local_extension"
     ext_name=${ext_src##*/}
     if _vscode_opts_intersect "$opts" "$disabled_opts"; then
       _prune_vscode_extension_versions \
@@ -1515,13 +1570,15 @@ _vscode_merge_extensions_tracked() {
     [[ -d $ext_src ]] || continue
     _prune_vscode_extension_versions \
       "$ext_id" "$ext_src" "$ext_name" "$ext_dir/extensions.json" || return 1
-  done < <(_vscode_local_extensions)
+  done
 
   _dev_profile_state_tempdir || return 1
   work=$REPLY
   managed=$work/managed.json
   links=$work/links.json
-  _vscode_build_managed_extensions "$ext_dir" "$opts" "$managed" || {
+  _vscode_build_managed_extensions \
+    "$ext_dir" "$opts" "$managed" \
+    ${local_extensions[@]+"${local_extensions[@]}"} || {
     _dev_profile_state_tempdir_remove "$work" || true
     return 1
   }
@@ -1538,7 +1595,8 @@ _vscode_merge_extensions_tracked() {
     return 1
   }
 
-  while IFS=$'\t' read -r ext_id ext_src disabled_opts; do
+  for local_extension in ${local_extensions[@]+"${local_extensions[@]}"}; do
+    IFS=$'\t' read -r ext_id ext_src disabled_opts <<<"$local_extension"
     _vscode_opts_intersect "$opts" "$disabled_opts" && continue
     [[ -d $ext_src ]] || continue
     ext_name=${ext_src##*/}
@@ -1601,7 +1659,7 @@ _vscode_merge_extensions_tracked() {
         break
       fi
     fi
-  done < <(_vscode_local_extensions)
+  done
 
   if ((status == 0)) && dev_profile_state_commit "$links"; then
     _dev_profile_state_tempdir_remove "$work"
@@ -1638,7 +1696,9 @@ merge() {
   command -v jq &>/dev/null || return 0
 
   local -a variants=()
+  local -a extension_variants=()
   local -a config_variants=()
+  local -a local_extensions=()
   local line
   while IFS= read -r line; do
     variants+=("$line")
@@ -1648,16 +1708,26 @@ merge() {
 
   ((${#variants[@]} > 0)) || return 0
 
-  # Config reconciliation is keyed by its destination rather than by the
-  # extension host. Build this smaller list once; extension pruning and local
-  # extension installation must still visit every original variant.
+  # Configuration and extension reconciliation have different identities.
+  # Build each list once so shared targets are processed only when their
+  # effective policy differs.
   while IFS= read -r line; do
     config_variants+=("$line")
   done < <(_vscode_config_variants "${variants[@]}")
 
+  while IFS= read -r line; do
+    extension_variants+=("$line")
+  done < <(_vscode_extension_variants "${variants[@]}")
+
+  while IFS= read -r line; do
+    local_extensions+=("$line")
+  done < <(_vscode_local_extensions)
+
   local ext_dir cfg_dir opts rest merge_rc=0
-  for line in "${variants[@]}"; do
-    _vscode_merge_extensions_tracked "$line" || merge_rc=1
+  for line in ${extension_variants[@]+"${extension_variants[@]}"}; do
+    _vscode_merge_extensions_tracked \
+      "$line" -- \
+      ${local_extensions[@]+"${local_extensions[@]}"} || merge_rc=1
   done
 
   # Merge settings and keybindings. Config destinations are independent, so

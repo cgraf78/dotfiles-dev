@@ -2771,6 +2771,91 @@ EOF
       "$vscode_expected_variant_override_output" \
       "$vscode_variant_override_output"
 
+    vscode_extension_variant_rc=0
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    vscode_extension_variant_output=$(env HOME="$vscode_variant_override_home" \
+      REAL_HOME="$REAL_HOME" bash -c '
+      set -euo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      variants=()
+      printf -v variant "%s\t%s\t%s" \
+        "$HOME/editor-a/extensions" "$HOME/config-a" shared-policy
+      variants+=("$variant")
+      printf -v variant "%s\t%s\t%s" \
+        "$HOME/editor-b/extensions" "$HOME/shared/User" middle-policy
+      variants+=("$variant")
+      printf -v variant "%s\t%s\t%s" \
+        "$HOME/editor-a/extensions" "$HOME/config-b" shared-policy
+      variants+=("$variant")
+      printf -v variant "%s\t%s\t%s" \
+        "$HOME/editor-a/extensions" "$HOME/config-c" final-policy
+      variants+=("$variant")
+      _vscode_extension_variants "${variants[@]}"
+    ' 2>/dev/null) || vscode_extension_variant_rc=$?
+    _assert_eq "vscode extensions: target deduplicator is available" \
+      "0" "$vscode_extension_variant_rc"
+    vscode_expected_extension_variant_output=$(printf '%s\t%s\t%s\n' \
+      "$vscode_variant_override_home/editor-b/extensions" \
+      "$vscode_variant_override_home/shared/User" middle-policy \
+      "$vscode_variant_override_home/editor-a/extensions" \
+      "$vscode_variant_override_home/config-b" shared-policy \
+      "$vscode_variant_override_home/editor-a/extensions" \
+      "$vscode_variant_override_home/config-c" final-policy)
+    _assert_eq "vscode extensions: duplicate target and options keep final ordering" \
+      "$vscode_expected_extension_variant_output" \
+      "$vscode_extension_variant_output"
+
+    vscode_local_extension_count=$vscode_variant_override_home/local-extension-count
+    vscode_extension_reconcile_log=$vscode_variant_override_home/extension-reconcile-log
+    : >"$vscode_local_extension_count"
+    : >"$vscode_extension_reconcile_log"
+    vscode_local_extension_cache_rc=0
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    env HOME="$vscode_variant_override_home" REAL_HOME="$REAL_HOME" \
+      COUNT_FILE="$vscode_local_extension_count" \
+      RECONCILE_FILE="$vscode_extension_reconcile_log" bash -c '
+      set -euo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      _dot_tool_present() { return 0; }
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      _vscode_install_declared_extensions() { :; }
+      _vscode_variants() {
+        printf "%s\t%s\t%s\n" \
+          "$HOME/editor-a/extensions" "$HOME/config-a" shared-policy
+        printf "%s\t%s\t%s\n" \
+          "$HOME/editor-b/extensions" "$HOME/config-b" middle-policy
+        printf "%s\t%s\t%s\n" \
+          "$HOME/editor-a/extensions" "$HOME/config-c" shared-policy
+      }
+      _vscode_local_extensions() {
+        printf "called\n" >>"$COUNT_FILE"
+        printf "%s\t%s\t%s\n" \
+          fixture.extension "$HOME/missing-extension" -
+      }
+      _merge_vscode_remote_configs_tracked() { :; }
+      _merge_vscode_config_tracked() { :; }
+      _vscode_merge_extensions_tracked() {
+        printf "%s\n" "$1" >>"$RECONCILE_FILE"
+        [[ ${2:-} == -- ]]
+      }
+      merge
+    ' || vscode_local_extension_cache_rc=$?
+    _assert_eq "vscode extensions: cached declaration merge succeeds" \
+      "0" "$vscode_local_extension_cache_rc"
+    _assert_eq "vscode extensions: local declarations resolve once per merge" \
+      "1" "$(wc -l <"$vscode_local_extension_count" | tr -d ' ')"
+    vscode_expected_extension_reconcile_output=$(printf '%s\t%s\t%s\n' \
+      "$vscode_variant_override_home/editor-b/extensions" \
+      "$vscode_variant_override_home/config-b" middle-policy \
+      "$vscode_variant_override_home/editor-a/extensions" \
+      "$vscode_variant_override_home/config-c" shared-policy)
+    _assert_eq "vscode extensions: merge reconciles each target and policy once" \
+      "$vscode_expected_extension_reconcile_output" \
+      "$(cat "$vscode_extension_reconcile_log")"
+
     partial_mv_bin=$(_tmpdir)/bin
     partial_commit_dir=$(_tmpdir)
     mkdir -p "$partial_mv_bin"
