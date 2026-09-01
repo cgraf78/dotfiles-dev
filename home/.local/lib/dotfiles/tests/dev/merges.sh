@@ -3438,10 +3438,23 @@ JSON
     _assert_eq "vscode mcp auth: token state file is not group/world readable" \
       "600" "$vscode_mcp_token_perms"
 
+    vscode_settings_before_repeat=$(cat "$vscode_home/.config/Code/User/settings.json")
     vscode_keybindings_before_repeat=$(cat "$vscode_home/.config/Code/User/keybindings.json")
+    vscode_settings_source_count=$vscode_home/settings-source-count
+    vscode_checkrun_capability_count=$vscode_home/checkrun-capability-count
+    vscode_checkrun_schema_count=$vscode_home/checkrun-schema-count
+    vscode_keybinding_family_count=$vscode_home/keybinding-family-count
+    : >"$vscode_settings_source_count"
+    : >"$vscode_checkrun_capability_count"
+    : >"$vscode_checkrun_schema_count"
+    : >"$vscode_keybinding_family_count"
     # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
     env HOME="$vscode_home" REAL_HOME="$REAL_HOME" PATH="$vscode_bin:$PATH" \
-      DOT_TEST_MV_LOG="$vscode_mv_log" DOT_TEST_VSCODE_HOSTNAME="fixture-host" bash -c '
+      DOT_TEST_MV_LOG="$vscode_mv_log" DOT_TEST_VSCODE_HOSTNAME="fixture-host" \
+      VSCODE_SETTINGS_SOURCE_COUNT="$vscode_settings_source_count" \
+      VSCODE_CHECKRUN_CAPABILITY_COUNT="$vscode_checkrun_capability_count" \
+      VSCODE_CHECKRUN_SCHEMA_COUNT="$vscode_checkrun_schema_count" \
+      VSCODE_KEYBINDING_FAMILY_COUNT="$vscode_keybinding_family_count" bash -c '
       set -euo pipefail
       . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
       dot_hook_platform_match() { return 1; }
@@ -3453,14 +3466,90 @@ JSON
       _vscode_variants() {
         printf "%s\t%s\n" "$HOME/.vscode/extensions" "$HOME/.config/Code/User"
       }
+      settings_sources_definition=$(declare -f _vscode_settings_sources)
+      eval "${settings_sources_definition/_vscode_settings_sources/_vscode_settings_sources_original}"
+      _vscode_settings_sources() {
+        printf "called\n" >>"$VSCODE_SETTINGS_SOURCE_COUNT"
+        _vscode_settings_sources_original
+      }
+      checkrun_capabilities_definition=$(declare -f _vscode_checkrun_capabilities)
+      eval "${checkrun_capabilities_definition/_vscode_checkrun_capabilities/_vscode_checkrun_capabilities_original}"
+      _vscode_checkrun_capabilities() {
+        printf "called\n" >>"$VSCODE_CHECKRUN_CAPABILITY_COUNT"
+        _vscode_checkrun_capabilities_original "$@"
+      }
+      checkrun_schema_definition=$(declare -f _vscode_checkrun_schema_config)
+      eval "${checkrun_schema_definition/_vscode_checkrun_schema_config/_vscode_checkrun_schema_config_original}"
+      _vscode_checkrun_schema_config() {
+        printf "called\n" >>"$VSCODE_CHECKRUN_SCHEMA_COUNT"
+        _vscode_checkrun_schema_config_original "$@"
+      }
+      keybinding_families_definition=$(declare -f _vscode_keybinding_families)
+      eval "${keybinding_families_definition/_vscode_keybinding_families/_vscode_keybinding_families_original}"
+      _vscode_keybinding_families() {
+        printf "called\n" >>"$VSCODE_KEYBINDING_FAMILY_COUNT"
+        _vscode_keybinding_families_original "$@"
+      }
       merge
     '
     _assert_eq "vscode mcp auth: token is stable across repeat merges" \
       "$vscode_mcp_token_setting" \
       "$(jq -r '.["vscode-mcp-server.authToken"] // empty' "$vscode_home/.config/Code/User/settings.json")"
+    _assert_file_content "vscode settings: repeat merge is byte-identical" \
+      "$vscode_settings_before_repeat" \
+      "$vscode_home/.config/Code/User/settings.json"
     _assert_file_content "vscode keybindings: repeat merge is byte-identical" \
       "$vscode_keybindings_before_repeat" \
       "$vscode_home/.config/Code/User/keybindings.json"
+    _assert_eq "vscode warm merge: settings sources resolve once per config" \
+      "1" "$(wc -l <"$vscode_settings_source_count" | tr -d ' ')"
+    _assert_eq "vscode warm merge: Checkrun capabilities project once per config" \
+      "1" "$(wc -l <"$vscode_checkrun_capability_count" | tr -d ' ')"
+    _assert_eq "vscode warm merge: Checkrun schemas project once per config" \
+      "1" "$(wc -l <"$vscode_checkrun_schema_count" | tr -d ' ')"
+    _assert_eq "vscode warm merge: keybinding families aggregate once per config" \
+      "1" "$(wc -l <"$vscode_keybinding_family_count" | tr -d ' ')"
+
+    vscode_settings_receipt_before=$(cat "$vscode_receipt_root/$vscode_settings_key.json")
+    vscode_projection_failure_tmp=$(_tmpdir)
+    vscode_projection_failure_rc=0
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    env HOME="$vscode_home" REAL_HOME="$REAL_HOME" PATH="$vscode_bin:$PATH" \
+      TMPDIR="$vscode_projection_failure_tmp" \
+      DOT_TEST_MV_LOG="$vscode_mv_log" DOT_TEST_VSCODE_HOSTNAME="fixture-host" bash -c '
+      set -uo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      dot_hook_platform_match() { return 1; }
+      uname() { printf "Linux\n"; }
+      _log() { :; }
+      _warn() { printf "%s\n" "$*" >&2; }
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      _vscode_variants() {
+        printf "%s\t%s\n" "$HOME/.vscode/extensions" "$HOME/.config/Code/User"
+      }
+      settings_merge_definition=$(declare -f _merge_vscode_settings)
+      eval "${settings_merge_definition/_merge_vscode_settings/_merge_vscode_settings_original}"
+      _merge_vscode_settings() {
+        if [[ $2 == "$HOME/.config/Code/User/settings.json" ]]; then
+          return 1
+        fi
+        _merge_vscode_settings_original "$@"
+      }
+      merge
+    ' >/dev/null 2>&1 || vscode_projection_failure_rc=$?
+    _assert_eq "vscode settings: live projection failure propagates" \
+      "1" "$vscode_projection_failure_rc"
+    _assert_file_content "vscode settings: live projection failure restores prior settings" \
+      "$vscode_settings_before_repeat" \
+      "$vscode_home/.config/Code/User/settings.json"
+    _assert_file_content "vscode settings: live projection failure preserves receipt" \
+      "$vscode_settings_receipt_before" \
+      "$vscode_receipt_root/$vscode_settings_key.json"
+    _assert_eq "vscode settings: live projection failure cleans transaction state" \
+      "0" \
+      "$(find "$vscode_projection_failure_tmp" -maxdepth 1 -type d \
+        -name 'dev-profile-state.*' -print | wc -l | tr -d ' ')"
 
     vscode_valid_keybindings=$(_tmpfile)
     cp "$vscode_home/.config/Code/User/keybindings.json" \

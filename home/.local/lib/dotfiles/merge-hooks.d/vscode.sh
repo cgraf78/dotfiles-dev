@@ -808,6 +808,51 @@ _merge_vscode_settings_config() {
   fi
 }
 
+# Apply an already-rendered managed settings projection after profile-state has
+# restored the user baseline. Building that projection resolves Checkrun and
+# every source family; repeating that work here made unchanged updates pay for
+# the same policy twice. The cleanup still runs against the live baseline so
+# settings imported by Settings Sync cannot preserve retired generated values.
+_vscode_apply_settings_projection() {
+  local managed=$1 destination=$2 opts=${3:-}
+
+  _remove_vscode_generated_checkrun_settings "$destination" || return 1
+  _merge_vscode_settings "$managed" "$destination" || return 1
+  if _vscode_opts_contains "$opts" "no-sley"; then
+    _remove_vscode_sley_settings "$destination" || return 1
+  fi
+  return 0
+}
+
+# Materialize the ordered source policy once. The active projection and the
+# live destination both need the complete retirement history, so reusing only
+# the final active bindings would be incorrect for Settings Sync migrations.
+_vscode_build_keybinding_source() {
+  local output=$1
+  local kb_family kb_source kb_layer kb_next kb_platform
+  kb_platform=$(_vscode_keybinding_platform) || return 1
+  printf '[]\n' >"$output"
+  while IFS= read -r kb_family; do
+    while IFS= read -r kb_source; do
+      kb_layer=$(mktemp)
+      kb_next=$(mktemp)
+      if ! _strip_jsonc "$kb_source" |
+        jq -s -e 'if length == 1 and (.[0] | type == "array") then .[0] else error("expected one array") end' \
+          >"$kb_layer" ||
+        ! jq -n --slurpfile layer "$kb_layer" --slurpfile current "$output" \
+          '$layer[0] + $current[0]' >"$kb_next"; then
+        rm -f "$kb_layer" "$kb_next" "$output"
+        return 1
+      fi
+      if ! mv -f -- "$kb_next" "$output"; then
+        rm -f "$kb_layer" "$kb_next" "$output"
+        return 1
+      fi
+      rm -f "$kb_layer"
+    done < <(dot_hook_family_files_matching "$kb_family" '*.jsonc' '*.replace/*.jsonc')
+  done < <(_vscode_keybinding_families "$kb_platform")
+}
+
 # Merge keybindings into a VS Code config dir.
 _merge_vscode_keybindings_config() {
   local cfg_dir=$1
@@ -816,35 +861,16 @@ _merge_vscode_keybindings_config() {
   # two current fragments with the same action but distinct conditions from
   # mistaking each other for stale output, while preserving the existing
   # later-fragment-first output precedence.
-  local kb_family kb_source kb_layer kb_aggregate kb_next kb_platform
-  kb_platform=$(_vscode_keybinding_platform) || return 1
+  local kb_aggregate
   kb_aggregate=$(mktemp)
-  printf '[]\n' >"$kb_aggregate"
-  while IFS= read -r kb_family; do
-    while IFS= read -r kb_source; do
-      kb_layer=$(mktemp)
-      kb_next=$(mktemp)
-      if ! _strip_jsonc "$kb_source" |
-        jq -s -e 'if length == 1 and (.[0] | type == "array") then .[0] else error("expected one array") end' \
-          >"$kb_layer" ||
-        ! jq -n --slurpfile layer "$kb_layer" --slurpfile current "$kb_aggregate" \
-          '$layer[0] + $current[0]' >"$kb_next"; then
-        rm -f "$kb_layer" "$kb_next" "$kb_aggregate"
-        dot_hook_warn "    warning: keybindings source aggregation failed for $cfg_dir — skipping"
-        return 1
-      fi
-      if ! mv -f -- "$kb_next" "$kb_aggregate"; then
-        rm -f "$kb_layer" "$kb_next" "$kb_aggregate"
-        dot_hook_warn "    warning: keybindings source aggregation failed for $cfg_dir — skipping"
-        return 1
-      fi
-      rm -f "$kb_layer"
-    done < <(dot_hook_family_files_matching "$kb_family" '*.jsonc' '*.replace/*.jsonc')
-  done < <(_vscode_keybinding_families "$kb_platform")
+  if ! _vscode_build_keybinding_source "$kb_aggregate"; then
+    rm -f "$kb_aggregate"
+    dot_hook_warn "    warning: keybindings source aggregation failed for $cfg_dir — skipping"
+    return 1
+  fi
   if ! _merge_vscode_keybindings \
     "$kb_aggregate" \
-    "$cfg_dir/keybindings.json" \
-    "$kb_platform"; then
+    "$cfg_dir/keybindings.json"; then
     rm -f "$kb_aggregate"
     return 1
   fi
@@ -871,11 +897,21 @@ _vscode_profile_state_publisher() {
 }
 
 _merge_vscode_config_tracked() {
-  local cfg_dir=$1 opts=${2:-} managed_dir publisher
+  local cfg_dir=$1 opts=${2:-} managed_dir publisher keybinding_source
   _dev_profile_state_tempdir || return 1
   managed_dir=$REPLY
-  if ! _merge_vscode_settings_config "$managed_dir" "$opts" "$cfg_dir" ||
-    ! _merge_vscode_keybindings_config "$managed_dir"; then
+  keybinding_source=$managed_dir/keybindings-source.json
+  if ! _merge_vscode_settings_config "$managed_dir" "$opts" "$cfg_dir"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if ! _vscode_build_keybinding_source "$keybinding_source"; then
+    dot_hook_warn "    warning: keybindings source aggregation failed for $cfg_dir — skipping"
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
+  if ! _merge_vscode_keybindings \
+    "$keybinding_source" "$managed_dir/keybindings.json"; then
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
@@ -889,7 +925,8 @@ _merge_vscode_config_tracked() {
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
-  if ! _merge_vscode_settings_config "$cfg_dir" "$opts" "$cfg_dir" ||
+  if ! _vscode_apply_settings_projection \
+    "$managed_dir/settings.json" "$cfg_dir/settings.json" "$opts" ||
     ! dev_profile_state_commit; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
@@ -901,7 +938,8 @@ _merge_vscode_config_tracked() {
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
-  if ! _merge_vscode_keybindings_config "$cfg_dir" ||
+  if ! _merge_vscode_keybindings \
+    "$keybinding_source" "$cfg_dir/keybindings.json" ||
     ! dev_profile_state_commit; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
