@@ -1,0 +1,25 @@
+name: Refresh Mise lock
+
+on:
+  schedule:
+    # Stagger this from the broader scheduled CI and schema refresh jobs.
+    - cron: "43 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refresh:
+    name: Refresh Dotfiles Dev Mise lock
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: cgraf78/actions/.github/workflows/mise-lock-refresh.yml@dc7be3dcf6da264083f229d78818c2ad087a3d34
+    with:
+      project_name: Dotfiles Dev
+      mise_config_file: home/.config/mise/config.toml
+      mise_lock_file: home/.config/mise/mise.lock
+    secrets:
+      # Provision a new write-capable deploy key scoped only to dotfiles-dev
+      # before enabling this scheduled maintenance workflow.
+      deploy_key: ${{ secrets.DOTFILES_DEV_MAINTENANCE_DEPLOY_KEY }}

@@ -3,7 +3,29 @@ set -euo pipefail
 
 repo_root=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
 cd "$repo_root"
-repo_name=${repo_root##*/}
+
+resolve_repo_name() {
+  local root=$1 github_repository=${2:-} remote=${3:-}
+  if [[ -n $github_repository ]]; then
+    printf '%s\n' "${github_repository##*/}"
+  elif [[ -n $remote ]]; then
+    remote=${remote##*/}
+    printf '%s\n' "${remote%.git}"
+  else
+    printf '%s\n' "${root##*/}"
+  fi
+}
+
+[[ $(resolve_repo_name /tmp/project cgraf78/dotfiles-dev) == dotfiles-dev ]] || {
+  printf 'workflow-test: GitHub repository identity did not override checkout basename\n' >&2
+  exit 1
+}
+[[ $(resolve_repo_name /tmp/project '' git@github.com:cgraf78/dotfiles-dev.git) == dotfiles-dev ]] || {
+  printf 'workflow-test: origin identity did not override checkout basename\n' >&2
+  exit 1
+}
+repo_remote=$(git config --get remote.origin.url)
+repo_name=$(resolve_repo_name "$repo_root" "${GITHUB_REPOSITORY:-}" "$repo_remote")
 
 fail() {
   printf 'workflow-test: %s\n' "$*" >&2
@@ -23,10 +45,12 @@ case $repo_name in
   dotfiles-nvim)
     expected_cron='23 9 * * *'
     descriptor=20-nvim.conf
+    expected_profiles=base,jq,python,lua,neovim,tmux,ripgrep,fd,procps
     ;;
   dotfiles-dev)
     expected_cron='37 9 * * *'
     descriptor=30-dev.conf
+    expected_profiles=base,jq,python,lua,neovim,zsh,procps
     ;;
   *) fail "unexpected repository name: $repo_name" ;;
 esac
@@ -40,7 +64,7 @@ remote_predicate() {
   remote_tmp=$(mktemp -d)
   trap 'rm -rf -- "$remote_tmp"' RETURN
   gh api --method GET repos/cgraf78/dotfiles/contents/.github/LICENSE \
-    -f ref=703e1aeea7286fccec56f65fa4314b8d57b46469 --jq .content |
+    -f ref=21626d196c0dfca242f6318606ec4b9bbca18371 --jq .content |
     base64 --decode >"$remote_tmp/source-LICENSE"
   gh api --method GET "repos/cgraf78/$repo_name/contents/LICENSE" --jq .content |
     base64 --decode >"$remote_tmp/target-LICENSE"
@@ -60,11 +84,13 @@ if [[ -n ${WORKFLOW_TEST_COUNT_FILE:-} ]]; then
 fi
 
 required_files=(
+  .selene.toml vim.yml
   .github/cgraf78-actions.lock .github/dependabot.yml .github/dot.lock
+  .github/provider-test.lock
   .github/dot-test-suites.txt .github/dotfiles-source.lock
   .github/repository-settings-endpoints.txt .github/shellcheck-files.txt
   .github/workflows/retry-infrastructure.yml .github/workflows/test.yml
-  .gitignore LICENSE README.md home/.gitkeep test/run test/workflow-test
+  .gitignore LICENSE README.md test/run test/workflow-test
   test/lib/capability-fixture.sh test/lib/repository-settings.sh
   test/lib/wait-github-state.sh
 )
@@ -77,10 +103,10 @@ single_sha() {
   [[ $value =~ ^[0-9a-f]{40}$ ]] || fail "$file does not contain a full lowercase commit SHA"
   [[ $value == "$expected" ]] || fail "$file contains an unexpected commit SHA"
 }
-single_sha .github/cgraf78-actions.lock de3f6086e36a77eec8ee62f2c9871266e4b5c05c
-single_sha .github/dot.lock dfe976f4962389ee2c2bfe107a8bcfc34660469d
+single_sha .github/cgraf78-actions.lock dc7be3dcf6da264083f229d78818c2ad087a3d34
+single_sha .github/dot.lock a96eeba1564925e0e0857492e0e3feeaf0d14964
 
-expected_source=$'version=1\nrepository=cgraf78/dotfiles\ncommit=703e1aeea7286fccec56f65fa4314b8d57b46469\nlicense_path=.github/LICENSE'
+expected_source=$'version=1\nrepository=cgraf78/dotfiles\ncommit=21626d196c0dfca242f6318606ec4b9bbca18371\nlicense_path=.github/LICENSE'
 [[ $(<.github/dotfiles-source.lock) == "$expected_source" ]] || fail 'source lock is not canonical'
 if LC_ALL=C grep -q $'\r' .github/dotfiles-source.lock; then fail 'source lock contains CRLF'; fi
 
@@ -92,21 +118,29 @@ fi
 [[ $license_hash == bfaed6d8fb29d7208c1266afa313681591d6ca05ec2f7e005cebe3d7a7b43579 ]] || fail 'LICENSE bytes differ from the frozen MIT license'
 [[ $(wc -c <LICENSE | tr -d '[:space:]') == 1067 ]] || fail 'LICENSE size differs from the frozen MIT license'
 if [[ -n ${DOTFILES_SOURCE_REPO:-} ]]; then
-  git -C "$DOTFILES_SOURCE_REPO" cat-file -e '703e1aeea7286fccec56f65fa4314b8d57b46469^{commit}'
-  cmp LICENSE <(git -C "$DOTFILES_SOURCE_REPO" show 703e1aeea7286fccec56f65fa4314b8d57b46469:.github/LICENSE)
-  cmp .github/dependabot.yml <(git -C "$DOTFILES_SOURCE_REPO" show 703e1aeea7286fccec56f65fa4314b8d57b46469:.github/dependabot.yml)
-  cmp .github/workflows/retry-infrastructure.yml <(git -C "$DOTFILES_SOURCE_REPO" show 703e1aeea7286fccec56f65fa4314b8d57b46469:.github/workflows/retry-infrastructure.yml)
+  git -C "$DOTFILES_SOURCE_REPO" cat-file -e '21626d196c0dfca242f6318606ec4b9bbca18371^{commit}'
+  cmp LICENSE <(git -C "$DOTFILES_SOURCE_REPO" show 21626d196c0dfca242f6318606ec4b9bbca18371:.github/LICENSE)
+  cmp .github/dependabot.yml <(git -C "$DOTFILES_SOURCE_REPO" show 21626d196c0dfca242f6318606ec4b9bbca18371:.github/dependabot.yml)
+  cmp .github/workflows/retry-infrastructure.yml <(git -C "$DOTFILES_SOURCE_REPO" show 21626d196c0dfca242f6318606ec4b9bbca18371:.github/workflows/retry-infrastructure.yml)
 fi
+selene_policy_hash=$(sha256sum home/.config/checkrun/selene.toml 2>/dev/null |
+  awk '{print $1}' || shasum -a 256 home/.config/checkrun/selene.toml | awk '{print $1}')
+[[ $selene_policy_hash == 4001d244c811c7f0c94dca6f77d3796c77f8d2fef8dede15d7831748b5f923b0 ]] ||
+  fail 'deployed Selene policy differs from the frozen source'
+grep -Fx 'std = "vim+lua51"' .selene.toml >/dev/null ||
+  fail 'repository-only Selene config does not select the Neovim standard library'
 [[ $(<.gitignore) == '.worktrees/' ]] || fail '.gitignore must contain only .worktrees/'
 manifest_hash=$(sha256sum .github/repository-settings-endpoints.txt 2>/dev/null | awk '{print $1}' || shasum -a 256 .github/repository-settings-endpoints.txt | awk '{print $1}')
-[[ $manifest_hash == 33b811658ba29f30dcebc77f1a10b4d37bac199c358831e1fa89af2bd8f18ac4 ]] || fail 'repository settings endpoint contract drifted'
+[[ $manifest_hash == 1014be04ef3f99d20570369cdc0831d4f75571882d2d4797b7d817cd43ff21c7 ]] || fail 'repository settings endpoint contract drifted'
 
 workflow=.github/workflows/test.yml
 grep -Fx 'name: Tests' "$workflow" >/dev/null || fail 'test workflow name drifted'
 grep -Fx "    - cron: \"$expected_cron\"" "$workflow" >/dev/null || fail 'nightly schedule drifted'
 grep -Fx '      setup: none' "$workflow" >/dev/null || fail 'capability CI must use setup: none'
 grep -Fx '      matrix-set: full' "$workflow" >/dev/null || fail 'capability CI must use the full matrix'
-grep -Fx '      profiles: base,jq,python' "$workflow" >/dev/null || fail 'bootstrap prerequisite profile drifted'
+grep -Fx "      profiles: $expected_profiles" "$workflow" >/dev/null || fail 'capability prerequisite profile drifted'
+grep -Fx '      test-command: test/run' "$workflow" >/dev/null || fail 'full suite runner is not wired'
+grep -Fx '      termux-command: test/run --termux' "$workflow" >/dev/null || fail 'Termux smoke command is not explicit'
 grep -Fx '    name: cgraf78/actions sync' "$workflow" >/dev/null || fail 'actions-sync job is missing'
 grep -Fx '          persist-credentials: false' "$workflow" >/dev/null || fail 'checkout credentials must not persist'
 if grep -F 'setup: dotfiles' "$workflow" >/dev/null; then fail 'overlay CI must not bootstrap the base dotfiles repository'; fi
@@ -125,9 +159,93 @@ grep -Fx '        run: test/workflow-test --remote' "$workflow" >/dev/null || fa
 grep -F 'wait_github_state 120 3' test/workflow-test >/dev/null || fail 'remote checks must use bounded polling'
 grep -F "infra-retry@$actions_sha" .github/workflows/retry-infrastructure.yml >/dev/null || fail 'retry action ref is missing'
 grep -F 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' "$workflow" >/dev/null || fail 'checkout pin drifted'
+grep -F 'android-dev-ci-smoke' test/run >/dev/null || fail 'Termux dev smoke test is not wired into the runner'
+grep -F 'for dependency in difftastic direnv lazygit mise yq watchexec; do' \
+  home/.local/lib/dotfiles/tests/android-dev-ci-smoke >/dev/null ||
+  fail 'Termux smoke lacks substantive watchexec policy coverage'
+if grep -E '^required_commands=.*(^|[[:space:]])cmp([[:space:]]|$)' test/run >/dev/null; then
+  fail 'controlled runtime PATH must not require cmp after bootstrap validation'
+fi
 
-expected_shell_files=(test/run test/workflow-test test/lib/capability-fixture.sh test/lib/repository-settings.sh test/lib/wait-github-state.sh)
+expected_provider_lock=$'version=1\ncheckrun=06a5e4cdf31365c4e120fab179c8214753921155\nsley=f4cc2e418d47e918d1b6a1b5ca1bc05855f46279\ngit_tools=f47683ebca2cbbd3dac750f3107bb60a9ca6e65f\nagentguard=05b8affcbdb55e6cecb5ad412ddf34ddac0ad403'
+[[ $(<.github/provider-test.lock) == "$expected_provider_lock" ]] ||
+  fail 'provider compatibility lock is not canonical'
+grep -Fx '  provider-compatibility:' "$workflow" >/dev/null || fail 'provider compatibility job is missing'
+grep -Fx '        run: test/run --provider-compatibility' "$workflow" >/dev/null ||
+  fail 'provider compatibility runner is not wired'
+grep -F 'watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz' \
+  "$workflow" >/dev/null || fail 'Watchexec compatibility artifact is not version-pinned'
+grep -F '2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1' \
+  "$workflow" >/dev/null || fail 'Watchexec compatibility checksum drifted'
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+watchexec_verify_line=$(grep -nF '          xz --test "$archive"' "$workflow" | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+watchexec_extract_line=$(grep -nF '          tar -xJf "$archive"' "$workflow" | cut -d: -f1)
+[[ -n $watchexec_verify_line && -n $watchexec_extract_line &&
+  $watchexec_verify_line -lt $watchexec_extract_line ]] ||
+  fail 'Watchexec archive integrity is not checked before extraction'
+grep -F 'mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64' "$workflow" >/dev/null ||
+  fail 'yq compatibility runtime is not version-pinned'
+grep -F 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' \
+  "$workflow" >/dev/null || fail 'yq compatibility checksum drifted'
+grep -F 'provider compatibility did not execute the real-yq merge block' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce real-yq merge coverage'
+grep -F 'provider compatibility did not execute the real-Node projection block' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce real-Node projection coverage'
+grep -F 'provider compatibility did not execute the live retirement-history guard' \
+  test/run >/dev/null || fail 'provider compatibility does not enforce live history coverage'
+# shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
+grep -F 'CAPABILITY_TEST_NODE: ${{ runner.temp }}/node-provider' "$workflow" >/dev/null ||
+  fail 'provider compatibility does not receive an explicit Node runtime'
+primary_checkout=$'      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          fetch-depth: 0\n          persist-credentials: false'
+grep -F "$primary_checkout" "$workflow" >/dev/null ||
+  fail 'provider compatibility primary checkout does not fetch development history'
+grep -F 'neovim/releases/download/v0.12.2/nvim-linux-x86_64.tar.gz' "$workflow" >/dev/null ||
+  fail 'provider compatibility Neovim is not version-pinned'
+grep -F 'fe333ad1dddfeb4b15169859287369207443477288737d4b94c07df7647ae21e' \
+  "$workflow" >/dev/null || fail 'provider compatibility Neovim checksum drifted'
+grep -F '31cf85945cb600d96cdf69f88bc68bec814acbff50863c5546adef3a1bcef260' \
+  "$workflow" >/dev/null || fail 'provider compatibility Neovim archive checksum drifted'
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+nvim_archive_verify_line=$(grep -nF '            "$archive" | sha256sum --check --strict' \
+  "$workflow" | head -1 | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
+nvim_extract_line=$(grep -nF '          tar -xzf "$archive"' "$workflow" | cut -d: -f1)
+[[ -n $nvim_archive_verify_line && -n $nvim_extract_line &&
+  $nvim_archive_verify_line -lt $nvim_extract_line ]] ||
+  fail 'provider compatibility Neovim archive is not verified before extraction'
+# shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
+grep -F 'CAPABILITY_TEST_NVIM: ${{ runner.temp }}/neovim-0.12.2/bin/nvim' \
+  "$workflow" >/dev/null || fail 'provider compatibility does not receive explicit Neovim'
+grep -F '    nvim-dev' test/run >/dev/null ||
+  fail 'provider compatibility does not execute nvim-dev coverage'
+while IFS='=' read -r provider sha; do
+  case $provider in version) continue ;; esac
+  repository=${provider//_/-}
+  grep -F "          repository: cgraf78/$repository" "$workflow" >/dev/null ||
+    fail "provider checkout is missing: $repository"
+  grep -F "          ref: $sha" "$workflow" >/dev/null ||
+    fail "provider checkout pin drifted: $repository"
+done <.github/provider-test.lock
+
+declare -a expected_shell_files=()
 declare -a actual_shell_files=()
+while IFS= read -r -d '' path; do
+  case $path in
+    dot/*)
+      expected_shell_files+=("$path")
+      ;;
+    *.sh | *.bash | *.bats | *.dash | *.ksh)
+      expected_shell_files+=("$path")
+      ;;
+    *)
+      IFS= read -r first_line <"$path" || true
+      case $first_line in
+        '#!'*bash* | '#!'*/sh) expected_shell_files+=("$path") ;;
+      esac
+      ;;
+  esac
+done < <(find dot home test -type f -print0)
 while IFS=$'\t' read -r type path extra; do
   case $type in '' | \#*) continue ;; esac
   [[ $type == program && -n $path && -z ${extra:-} ]] || fail 'invalid typed ShellCheck inventory record'
@@ -143,6 +261,10 @@ test/lib/repository-settings.sh --self-test
 test/lib/wait-github-state.sh --self-test
 test/lib/capability-fixture.sh --self-test
 test/run --inventory-self-test
+grep -F 'gitleaks dir . --config home/.gitleaks.toml' README.md >/dev/null ||
+  fail 'documented working-tree secret scan must use the overlay config'
+grep -F 'gitleaks git . --config home/.gitleaks.toml' README.md >/dev/null ||
+  fail 'documented history secret scan must use the overlay config'
 
 descriptor_path=".config/dot/overlays.d/$descriptor"
 case $descriptor_path in
@@ -151,7 +273,7 @@ case $descriptor_path in
 esac
 
 suite_count=$(awk 'NF && $1 !~ /^#/ { count++ } END { print count+0 }' .github/dot-test-suites.txt)
-case ${DOTFILES_CAPABILITY_PHASE:-bootstrap} in
+case ${DOTFILES_CAPABILITY_PHASE:-final} in
   bootstrap) ;;
   final) ((suite_count > 0)) || fail 'final mode requires a non-empty suite inventory' ;;
   *) fail 'DOTFILES_CAPABILITY_PHASE must be bootstrap or final' ;;

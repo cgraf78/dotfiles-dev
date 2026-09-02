@@ -4,6 +4,70 @@ set -euo pipefail
 repo_root=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
 cd "$repo_root"
 
+mode=${1:-}
+case $mode in
+  '' | --inventory-self-test | --provider-compatibility | --termux) ;;
+  *)
+    echo 'usage: test/run [--provider-compatibility|--termux]' >&2
+    exit 2
+    ;;
+esac
+
+provider_lock_value() {
+  local key=$1
+  sed -n "s/^$key=//p" .github/provider-test.lock
+}
+
+validate_provider_checkout() {
+  local key=$1 root=$2 expected actual
+  expected=$(provider_lock_value "$key")
+  [[ $expected =~ ^[0-9a-f]{40}$ ]] || {
+    echo "invalid provider lock for $key" >&2
+    return 1
+  }
+  [[ $root == /* && -d $root ]] || {
+    echo "DOT_TEST_${key^^}_ROOT must name an absolute checkout" >&2
+    return 1
+  }
+  actual=$(git -C "$root" rev-parse HEAD 2>/dev/null) || return 1
+  [[ $actual == "$expected" ]] || {
+    echo "provider checkout mismatch for $key: expected $expected, got $actual" >&2
+    return 1
+  }
+}
+
+nvim_version_supported() {
+  local version=${1:-} major minor patch
+  [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]] || return 1
+  major=$((10#${BASH_REMATCH[1]}))
+  minor=$((10#${BASH_REMATCH[2]}))
+  patch=$((10#${BASH_REMATCH[3]}))
+  ((major > 0 || minor > 11 || minor == 11 && patch >= 2))
+}
+
+if [[ $mode == --provider-compatibility ]]; then
+  validate_provider_checkout checkrun "${DOT_TEST_CHECKRUN_ROOT:-}"
+  validate_provider_checkout sley "${DOT_TEST_SLEY_ROOT:-}"
+  validate_provider_checkout git_tools "${DOT_TEST_GIT_TOOLS_ROOT:-}"
+  validate_provider_checkout agentguard "${DOT_TEST_AGENTGUARD_ROOT:-}"
+  [[ ${DOT_TEST_WATCHEXEC_BIN:-} == /* && -x ${DOT_TEST_WATCHEXEC_BIN:-} ]] || {
+    echo 'DOT_TEST_WATCHEXEC_BIN must name an absolute executable' >&2
+    exit 1
+  }
+  [[ ${CAPABILITY_TEST_YQ:-} == /* && -x ${CAPABILITY_TEST_YQ:-} ]] || {
+    echo 'provider compatibility requires an explicit yq executable' >&2
+    exit 1
+  }
+  [[ ${CAPABILITY_TEST_NODE:-} == /* && -x ${CAPABILITY_TEST_NODE:-} ]] || {
+    echo 'provider compatibility requires an explicit Node executable' >&2
+    exit 1
+  }
+  [[ ${CAPABILITY_TEST_NVIM:-} == /* && -x ${CAPABILITY_TEST_NVIM:-} ]] || {
+    echo 'provider compatibility requires an explicit Neovim executable' >&2
+    exit 1
+  }
+fi
+
 validate_suite_inventory() {
   local root=$1 inventory=$2 source_root=$3 entry suite relative_suite suite_name
   while IFS= read -r entry || [[ -n $entry ]]; do
@@ -46,6 +110,14 @@ inventory_self_test() {
   rm "$root/unlisted-test"
   output=$(validate_suite_inventory "$root" "$inventory" "$tmp/repo")
   [[ $output == declared ]]
+  nvim_version_supported 0.11.2
+  nvim_version_supported 0.11.10
+  nvim_version_supported 0.12.0
+  nvim_version_supported 0.20.0
+  nvim_version_supported 1.0.0
+  nvim_version_supported 10.0.0
+  if nvim_version_supported 0.11.1; then return 1; fi
+  if nvim_version_supported unknown; then return 1; fi
 }
 
 if [[ ${1:-} == --inventory-self-test ]]; then
@@ -81,6 +153,20 @@ git -C "$dot_checkout" checkout --quiet --detach FETCH_HEAD
 [[ $(git -C "$dot_checkout" rev-parse HEAD) == "$dot_sha" ]]
 ln -s "$dot_checkout/bin/dot" "$fixture_home/.local/bin/dot"
 
+if [[ $mode == --termux ]]; then
+  export HOME=$fixture_home
+  export XDG_CONFIG_HOME=$fixture_home/.config
+  export XDG_DATA_HOME=$tmp/xdg-data
+  export XDG_STATE_HOME=$tmp/xdg-state
+  export XDG_CACHE_HOME=$tmp/xdg-cache
+  export XDG_RUNTIME_DIR=$tmp/xdg-runtime
+  export PATH=$fixture_home/.local/bin:$PATH
+  mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
+  dot update >/dev/null
+  "$HOME/.local/lib/dotfiles/tests/android-dev-ci-smoke"
+  exit 0
+fi
+
 # Keep user-local host tools out of capability tests. Resolve only commands
 # supplied by audited system/prerequisite roots into a private fixture bin.
 controlled_bin=$tmp/bin
@@ -88,10 +174,11 @@ mkdir "$controlled_bin"
 system_roots=()
 [[ -z ${PREFIX:-} ]] || system_roots+=("$PREFIX/bin")
 system_roots+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin)
-required_commands=(awk bash basename cat chmod cmp cut date dirname env find git grep head id jq ln mkdir mkfifo mktemp mv od ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee tr uname wc xargs)
+required_commands=(awk bash basename cat chmod cp cut date dirname env find git grep head id jq ln lua mkdir mkfifo mktemp mv od paste printenv ps pwd python3 readlink rm rmdir sed sh sleep sort stat tail tee touch tr uname wc whoami xargs zsh)
 for command_name in "${required_commands[@]}"; do
   command_path=
   for command_root in "${system_roots[@]}"; do
+    [[ -z $command_path ]] || break
     if [[ -x $command_root/$command_name && ! -d $command_root/$command_name ]]; then
       command_path=$command_root/$command_name
       break
@@ -103,6 +190,61 @@ for command_name in "${required_commands[@]}"; do
   }
   ln -s "$command_path" "$controlled_bin/$command_name"
 done
+node_path=${CAPABILITY_TEST_NODE:-}
+if [[ -z $node_path ]]; then
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/node && ! -d $command_root/node ]]; then
+      node_path=$command_root/node
+      break
+    fi
+  done
+fi
+if [[ -n $node_path ]]; then
+  [[ $node_path == /* && -x $node_path && ! -d $node_path ]] || {
+    echo 'CAPABILITY_TEST_NODE must name an absolute executable' >&2
+    exit 1
+  }
+  ln -s "$node_path" "$controlled_bin/node"
+fi
+yq_path=${CAPABILITY_TEST_YQ:-}
+if [[ -z $yq_path ]]; then
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/yq && ! -d $command_root/yq ]]; then
+      yq_path=$command_root/yq
+      break
+    fi
+  done
+fi
+if [[ -n $yq_path ]]; then
+  [[ $yq_path == /* && -x $yq_path && ! -d $yq_path ]] || {
+    echo 'CAPABILITY_TEST_YQ must name an absolute executable' >&2
+    exit 1
+  }
+  ln -s "$yq_path" "$controlled_bin/yq"
+fi
+if [[ $mode == --provider-compatibility ]]; then
+  ln -s "$DOT_TEST_CHECKRUN_ROOT/bin/checkrun" "$controlled_bin/checkrun"
+  ln -s "$DOT_TEST_SLEY_ROOT/bin/sley" "$controlled_bin/sley"
+  ln -s "$DOT_TEST_AGENTGUARD_ROOT/bin/agentguard-classify-command" \
+    "$controlled_bin/agentguard-classify-command"
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/cmp && ! -d $command_root/cmp ]]; then
+      ln -s "$command_root/cmp" "$controlled_bin/cmp"
+      break
+    fi
+  done
+  [[ -x $controlled_bin/cmp ]] || {
+    echo 'missing required provider compatibility command: cmp' >&2
+    exit 1
+  }
+  cat >"$controlled_bin/gitleaks" <<'EOF'
+#!/bin/sh
+# Sley owns secret-scanner orchestration. The compatibility lane keeps that
+# provider path real while making the external scanner result deterministic.
+exit 0
+EOF
+  chmod +x "$controlled_bin/gitleaks"
+fi
 cat >"$controlled_bin/hostname" <<'EOF'
 #!/bin/sh
 printf 'capability-ci.invalid\n'
@@ -129,12 +271,105 @@ mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 mkdir -p "$HOME/.local/lib/dotfiles"
 chmod 700 "$HOME/.local/lib/dotfiles"
 
+# The dev overlay inherits the base doctor compatibility adapter. Build a
+# regular-file extension root so Dot's public trust boundary can validate and
+# load every dev-owned wrapper without authorizing sync=none payload symlinks.
+doctor_fixture_home=$tmp/doctor-extension-home
+mkdir -p "$doctor_fixture_home/.local/lib/dotfiles"
+chmod 700 "$doctor_fixture_home/.local/lib/dotfiles"
+cp -R "$repo_root/home/.local/lib/dotfiles/doctor.d" \
+  "$doctor_fixture_home/.local/lib/dotfiles/doctor.d"
+cat >"$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh" <<'EOF'
+# shellcheck shell=bash
+_dr_section() { dot_doctor_section "$@"; }
+_dr_ok() { dot_doctor_ok "$@"; }
+_dr_warn() { dot_doctor_warn "$@"; }
+_dr_fail() { dot_doctor_fail "$@"; }
+_dr_skip() { dot_doctor_skip "$@"; }
+_dr_tilde() { dot_doctor_display_path "$@"; }
+_dr_physical_path() {
+  local path=$1 directory base
+  while [[ $path != / && $path == */ ]]; do path=${path%/}; done
+  case $path in
+    /) directory=/; base=/ ;;
+    */*)
+      directory=${path%/*}; base=${path##*/}
+      [[ -n $directory ]] || directory=/
+      ;;
+    *) directory=.; base=$path ;;
+  esac
+  [[ -d $directory ]] || return 1
+  directory=$(cd "$directory" && pwd -P) || return 1
+  printf '%s/%s\n' "$directory" "$base"
+}
+_dr_symlink_target_path() {
+  local link=$1 target link_directory
+  target=$(readlink "$link") || return 1
+  case $target in
+    /*) _dr_physical_path "$target" ;;
+    *)
+      case $link in
+        */*)
+          link_directory=${link%/*}
+          [[ -n $link_directory ]] || link_directory=/
+          ;;
+        *) link_directory=. ;;
+      esac
+      _dr_physical_path "$link_directory/$target"
+      ;;
+  esac
+}
+_dr_symlink_points_to() {
+  local link=$1 expected=$2 actual expected_physical
+  [[ -e $expected ]] || return 1
+  actual=$(_dr_symlink_target_path "$link") || return 1
+  expected_physical=$(_dr_physical_path "$expected") || return 1
+  [[ $actual == "$expected_physical" ]]
+}
+_dot_shdeps_conf_dir() { printf '%s\n' "$HOME/.config/shdeps"; }
+dot_agentguard_opencode_marker() { printf '%s\n' '// agentguard-managed:opencode-plugin'; }
+DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
+GIT="git --git-dir=$DOTFILES --work-tree=$HOME"
+_dr_is_dotfiles_checkout() { return 1; }
+EOF
+chmod 600 "$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh"
+export DOT_TEST_DOCTOR_EXTENSION_HOME=$doctor_fixture_home
+
 if git -C "$HOME" rev-parse --show-toplevel >/dev/null 2>&1; then
   echo 'capability fixture unexpectedly contains a base Git repository' >&2
   exit 1
 fi
 dot --version >/dev/null
 dot update >/dev/null
+# Keep Neovim out of PATH during convergence so the editor merge hook cannot
+# perform a real plugin update. The focused suites receive the audited binary
+# only after the composed payload is installed.
+nvim_path=${CAPABILITY_TEST_NVIM:-}
+if [[ -n $nvim_path ]]; then
+  [[ $nvim_path == /* && -x $nvim_path && ! -d $nvim_path ]] || {
+    echo 'CAPABILITY_TEST_NVIM must name an absolute executable' >&2
+    exit 1
+  }
+else
+  for command_root in "${system_roots[@]}"; do
+    if [[ -x $command_root/nvim && ! -d $command_root/nvim ]]; then
+      nvim_path=$command_root/nvim
+      break
+    fi
+  done
+fi
+[[ -n $nvim_path ]] || {
+  echo 'missing required fixture command: nvim' >&2
+  exit 1
+}
+nvim_version=$($nvim_path --version 2>/dev/null | sed -n '1s/^NVIM v//p')
+nvim_supported=false
+if nvim_version_supported "$nvim_version"; then nvim_supported=true; fi
+if [[ $mode == --provider-compatibility && $nvim_supported != true ]]; then
+  echo "provider compatibility requires Neovim 0.11.2 or newer, got ${nvim_version:-unknown}" >&2
+  exit 1
+fi
+ln -s "$nvim_path" "$controlled_bin/nvim"
 find "$repo_root/home" -type f -print | LC_ALL=C sort >"$tmp/overlay-payloads"
 linked_source=
 IFS= read -r linked_source <"$tmp/overlay-payloads" || true
@@ -147,12 +382,50 @@ linked_relative=${linked_source#"$repo_root/home"/}
   echo 'capability descriptor was not converged through standalone Dot' >&2
   exit 1
 }
+# The single-quoted script intentionally expands $1 in the child shell.
+# shellcheck disable=SC2016
+installed_dev_root=$(
+  env -u DOT_TEST_DEV_REPO_ROOT -u DOT_PROFILE_FIXTURE \
+    DOT_TEST_TESTS_DIR="$HOME/.local/lib/dotfiles/tests" \
+    bash -c '. "$1"; _dev_repo_root' _ \
+    "$HOME/.local/lib/dotfiles/tests/dev/helpers.sh"
+)
+[[ $installed_dev_root == "$repo_root" ]] || {
+  echo "installed dev helper resolved the wrong owner root: $installed_dev_root" >&2
+  echo "installed helper target: $(readlink "$HOME/.local/lib/dotfiles/tests/dev/helpers.sh")" >&2
+  exit 1
+}
 
 suite_root=$repo_root/home/.local/lib/dotfiles/tests
 validate_suite_inventory "$suite_root" .github/dot-test-suites.txt "$repo_root" >"$tmp/suites"
 mapfile -t suites <"$tmp/suites"
 
-if [[ ${DOTFILES_CAPABILITY_PHASE:-bootstrap} == final && ${#suites[@]} -eq 0 ]]; then
+if [[ $mode == --provider-compatibility ]]; then
+  suites=(
+    dev-merges
+    dev-shdeps-hooks
+    git-shell-workflows
+    nvim-dev
+    validate-commit-msg
+    vscode-sley
+    workflow-consistency
+  )
+  DOT_TEST_YQ_MERGE_BLOCK_MARKER=$tmp/yq-merge-block.executed
+  DOT_TEST_NODE_PROJECTION_MARKER=$tmp/node-projection.executed
+  DOT_TEST_VSCODE_HISTORY_MARKER=$tmp/vscode-history.executed
+  export DOT_TEST_YQ_MERGE_BLOCK_MARKER DOT_TEST_NODE_PROJECTION_MARKER
+  export DOT_TEST_VSCODE_HISTORY_MARKER
+elif [[ $nvim_supported != true ]]; then
+  printf 'SKIP: nvim-dev suite requires Neovim 0.11.2 or newer (found %s)\n' \
+    "${nvim_version:-unknown}"
+  filtered_suites=()
+  for suite in "${suites[@]}"; do
+    [[ $suite == nvim-dev ]] || filtered_suites+=("$suite")
+  done
+  suites=("${filtered_suites[@]}")
+fi
+
+if [[ ${DOTFILES_CAPABILITY_PHASE:-final} == final && ${#suites[@]} -eq 0 ]]; then
   echo 'final capability repository requires at least one focused suite' >&2
   exit 1
 fi
@@ -160,20 +433,49 @@ if ((${#suites[@]} > 0)); then
   DOT_TEST_TESTS_DIR=$suite_root DOT_TEST_INCLUDE_PROVIDER=0 \
     dot test -s "${suites[@]}"
 fi
+if [[ $mode == --provider-compatibility ]]; then
+  [[ -f $DOT_TEST_YQ_MERGE_BLOCK_MARKER &&
+    $(<"$DOT_TEST_YQ_MERGE_BLOCK_MARKER") == executed ]] || {
+    echo 'provider compatibility did not execute the real-yq merge block' >&2
+    exit 1
+  }
+  [[ -f $DOT_TEST_NODE_PROJECTION_MARKER &&
+    $(<"$DOT_TEST_NODE_PROJECTION_MARKER") == executed ]] || {
+    echo 'provider compatibility did not execute the real-Node projection block' >&2
+    exit 1
+  }
+  [[ -f $DOT_TEST_VSCODE_HISTORY_MARKER &&
+    $(<"$DOT_TEST_VSCODE_HISTORY_MARKER") == executed ]] || {
+    echo 'provider compatibility did not execute the live retirement-history guard' >&2
+    exit 1
+  }
+fi
+
+case ${PREFIX:-} in
+  /data/data/com.termux/*)
+    "$HOME/.local/lib/dotfiles/tests/android-dev-ci-smoke"
+    ;;
+esac
 
 # Prove a listed suite is linked from a sync=none overlay and executed by Dot,
 # independent of the bootstrap repository's intentionally empty inventory.
 synthetic_overlay=$tmp/synthetic-overlay
 synthetic_home=$tmp/synthetic-home
 synthetic_suite=$synthetic_overlay/home/.local/lib/dotfiles/tests/synthetic-test
+fixture_umask=$(umask)
+umask 000
 mkdir -p "${synthetic_suite%/*}" "$synthetic_home/.local/bin" "$synthetic_home/.local/lib/dotfiles"
+# Shared CI deliberately exercises permissive umasks on some platforms.
+# Dot must still see the generated executable suite as owner-only.
+chmod 700 "${synthetic_suite%/*}"
 chmod 700 "$synthetic_home/.local/lib/dotfiles"
 cat >"$synthetic_suite" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 "${DOT_TEST_REPORTER:?}" complete 1 0
 EOF
-chmod +x "$synthetic_suite"
+chmod 700 "$synthetic_suite"
+umask "$fixture_umask"
 capability_fixture_create "$synthetic_home" "$synthetic_overlay"
 ln -s "$dot_checkout/bin/dot" "$synthetic_home/.local/bin/dot"
 export HOME=$synthetic_home

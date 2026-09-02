@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/launchers.sh"
+dot_dev_launchers_test
+_test_summary

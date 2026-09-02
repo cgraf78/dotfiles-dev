@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== Development Lua configuration ==='
+for path in \
+  "$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua" \
+  "$HOME/.config/nvim/lua/dotfiles/final_policy/mason.lua" \
+  "$HOME/.config/nvim/lua/plugins/coding.lua" \
+  "$HOME/.config/nvim/lua/plugins/formatting.lua" \
+  "$HOME/.config/nvim/lua/plugins/git-dev.lua" \
+  "$HOME/.config/nvim/lua/plugins/linting.lua"; do
+  if [[ -f $path ]]; then _pass "Lua source exists: ${path#"$HOME/"}"; else _fail "Lua source missing: ${path#"$HOME/"}"; fi
+done
+dev_extras=$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua
+_assert_contains 'Dev extras include DAP' 'lazyvim.plugins.extras.dap.core' \
+  "$(<"$dev_extras")"
+_assert_contains 'Dev extras include LSP tooling' 'lazyvim.plugins.extras.lsp.none-ls' \
+  "$(<"$dev_extras")"
+_test_summary

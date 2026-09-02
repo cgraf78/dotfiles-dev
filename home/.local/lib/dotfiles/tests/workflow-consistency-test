@@ -1,0 +1,557 @@
+#!/usr/bin/env bash
+# workflow-consistency-test - exact dev-owned editor/workflow projections.
+set -euo pipefail
+export NO_COLOR=1
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+owner_root=$(_dev_repo_root)
+root=$owner_root/home
+metadata=$root/.config/nvim/checkrun-editor-metadata.json
+associations=$root/.config/checkrun/associations.json
+vscode_settings=$root/.config/dot/merge-hooks.d/vscode/settings.d/10-settings.json
+vscode_extensions=$root/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv
+language_policy=$root/.config/nvim/lua/config/language-policy.lua
+checkrun_adapter=$root/.config/nvim/lua/config/checkrun-nvim.lua
+formatting_plugin=$root/.config/nvim/lua/plugins/formatting.lua
+linting_plugin=$root/.config/nvim/lua/plugins/linting.lua
+git_config=$root/.config/git/config
+deps=$root/.config/shdeps/30-dev.conf
+
+_assert_no_low_level_dispatch() {
+  local registry=$1 violations=$2 classifier=${3:-}
+
+  [[ -x $classifier ]] || {
+    _fail 'workflow surfaces: immutable AgentGuard classifier is available'
+    return
+  }
+
+  jq -r '
+    [
+      .selectors[]? | ((.format // []) + (.lint // []))[]?.tool,
+      .crossCutting.lint[]?.tool,
+      "mypy", "pyre", "prettier"
+    ]
+    | flatten
+    | map(select(type == "string" and test("^[A-Za-z0-9_.+-]+$")))
+    | map(select(. as $tool | ["cargo", "crontab", "php", "tmux", "zsh"] | index($tool) | not))
+    | unique
+    | .[]
+  ' "$registry" >"${violations%/*}/low-level-tools.txt"
+
+  git -C "$owner_root" ls-files -- \
+    home/.config/dot/merge-hooks.d \
+    home/.config/nvim/lua/config/checkrun-nvim.lua \
+    home/.config/nvim/lua/config/language-policy.lua \
+    home/.config/nvim/lua/config/schema-policy.lua \
+    home/.config/nvim/lua/config/sley-nvim.lua \
+    home/.config/nvim/lua/plugins/formatting.lua \
+    home/.config/nvim/lua/plugins/linting.lua \
+    home/.config/nvim/lua/plugins/sley.lua \
+    home/.local/lib/dotfiles/git-hooks \
+    >"${violations%/*}/workflow-surface-files.txt"
+
+  DOTFILES_ROOT="$owner_root" AGENTGUARD_CLASSIFIER="$classifier" \
+    python3 - "${violations%/*}/low-level-tools.txt" \
+    "${violations%/*}/workflow-surface-files.txt" >"$violations" <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+
+root = os.environ["DOTFILES_ROOT"]
+classifier = os.environ["AGENTGUARD_CLASSIFIER"]
+tools_path, files_path = sys.argv[1], sys.argv[2]
+with open(tools_path, encoding="utf-8") as handle:
+    tools = [line.strip() for line in handle if line.strip()]
+tool_names = set(tools)
+seam = r"""(?:["'\\])*"""
+loose = "|".join(
+    seam.join(re.escape(char) for char in tool)
+    for tool in sorted(tools, key=len, reverse=True)
+)
+token = re.compile(rf"(^|[^A-Za-z0-9_.+-])(?:{loose})(?:$|[^A-Za-z0-9_.+-])")
+js_exec = re.compile(r"\b(?:execFile|spawn|run)\(\s*['\"]")
+lua_exec = re.compile(r"\b(?:jobstart\(\s*\{|cmd\s*=\s*\{)\s*['\"]")
+json_command = re.compile(r'"(?:cmd|command)"\s*:\s*("(?:\\.|[^"\\])*")')
+
+def classify(commands):
+    unique = list(dict.fromkeys(command.rstrip("\n") for command in commands if "\n" not in command and token.search(command)))
+    if not unique:
+        return {}
+    result = subprocess.run(
+        [classifier, "--json-lines"],
+        input="".join(f"{command}\n" for command in unique),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return {
+        payload["input"]: {
+            item.get("basename", "")
+            for item in payload.get("commands", [])
+            if isinstance(item, dict)
+        }
+        for payload in map(json.loads, result.stdout.splitlines())
+    }
+
+parser_examples = [
+    "if ! prettier --check .; then",
+    "{ prettier --check .; }",
+    "env -u GIT_DIR prettier --check .",
+    "xargs -r -n 1 prettier --check",
+    'env -u GIT_DIR ru"ff" check .',
+    r"ru\ff check .",
+]
+parser_classified = classify(parser_examples + ["prettier --check ."])
+for example in parser_examples:
+    if not (parser_classified.get(example, set()) & tool_names):
+        print(f"<parser-self-test>: expected direct tool command in: {example}")
+json_example = json.loads('"prettier --check ."')
+if not (parser_classified.get(json_example, set()) & tool_names):
+    print("<parser-self-test>: expected direct tool command in JSON command key")
+
+def active(line, relpath):
+    stripped = line.lstrip()
+    if stripped.startswith("#") or stripped.startswith("--") or '"Bash(' in line:
+        return ""
+    return re.sub(r"//.*$", "", line) if relpath.endswith(".js") else line
+
+checks = []
+violations = set()
+with open(files_path, encoding="utf-8") as handle:
+    paths = [line.strip() for line in handle if line.strip()]
+for relpath in paths:
+    with open(os.path.join(root, relpath), encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, 1):
+            code = active(line, relpath)
+            if not code:
+                continue
+            if js_exec.search(code) or lua_exec.search(code):
+                if token.search(code):
+                    violations.add((relpath, line_no, line.rstrip()))
+            if token.search(code):
+                checks.append((relpath, line_no, line.rstrip(), code))
+            for match in json_command.finditer(code):
+                command = json.loads(match.group(1))
+                if token.search(command):
+                    checks.append((relpath, line_no, line.rstrip(), command))
+classified = classify([command for _, _, _, command in checks])
+for relpath, line_no, text, command in checks:
+    if classified.get(command.rstrip("\n"), set()) & tool_names:
+        violations.add((relpath, line_no, text))
+for record in sorted(violations):
+    print(f"{record[0]}:{record[1]}: {record[2]}")
+PY
+
+  if [[ -s $violations ]]; then
+    _fail 'workflow surfaces: low-level tools stay behind Checkrun/Sley'
+    sed 's/^/    /' "$violations" >&2
+  else
+    _pass 'workflow surfaces: low-level tools stay behind Checkrun/Sley'
+  fi
+}
+
+echo '=== Development workflow consistency ==='
+_assert_file_exists 'Checked Checkrun editor metadata is dev-owned' "$metadata"
+_assert_file_exists 'Checkrun schema association policy is dev-owned' "$associations"
+_assert_contains 'Git activates the dev-owned hook directory' '.local/lib/dotfiles/git-hooks' "$(<"$git_config")"
+_assert_contains 'Sley provider is installed by dev' 'cgraf78/sley' "$(<"$deps")"
+_assert_contains 'Checkrun provider is installed by dev' 'cgraf78/checkrun' "$(<"$deps")"
+_assert_contains 'VS Code activates the provider-owned Sley extension' 'share/sley/vscode' "$(<"$vscode_extensions")"
+_assert_contains 'Nvim resolves Checkrun through the dependency boundary' 'cgraf78/checkrun' "$(<"$checkrun_adapter")"
+_assert_contains 'Nvim derives formatter policy from Checkrun capabilities' 'sley_formatters_by_ft' "$(<"$language_policy")"
+_assert_contains 'Nvim derives linter policy from Checkrun capabilities' 'sley_linters_by_ft' "$(<"$language_policy")"
+_assert_contains 'Nvim formatter consumes the shared language policy' 'config.language-policy' "$(<"$formatting_plugin")"
+_assert_contains 'Nvim linter consumes the shared language policy' 'config.language-policy' "$(<"$linting_plugin")"
+_assert_contains 'VS Code keeps generated Checkrun settings out of sync' 'evenBetterToml.schema.associations' "$(<"$vscode_settings")"
+_assert_contains 'VS Code excludes dependency trees from Sley diagnostics' '**/node_modules/**' "$(<"$vscode_settings")"
+
+projection_output=$(
+  python3 - "$metadata" "$associations" "$vscode_settings" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+metadata = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+associations = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+settings = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+
+assert metadata["version"] == 1
+cap = metadata["capabilities"]
+assert cap["version"] == 2
+for phase in ("format", "lint"):
+    values = cap["filetypes"][phase]
+    assert values == sorted(set(values)), (phase, values)
+    assert {"bash", "lua", "python", "rust"}.issubset(values), (phase, values)
+
+vscode_ids = cap["editorLanguageIds"]["vscode"]
+assert vscode_ids["bash"] == ["shellscript"]
+assert vscode_ids["zsh"] == ["shellscript"]
+assert vscode_ids["starlark"] == ["starlark", "bzl"]
+assert vscode_ids["sshconfig"] == ["ssh_config"]
+
+custom = cap["filetypes"]["custom"]
+assert custom["filename"]["CMakeLists.txt"] == "cmake"
+assert custom["filename"]["Dockerfile"] == "dockerfile"
+assert custom["extension"]["tsx"] == "typescriptreact"
+assert custom["extension"]["hgrc"] == "ini"
+assert any(item == {"pattern": "Dockerfile.*", "filetype": "dockerfile"}
+           for item in custom["patterns"])
+
+items = associations["associations"]
+names = [item["name"] for item in items]
+assert len(names) == len(set(names))
+assert all(item.get("matches") for item in items)
+assert all(isinstance(item.get("enforce", True), bool) for item in items)
+required = {
+    "Checkrun schema association policy",
+    "Sley verify registry",
+    "GitHub CLI config layers",
+    "Claude Code settings layers",
+    "mise global config",
+}
+assert required.issubset(names), sorted(required - set(names))
+
+ignored = settings["settingsSync.ignoredSettings"]
+assert ignored == sorted(set(ignored))
+assert {
+    "evenBetterToml.schema.associations",
+    "json.schemas",
+    "yaml.schemas",
+}.issubset(ignored)
+print(f"format={len(cap['filetypes']['format'])} lint={len(cap['filetypes']['lint'])} associations={len(items)}")
+PY
+)
+_assert_exit 'Checkrun metadata and editor projections satisfy exact policy invariants' 0 "$?"
+_pass "Projection inventory: $projection_output"
+
+fixture=$owner_root/home/.local/lib/dotfiles/tests/fixtures/common-language-policy.json
+if jq -e '
+  .version == 1 and (.languages | type == "array" and length > 0) and
+  (([.languages[].id] | unique | length) == (.languages | length)) and
+  all(.languages[];
+    (.path | type == "string" and length > 0) and
+    (.filetype | type == "string" and length > 0) and
+    (.vscodeLanguages | type == "array" and length > 0) and
+    (.format | type == "boolean") and (.lint | type == "boolean"))
+' "$fixture" >/dev/null; then
+  _pass 'Common language policy fixture is valid and dev-owned'
+else
+  _fail 'Common language policy fixture is valid and dev-owned'
+fi
+
+work=$(_tmpdir)
+checkrun_command=
+checkrun_nvim_fixture=
+sley_extension=
+agentguard_classifier=
+if [[ -n ${DOT_TEST_CHECKRUN_ROOT:-} || -n ${DOT_TEST_SLEY_ROOT:-} ||
+  -n ${DOT_TEST_AGENTGUARD_ROOT:-} ]]; then
+  : "${DOT_TEST_CHECKRUN_ROOT:?provider compatibility requires Checkrun}"
+  : "${DOT_TEST_SLEY_ROOT:?provider compatibility requires Sley}"
+  : "${DOT_TEST_AGENTGUARD_ROOT:?provider compatibility requires AgentGuard}"
+  provider_scope=immutable
+  checkrun_command=$DOT_TEST_CHECKRUN_ROOT/bin/checkrun
+  checkrun_nvim_fixture=$DOT_TEST_CHECKRUN_ROOT/lib/checkrun/nvim.lua
+  sley_extension=$DOT_TEST_SLEY_ROOT/share/sley/vscode/sley-tools-0.0.1/extension.js
+  agentguard_classifier=$DOT_TEST_AGENTGUARD_ROOT/bin/agentguard-classify-command
+  for provider_asset in "$checkrun_command" "$checkrun_nvim_fixture" \
+    "$sley_extension" "$agentguard_classifier"; do
+    [[ -r $provider_asset ]] || {
+      echo "workflow-consistency-test: provider asset unavailable: $provider_asset" >&2
+      exit 1
+    }
+  done
+else
+  provider_scope=hermetic
+  provider_bin=$work/provider-bin
+  checkrun_nvim_fixture=$work/checkrun-nvim.lua
+  sley_extension=$work/sley-extension/extension.js
+  mkdir -p "$provider_bin" "${sley_extension%/*}"
+  cat >"$provider_bin/checkrun" <<'PY'
+#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import sys
+
+metadata = json.loads(pathlib.Path(os.environ["CHECKRUN_TEST_METADATA"]).read_text())
+fixture = json.loads(pathlib.Path(os.environ["CHECKRUN_TEST_FIXTURE"]).read_text())
+if sys.argv[1:3] == ["capabilities", "--json"]:
+    print(json.dumps(metadata["capabilities"]))
+elif sys.argv[1:3] == ["registry", "--json"]:
+    print(json.dumps({"selectors": [{"format": [{"tool": "sley"}], "lint": [{"tool": "sley"}]}]}))
+elif len(sys.argv) >= 5 and sys.argv[1:3] == ["plan", "--json"] and sys.argv[3] == "--phase":
+    phase = sys.argv[4]
+    by_name = {item["path"]: item for item in fixture["languages"]}
+    files = []
+    for raw in sys.argv[5:]:
+        path = pathlib.Path(raw)
+        item = next(value for name, value in by_name.items() if raw.endswith("/" + name))
+        tools = item.get("lintTools", ["sley"]) if phase == "lint" else ["sley"]
+        steps = [{"tool": tool} for tool in tools] if item[phase] else []
+        files.append({"path": str(path.resolve()), "filetype": item["filetype"], phase: {"steps": steps}})
+    print(json.dumps({"files": files}))
+else:
+    raise SystemExit(2)
+PY
+  cat >"$provider_bin/cmp" <<'PY'
+#!/usr/bin/env python3
+import pathlib
+import sys
+
+raise SystemExit(0 if pathlib.Path(sys.argv[-2]).read_bytes() == pathlib.Path(sys.argv[-1]).read_bytes() else 1)
+PY
+  cat >"$sley_extension" <<'NODE'
+function languageToFiletypes(languageMap) {
+  const result = {};
+  for (const [filetype, languages] of Object.entries(languageMap || {})) {
+    for (const language of languages) {
+      (result[language] ||= []).push(filetype);
+    }
+  }
+  return result;
+}
+function providerSelector(filetypes, languageMap, phase) {
+  const enabled = new Set(filetypes[phase] || []);
+  const result = [];
+  for (const filetype of enabled) {
+    const languages = languageMap[filetype] || [filetype];
+    for (const language of languages) result.push({ language, scheme: "file" });
+  }
+  return result;
+}
+function supports(document, filetypes, byLanguage, phase) {
+  const enabled = new Set(filetypes[phase] || []);
+  return enabled.has(document.languageId) ||
+    (byLanguage[document.languageId] || []).some(filetype => enabled.has(filetype));
+}
+module.exports = { _test: { languageToFiletypes, providerSelector, supports } };
+NODE
+  cat >"$checkrun_nvim_fixture" <<'LUA'
+local M = {}
+
+function M.editor_metadata(opts)
+  local lines = vim.fn.readfile(opts.path)
+  return vim.json.decode(table.concat(lines, "\n"))
+end
+
+function M.capabilities(opts)
+  return vim.deepcopy(opts.capabilities)
+end
+
+return M
+LUA
+  chmod +x "$provider_bin/checkrun" "$provider_bin/cmp"
+  PATH=$provider_bin:$PATH
+  export PATH
+  checkrun_command=$provider_bin/checkrun
+fi
+
+echo "=== $provider_scope provider projection consistency ==="
+export CHECKRUN_TEST_METADATA=$metadata
+export CHECKRUN_TEST_FIXTURE=$fixture
+cap=$work/capabilities.json
+registry=$work/registry.json
+settings=$work/settings.json
+nvim_policy=$work/nvim-policy.json
+repo=$work/repo
+mkdir -p "$repo"
+"$checkrun_command" capabilities --json >"$cap"
+"$checkrun_command" registry --json >"$registry"
+
+python3 - "$fixture" "$repo" <<'PY'
+import json
+import pathlib
+import sys
+
+fixture = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+root = pathlib.Path(sys.argv[2])
+for item in fixture["languages"]:
+    target = root / item["path"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(item.get("content", ""), encoding="utf-8")
+PY
+
+python3 - "$cap" "$registry" "$fixture" <<'PY'
+import json
+import pathlib
+import sys
+
+cap = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+registry = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+fixture = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+assert registry.get("selectors"), "empty Checkrun registry"
+for item in fixture["languages"]:
+    filetype = item["filetype"]
+    assert (filetype in cap["filetypes"]["format"]) == item["format"], item["id"]
+    assert (filetype in cap["filetypes"]["lint"]) == item["lint"], item["id"]
+    actual = cap.get("editorLanguageIds", {}).get("vscode", {}).get(filetype, [filetype])
+    assert actual == item["vscodeLanguages"], (item["id"], actual)
+PY
+_assert_exit 'Actual Checkrun capabilities and registry match the shared fixture' 0 "$?"
+
+# Load the production hook against the active composed HOME. The helper is
+# inherited from base when installed and supplied by the D3 owner harness
+# only for standalone unit execution.
+# shellcheck disable=SC1090
+if . "$HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"; then
+  _pass 'Installed workflow test loads the composed Dot merge API'
+else
+  _fail 'Installed workflow test loads the composed Dot merge API'
+  _test_summary
+fi
+# shellcheck disable=SC1090
+if . "$HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"; then
+  _pass 'Installed workflow test loads the composed VS Code hook'
+else
+  _fail 'Installed workflow test loads the composed VS Code hook'
+  _test_summary
+fi
+if _vscode_checkrun_settings "$settings" 1; then
+  _pass 'Installed workflow test projects Checkrun settings'
+else
+  _fail 'Installed workflow test projects Checkrun settings'
+  _test_summary
+fi
+
+while IFS=$'\t' read -r association_key association_value; do
+  [[ -n $association_key ]] || continue
+  if jq -e --arg key "$association_key" --arg value "$association_value" \
+    '.["files.associations"][$key] == $value' "$settings" >/dev/null; then
+    _pass "VS Code associates $association_key as $association_value"
+  else
+    _fail "VS Code associates $association_key as $association_value"
+  fi
+done < <(jq -r '.languages[] | select(.association) | [.association.key, .association.value] | @tsv' "$fixture")
+
+nvim_bin=${NVIM_TEST_BIN:-$(command -v nvim)}
+if [[ $provider_scope == immutable ]]; then
+  _assert_no_low_level_dispatch "$registry" "$work/low-level-dispatch-violations.txt" \
+    "$agentguard_classifier"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  if [[ -n ${DOT_TEST_NODE_PROJECTION_MARKER:-} ]]; then
+    printf 'executed\n' >"$DOT_TEST_NODE_PROJECTION_MARKER"
+  fi
+  SLEY_VSCODE_EXTENSION_PATH=${sley_extension%/extension.js} \
+    node - "$cap" "$settings" "$fixture" "$repo" <<'NODE'
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const Module = require("node:module");
+const path = require("node:path");
+const cap = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const settings = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const fixture = JSON.parse(fs.readFileSync(process.argv[4], "utf8"));
+const repo = process.argv[5];
+const originalLoad = Module._load;
+Module._load = function load(request, parent, isMain) {
+  if (request === "vscode") {
+    return {
+      Diagnostic: class {}, DiagnosticSeverity: {}, Position: class {}, Range: class {}, TextEdit: {},
+      commands: {}, languages: {}, window: {},
+      workspace: { getConfiguration: () => ({ get: () => undefined }), getWorkspaceFolder: () => undefined },
+    };
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
+try {
+  const extension = require(path.join(process.env.SLEY_VSCODE_EXTENSION_PATH, "extension.js"));
+  const languageMap = cap.editorLanguageIds?.vscode || {};
+  const byLanguage = extension._test.languageToFiletypes(languageMap);
+  const selected = new Set(extension._test.providerSelector(cap.filetypes, languageMap, "format").map(x => x.language).filter(Boolean));
+  const configured = Object.entries(settings)
+    .filter(([key, value]) => /^\[.+\]$/.test(key) && value?.["editor.defaultFormatter"] === "cgraf.sley-tools")
+    .map(([key]) => key.slice(1, -1));
+  assert.deepEqual([...selected].sort(), configured.sort());
+  for (const item of fixture.languages) {
+    const file = path.join(repo, item.path);
+    for (const languageId of item.vscodeLanguages) {
+      const doc = { isUntitled: false, languageId, uri: { fsPath: file, scheme: "file" }, getText: () => fs.readFileSync(file, "utf8") };
+      assert.equal(extension._test.supports(doc, cap.filetypes, byLanguage, "format"), item.format);
+      assert.equal(extension._test.supports(doc, cap.filetypes, byLanguage, "lint"), item.lint);
+    }
+  }
+} finally {
+  Module._load = originalLoad;
+}
+NODE
+  _assert_exit 'Provider Sley extension and generated VS Code settings match Checkrun' 0 "$?"
+else
+  printf '  SKIP: Provider Sley extension projection (Node unavailable)\n'
+fi
+
+nvim_command=("$nvim_bin")
+if [[ -n $checkrun_nvim_fixture ]]; then
+  nvim_command=(env DOT_TEST_CHECKRUN_NVIM_ADAPTER="$checkrun_nvim_fixture" "$nvim_bin")
+fi
+"${nvim_command[@]}" --headless --noplugin -u NONE -i NONE \
+  -c "lua if vim.env.DOT_TEST_CHECKRUN_NVIM_ADAPTER then package.preload['config.dot-runtime']=function() return {dep_file=function(dependency, asset) if dependency == 'cgraf78/checkrun' and asset == 'lib/checkrun/nvim.lua' then return vim.env.DOT_TEST_CHECKRUN_NVIM_ADAPTER end end} end end; package.path='$HOME/.config/nvim/lua/?.lua;' .. package.path; local p=require('config.language-policy'); vim.fn.writefile({vim.json.encode({formatters=p.sley_formatters_by_ft(),linters=p.sley_linters_by_ft()})}, '$nvim_policy')" \
+  -c 'qa!'
+python3 - "$cap" "$nvim_policy" <<'PY'
+import json
+import pathlib
+import sys
+
+cap = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+nvim = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert sorted(cap["filetypes"]["format"]) == sorted(nvim["formatters"])
+assert sorted(cap["filetypes"]["lint"]) == sorted(nvim["linters"])
+assert all(value == ["sley"] for value in nvim["formatters"].values())
+assert all(value == ["sley"] for value in nvim["linters"].values())
+PY
+_assert_exit 'Actual Nvim projections mirror Checkrun capabilities' 0 "$?"
+
+format_plan=$work/format-plan.json
+lint_plan=$work/lint-plan.json
+mapfile -t fixture_paths < <(jq -r --arg repo "$repo" '.languages[] | $repo + "/" + .path' "$fixture")
+"$checkrun_command" plan --json --phase format "${fixture_paths[@]}" >"$format_plan"
+"$checkrun_command" plan --json --phase lint "${fixture_paths[@]}" >"$lint_plan"
+python3 - "$format_plan" "$lint_plan" "$fixture" "$repo" <<'PY'
+import json
+import pathlib
+import sys
+
+format_plan = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+lint_plan = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+fixture = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+repo = pathlib.Path(sys.argv[4]).resolve()
+for item in fixture["languages"]:
+    expected_path = str(repo / item["path"])
+    for phase, plan in (("format", format_plan), ("lint", lint_plan)):
+        record = next(entry for entry in plan["files"] if entry["path"] == expected_path)
+        assert record["filetype"] == item["filetype"]
+        assert bool(record[phase].get("steps", [])) == item[phase]
+        tools = {step["tool"] for step in record[phase].get("steps", [])}
+        if phase == "lint":
+            assert set(item.get("lintTools", [])) <= tools
+PY
+_assert_exit 'Actual Checkrun plans match shared format and lint expectations' 0 "$?"
+
+if [[ $provider_scope == immutable ]]; then
+  codex_native=$DOT_TEST_AGENTGUARD_ROOT/share/agentguard/integrations/codex/hooks.toml
+  codex_trust=$root/.local/lib/dotfiles/merge-hooks.d/lib/codex/refresh-trust.py
+  codex_unmapped=$(
+    python3 - "$codex_native" "$codex_trust" <<'PY'
+import importlib.util
+import sys
+import tomllib
+
+native, trust = sys.argv[1], sys.argv[2]
+with open(native, "rb") as handle:
+    events = set(tomllib.load(handle).get("hooks", {}))
+spec = importlib.util.spec_from_file_location("codex_refresh_trust", trust)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(",".join(sorted(events - set(module.EVENT_LABELS))))
+PY
+  )
+  _assert_eq 'AgentGuard native Codex events all have trust labels' '' \
+    "$codex_unmapped"
+fi
+_pass "$provider_scope provider projection path completed"
+
+_test_summary

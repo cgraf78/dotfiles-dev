@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=dev/static.sh
+. "${BASH_SOURCE[0]%/*}/dev/static.sh"
+
+dot_dev_static_test

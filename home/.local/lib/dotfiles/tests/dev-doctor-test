@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# shellcheck source=dev/helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+# shellcheck source=dev/doctor.sh
+. "${BASH_SOURCE[0]%/*}/dev/doctor.sh"
+dot_dev_doctor_test
+_test_summary

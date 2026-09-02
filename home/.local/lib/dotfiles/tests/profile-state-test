@@ -1,0 +1,748 @@
+#!/usr/bin/env bash
+# Verify reversible semantic ownership for dev-generated configuration.
+
+set -euo pipefail
+
+# shellcheck source=helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+repo_root=$(_dev_repo_root)
+engine=$repo_root/home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.py
+library=$repo_root/home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
+fixture=$(_tmpdir)
+
+installed_library=$fixture/installed/home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
+mkdir -p "${installed_library%/*}"
+ln -s "$library" "$installed_library"
+installed_engine=$(bash --noprofile --norc -c \
+  '. "$1"; _dev_profile_state_engine' _ "$installed_library")
+_assert_eq 'profile state resolves its engine through an installed symlink' \
+  "$engine" "$installed_engine"
+
+printf 'replacement\n' >"$fixture/publish-source"
+printf 'original\n' >"$fixture/publish-destination"
+python3 "$engine" publish-in-place \
+  --source "$fixture/publish-source" \
+  --destination "$fixture/publish-destination"
+_assert_file_content 'profile state verified in-place publisher replaces all bytes' \
+  'replacement' "$fixture/publish-destination"
+
+cp "$fixture/publish-destination" "$fixture/equal-copy"
+if python3 "$engine" equal \
+  --left "$fixture/publish-destination" \
+  --right "$fixture/equal-copy"; then
+  _pass 'profile state recognizes equal files without external cmp'
+else
+  _fail 'profile state compares equal files without external cmp'
+fi
+printf 'different\n' >"$fixture/equal-copy"
+if python3 "$engine" equal \
+  --left "$fixture/publish-destination" \
+  --right "$fixture/equal-copy"; then
+  _fail 'profile state distinguishes unequal files without external cmp'
+else
+  _pass 'profile state compares file bytes without external cmp'
+fi
+
+reverse() {
+  local policy=$1 before=$2 applied=$3 current=$4 output=$5
+  python3 "$engine" reverse \
+    --policy "$policy" \
+    --before "$before" \
+    --applied "$applied" \
+    --current "$current" \
+    --output "$output"
+}
+
+capture() {
+  local policy=$1 before=$2 applied=$3 current=$4 output=$5
+  python3 "$engine" capture \
+    --policy "$policy" \
+    --before "$before" \
+    --applied "$applied" \
+    --current "$current" \
+    --output "$output"
+}
+
+printf '%s\n' '{"editor":{"fontSize":12},"user":true}' >"$fixture/before.json"
+printf '%s\n' '{"editor":{"fontSize":14},"user":true,"dev":1}' >"$fixture/applied.json"
+printf '%s\n' '{"editor":{"fontSize":14},"user":false,"later":"kept","dev":1}' >"$fixture/current.json"
+reverse object "$fixture/before.json" "$fixture/applied.json" \
+  "$fixture/current.json" "$fixture/output.json"
+_assert_eq 'profile state restores owned object values and preserves disjoint edits' \
+  '{"editor":{"fontSize":12},"later":"kept","user":false}' \
+  "$(jq -cS . "$fixture/output.json")"
+
+printf '%s\n' '{"editor":{"fontSize":99},"user":false}' >"$fixture/conflict.json"
+if reverse object "$fixture/before.json" "$fixture/applied.json" \
+  "$fixture/conflict.json" "$fixture/conflict-output.json" 2>/dev/null; then
+  _fail 'profile state rejects edits to an owned object value'
+else
+  _pass 'profile state rejects edits to an owned object value'
+fi
+_assert_file_missing 'profile state publishes no conflicted output' \
+  "$fixture/conflict-output.json"
+
+printf '%s\n' '{"permissions":{"allow":["Read"]}}' >"$fixture/permissions-before.json"
+printf '%s\n' '{"permissions":{"allow":["Bash","Read"]}}' >"$fixture/permissions-applied.json"
+printf '%s\n' '{"permissions":{"allow":["Bash","Edit","Read"]}}' >"$fixture/permissions-current.json"
+reverse claude "$fixture/permissions-before.json" \
+  "$fixture/permissions-applied.json" "$fixture/permissions-current.json" \
+  "$fixture/permissions-output.json"
+_assert_eq 'profile state removes managed permissions and preserves later entries' \
+  '["Edit","Read"]' \
+  "$(jq -cS '.permissions.allow' "$fixture/permissions-output.json")"
+
+printf '%s\n' '{"permissions":{"allow":["Read"]}}' \
+  >"$fixture/added-before.json"
+printf '%s\n' '{"permissions":{"allow":["Bash","Read"]}}' \
+  >"$fixture/added-applied.json"
+printf '%s\n' '{"permissions":{"allow":["Read"]}}' \
+  >"$fixture/added-current.json"
+reverse claude "$fixture/added-before.json" \
+  "$fixture/added-applied.json" "$fixture/added-current.json" \
+  "$fixture/added-output.json"
+_assert_eq 'profile state accepts a managed list entry already removed by the user' \
+  '["Read"]' \
+  "$(jq -cS '.permissions.allow' "$fixture/added-output.json")"
+
+printf '%s\n' '{"permissions":{"allow":["Bash","Read"]}}' \
+  >"$fixture/removed-before.json"
+printf '%s\n' '{"permissions":{"allow":["Read"]}}' \
+  >"$fixture/removed-applied.json"
+printf '%s\n' '{"permissions":{"allow":["Edit","Read"]}}' \
+  >"$fixture/removed-current.json"
+reverse claude "$fixture/removed-before.json" \
+  "$fixture/removed-applied.json" "$fixture/removed-current.json" \
+  "$fixture/removed-output.json"
+_assert_eq 'profile state restores a managed-removed list entry beside later edits' \
+  '["Bash","Edit","Read"]' \
+  "$(jq -cS '.permissions.allow | sort' "$fixture/removed-output.json")"
+
+cat >"$fixture/keybindings-before.json" <<'EOF'
+[{"key":"ctrl+tab","when":"terminalFocus","command":"user.command"}]
+EOF
+cat >"$fixture/keybindings-applied.json" <<'EOF'
+[{"key":"ctrl+tab","when":"terminalFocus","command":"workbench.action.terminal.sendSequence"}]
+EOF
+cat >"$fixture/keybindings-current.json" <<'EOF'
+[
+  {"key":"ctrl+tab","when":"terminalFocus","command":"workbench.action.terminal.sendSequence"},
+  {"key":"ctrl+k","when":"editorFocus","command":"user.other"}
+]
+EOF
+reverse vscode-keybindings "$fixture/keybindings-before.json" \
+  "$fixture/keybindings-applied.json" "$fixture/keybindings-current.json" \
+  "$fixture/keybindings-output.json"
+_assert_eq 'profile state restores displaced keybindings and preserves unrelated bindings' \
+  '[{"command":"user.command","key":"ctrl+tab","when":"terminalFocus"},{"command":"user.other","key":"ctrl+k","when":"editorFocus"}]' \
+  "$(jq -cS . "$fixture/keybindings-output.json")"
+
+cat >"$fixture/keybindings-user-edit.json" <<'EOF'
+[{"key":"ctrl+tab","when":"terminalFocus","command":"user.new"}]
+EOF
+capture vscode-keybindings "$fixture/keybindings-before.json" \
+  "$fixture/keybindings-applied.json" "$fixture/keybindings-user-edit.json" \
+  "$fixture/keybindings-captured.json"
+_assert_eq 'profile state refresh captures a conflicting user binding as baseline' \
+  '[{"command":"user.new","key":"ctrl+tab","when":"terminalFocus"}]' \
+  "$(jq -cS . "$fixture/keybindings-captured.json")"
+
+printf '%s\n' \
+  '{"terminal.integrated.commandsToSkipShell":["user.command"]}' \
+  >"$fixture/vscode-before.json"
+printf '%s\n' \
+  '{"terminal.integrated.commandsToSkipShell":["user.command","-dev.command"]}' \
+  >"$fixture/vscode-applied.json"
+printf '%s\n' \
+  '{"terminal.integrated.commandsToSkipShell":["user.command","-dev.command","later.command"]}' \
+  >"$fixture/vscode-current.json"
+reverse vscode-settings "$fixture/vscode-before.json" \
+  "$fixture/vscode-applied.json" "$fixture/vscode-current.json" \
+  "$fixture/vscode-output.json"
+_assert_eq 'profile state removes managed VS Code commands by command identity' \
+  '["user.command","later.command"]' \
+  "$(jq -cS '."terminal.integrated.commandsToSkipShell"' "$fixture/vscode-output.json")"
+
+# shellcheck source=/dev/null
+. "$library"
+export DOT_TEST=1
+export HOME=$fixture/user
+export XDG_STATE_HOME=$fixture/state
+export TMPDIR=$fixture/tmp
+mkdir -p "$TMPDIR"
+destination=$HOME/live/settings.json
+managed=$fixture/managed.json
+mkdir -p "${destination%/*}"
+printf '%s\n' '{"local":1,"owned":"before"}' >"$destination"
+printf '%s\n' '{"owned":"dev"}' >"$managed"
+dev_profile_state_begin test-object json "$destination" "$managed"
+_assert_eq 'profile state initial adoption removes exact legacy managed values' \
+  '{"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+printf '%s\n' '{"local":1,"owned":"dev"}' >"$destination"
+dev_profile_state_commit
+
+printf '%s\n' '{"later":2,"local":1,"owned":"dev"}' >"$destination"
+printf '%s\n' '{"owned":"dev-v2"}' >"$managed"
+dev_profile_state_begin test-object json "$destination" "$managed"
+_assert_eq 'profile state recovers the baseline before a later generation' \
+  '{"later":2,"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+printf '%s\n' '{"later":2,"local":1,"owned":"dev-v2"}' >"$destination"
+dev_profile_state_commit
+
+dev_profile_state_retire_all
+_assert_eq 'profile state retirement restores baseline and preserves later edits' \
+  '{"later":2,"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+dev_profile_state_retire_all
+_assert_eq 'profile state retirement is idempotent' \
+  '{"later":2,"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+
+transaction_home=$fixture/transaction-user
+transaction_state=$fixture/transaction-state
+export HOME=$transaction_home
+export XDG_STATE_HOME=$transaction_state
+mkdir -p "$HOME/first" "$HOME/second"
+first_destination=$HOME/first/settings.json
+second_destination=$HOME/second/settings.json
+first_managed=$fixture/first-managed.json
+second_managed=$fixture/second-managed.json
+printf '%s\n' '{"first":"dev"}' >"$first_managed"
+printf '%s\n' '{"second":"dev"}' >"$second_managed"
+printf '%s\n' '{"first":"before"}' >"$first_destination"
+printf '%s\n' '{"second":"before"}' >"$second_destination"
+dev_profile_state_begin test-object json "$first_destination" "$first_managed"
+printf '%s\n' '{"first":"dev"}' >"$first_destination"
+dev_profile_state_commit
+dev_profile_state_begin test-object json "$second_destination" "$second_managed"
+printf '%s\n' '{"second":"dev"}' >"$second_destination"
+dev_profile_state_commit
+
+first_key=$(_dev_profile_state_key test-object "$first_destination")
+second_key=$(_dev_profile_state_key test-object "$second_destination")
+if [[ $first_key < $second_key ]]; then
+  fail_destination=$second_destination
+else
+  fail_destination=$first_destination
+fi
+mkdir -p "$fixture/failing-bin"
+real_mv=$(command -v mv)
+cat >"$fixture/failing-bin/mv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+destination=${!#}
+if [[ $destination == "$DOT_TEST_FAIL_DESTINATION" &&
+  ! -e $DOT_TEST_FAIL_MARKER ]]; then
+  : >"$DOT_TEST_FAIL_MARKER"
+  if [[ -n ${DOT_TEST_CONCURRENT_DESTINATION:-} ]]; then
+    printf '%s\n' '{"concurrent":"kept"}' >"$DOT_TEST_CONCURRENT_DESTINATION"
+  fi
+  exit 1
+fi
+exec "$DOT_TEST_REAL_MV" "$@"
+EOF
+chmod +x "$fixture/failing-bin/mv"
+mkdir -p "$fixture/crashing-bin"
+cat >"$fixture/crashing-bin/mv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+destination=${!#}
+if [[ $destination == "$DOT_TEST_CRASH_DESTINATION" &&
+  ! -e $DOT_TEST_CRASH_MARKER ]]; then
+  "$DOT_TEST_REAL_MV" "$@"
+  : >"$DOT_TEST_CRASH_MARKER"
+  kill -KILL "${DOT_TEST_CRASH_PARENT_PID:?}"
+  exit 137
+fi
+exec "$DOT_TEST_REAL_MV" "$@"
+EOF
+chmod +x "$fixture/crashing-bin/mv"
+_run_crashing_retirement() {
+  bash --noprofile --norc -c '
+    export DOT_TEST_CRASH_PARENT_PID=$$
+    . "$1"
+    dev_profile_state_retire_all >/dev/null 2>&1
+  ' _ "$library"
+}
+export DOT_TEST_FAIL_DESTINATION=$fail_destination
+export DOT_TEST_FAIL_MARKER=$fixture/publish-failed
+export DOT_TEST_REAL_MV=$real_mv
+original_path=$PATH
+PATH=$fixture/failing-bin:$PATH
+
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state retirement rolls back a partial publication failure'
+else
+  _pass 'profile state retirement reports a partial publication failure'
+fi
+_assert_eq 'profile state retirement failure preserves the first destination' \
+  '{"first":"dev"}' "$(jq -cS . "$first_destination")"
+_assert_eq 'profile state retirement failure preserves the second destination' \
+  '{"second":"dev"}' "$(jq -cS . "$second_destination")"
+receipt_root=$(_dev_profile_state_root)
+_assert_eq 'profile state retirement failure preserves every receipt' '2' \
+  "$(printf '%s\n' "$receipt_root"/*.json | wc -l | tr -d '[:space:]')"
+PATH=$original_path
+dev_profile_state_retire_all
+
+# A failure on the first publication must not restore a later destination that
+# this invocation never changed. Simulate another writer changing that later
+# file after preflight but before the first publisher reports failure.
+printf '%s\n' '{"first":"before"}' >"$first_destination"
+printf '%s\n' '{"second":"before"}' >"$second_destination"
+dev_profile_state_begin test-object json "$first_destination" "$first_managed"
+printf '%s\n' '{"first":"dev"}' >"$first_destination"
+dev_profile_state_commit
+dev_profile_state_begin test-object json "$second_destination" "$second_managed"
+printf '%s\n' '{"second":"dev"}' >"$second_destination"
+dev_profile_state_commit
+if [[ $first_key < $second_key ]]; then
+  fail_destination=$first_destination
+  concurrent_destination=$second_destination
+else
+  fail_destination=$second_destination
+  concurrent_destination=$first_destination
+fi
+export DOT_TEST_FAIL_DESTINATION=$fail_destination
+export DOT_TEST_FAIL_MARKER=$fixture/first-publish-failed
+export DOT_TEST_CONCURRENT_DESTINATION=$concurrent_destination
+PATH=$fixture/failing-bin:$PATH
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state retirement reports a first-publication failure'
+else
+  _pass 'profile state retirement reports a first-publication failure'
+fi
+_assert_eq 'first-publication failure preserves a later concurrent edit' \
+  '{"concurrent":"kept"}' "$(jq -cS . "$concurrent_destination")"
+PATH=$original_path
+unset DOT_TEST_CONCURRENT_DESTINATION
+if [[ $concurrent_destination == "$first_destination" ]]; then
+  printf '%s\n' '{"first":"dev"}' >"$first_destination"
+else
+  printf '%s\n' '{"second":"dev"}' >"$second_destination"
+fi
+dev_profile_state_retire_all
+
+export HOME=$fixture/retirement-crash-user
+export XDG_STATE_HOME=$fixture/retirement-crash-state
+retirement_crash_destination=$HOME/live/settings.json
+retirement_crash_managed=$fixture/retirement-crash-managed.json
+mkdir -p "${retirement_crash_destination%/*}"
+printf '%s\n' '{"owned":"before"}' >"$retirement_crash_destination"
+printf '%s\n' '{"owned":"dev"}' >"$retirement_crash_managed"
+dev_profile_state_begin \
+  test-object json "$retirement_crash_destination" "$retirement_crash_managed"
+printf '%s\n' '{"owned":"dev"}' >"$retirement_crash_destination"
+dev_profile_state_commit
+retirement_crash_root=$(_dev_profile_state_root)
+mkdir -p "$retirement_crash_root/.retiring"
+chmod 0700 "$retirement_crash_root/.retiring"
+printf 'preparing\n' >"$retirement_crash_root/.retiring/preparing"
+chmod 0600 "$retirement_crash_root/.retiring/preparing"
+_dev_profile_state_retirement_recover "$retirement_crash_root"
+_assert_eq 'preparation recovery preserves active configuration' \
+  '{"owned":"dev"}' "$(jq -cS . "$retirement_crash_destination")"
+_assert_eq 'preparation recovery preserves active receipts' '1' \
+  "$(find "$retirement_crash_root" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d '[:space:]')"
+
+export DOT_TEST_CRASH_DESTINATION=$retirement_crash_destination
+export DOT_TEST_CRASH_MARKER=$fixture/config-publish-crashed
+PATH=$fixture/crashing-bin:$PATH
+if _run_crashing_retirement 2>/dev/null; then
+  _fail 'profile state simulates interruption after config publication'
+else
+  _pass 'profile state simulates interruption after config publication'
+fi
+PATH=$original_path
+_assert_file_exists 'config publication interruption leaves a recovery journal' \
+  "$retirement_crash_root/.retiring/manifest.json"
+dev_profile_state_begin \
+  test-object json "$retirement_crash_destination" "$retirement_crash_managed"
+_assert_eq 'begin recovers the active generation before capturing a new one' \
+  '{"owned":"dev"}' "$(jq -cS . "$_DEV_PROFILE_STATE_ORIGINAL_STATE")"
+printf '%s\n' '{"owned":"dev"}' >"$retirement_crash_destination"
+dev_profile_state_commit
+_assert_eq 'begin recovery allows the active generation to be recommitted' \
+  '{"owned":"dev"}' "$(jq -cS . "$retirement_crash_destination")"
+_assert_eq 'begin recovery preserves the active receipt' '1' \
+  "$(find "$retirement_crash_root" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d '[:space:]')"
+dev_profile_state_retire_all
+_assert_eq 'recovered config can retire on the next attempt' \
+  '{"owned":"before"}' "$(jq -cS . "$retirement_crash_destination")"
+export HOME=$transaction_home
+export XDG_STATE_HOME=$transaction_state
+
+printf '%s\n' '{"first":"dev"}' >"$first_managed"
+dev_profile_state_begin test-object json "$first_destination" "$first_managed"
+printf '%s\n' '{"first":"dev"}' >"$first_destination"
+dev_profile_state_commit
+first_receipt=$receipt_root/$(_dev_profile_state_key test-object "$first_destination").json
+forged_receipt=$receipt_root/0000000000000000000000000000000000000000.json
+mv "$first_receipt" "$forged_receipt"
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state retirement rejects a receipt under the wrong identity'
+else
+  _pass 'profile state retirement rejects a receipt under the wrong identity'
+fi
+_assert_eq 'invalid receipt identity preserves its destination' \
+  '{"first":"dev"}' "$(jq -cS . "$first_destination")"
+_assert_file_exists 'invalid receipt identity remains available for diagnosis' \
+  "$forged_receipt"
+
+export HOME=$fixture/crash-user
+export XDG_STATE_HOME=$fixture/crash-state
+crash_destination=$HOME/live/settings.json
+mkdir -p "${crash_destination%/*}"
+printf '%s\n' '{"local":"before"}' >"$crash_destination"
+printf '%s\n' '{"owned":"dev"}' >"$managed"
+(
+  # Simulate a worker disappearing after it has published an intermediate
+  # generation but before it can commit the new ownership receipt.
+  # shellcheck source=/dev/null
+  . "$library"
+  dev_profile_state_begin test-object json "$crash_destination" "$managed"
+  printf '%s\n' '{"owned":"partial"}' >"$crash_destination"
+)
+dev_profile_state_begin test-object json "$crash_destination" "$managed"
+_assert_eq 'profile state recovers the last known-good file after interruption' \
+  '{"local":"before"}' "$(jq -cS . "$crash_destination")"
+dev_profile_state_abort
+_assert_eq 'profile state abort after recovery preserves the last known-good file' \
+  '{"local":"before"}' "$(jq -cS . "$crash_destination")"
+
+export HOME=$fixture/empty-user
+export XDG_STATE_HOME=$fixture/empty-state
+empty_destination=$HOME/live/settings.json
+mkdir -p "${empty_destination%/*}"
+printf '{}\n' >"$empty_destination"
+dev_profile_state_begin test-object json "$empty_destination" "$managed"
+printf '%s\n' '{"owned":"dev"}' >"$empty_destination"
+dev_profile_state_commit
+dev_profile_state_retire_all
+_assert_file_exists 'profile state preserves a pre-existing empty document' \
+  "$empty_destination"
+_assert_eq 'profile state restores a pre-existing empty document' '{}' \
+  "$(jq -cS . "$empty_destination")"
+
+export HOME=$fixture/duplicate-user
+export XDG_STATE_HOME=$fixture/duplicate-state
+duplicate_destination=$HOME/.claude/settings.json
+mkdir -p "${duplicate_destination%/*}"
+printf '%s\n' '{"owned":"dev"}' >"$managed"
+dev_profile_state_begin claude json "$duplicate_destination" "$managed"
+printf '%s\n' '{"owned":"dev"}' >"$duplicate_destination"
+dev_profile_state_commit
+dev_profile_state_begin test-object json "$duplicate_destination" "$managed"
+printf '%s\n' '{"owned":"dev"}' >"$duplicate_destination"
+dev_profile_state_commit
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state retirement rejects duplicate destination receipts'
+else
+  _pass 'profile state retirement rejects duplicate destination receipts'
+fi
+_assert_eq 'duplicate destination receipts preserve the live destination' \
+  '{"owned":"dev"}' "$(jq -cS . "$duplicate_destination")"
+
+export HOME=$fixture/jsonc-user
+export XDG_STATE_HOME=$fixture/jsonc-state
+jsonc_destination=$HOME/.config/Code/User/keybindings.json
+jsonc_managed=$fixture/keybindings-managed.jsonc
+mkdir -p "${jsonc_destination%/*}"
+cat >"$jsonc_managed" <<'EOF'
+[
+  {"key":"ctrl+tab","when":"terminalFocus","command":"dev.route"}
+]
+EOF
+dev_profile_state_begin \
+  vscode-keybindings jsonc "$jsonc_destination" "$jsonc_managed"
+cat >"$jsonc_destination" <<'EOF'
+[
+  {"key":"ctrl+tab","when":"terminalFocus","command":"dev.route"}
+]
+EOF
+dev_profile_state_commit
+cat >"$jsonc_destination" <<'EOF'
+// Settings Sync may restore full-line JSONC comments and CRLF input.
+[
+  {"key":"ctrl+tab","when":"terminalFocus","command":"dev.route"},
+  {"key":"ctrl+k","when":"editorFocus","command":"user.route"}
+]
+EOF
+dev_profile_state_retire_all
+_assert_eq 'profile state retires an absent-before JSONC root array' \
+  '[{"command":"user.route","key":"ctrl+k","when":"editorFocus"}]' \
+  "$(jq -cS . "$jsonc_destination")"
+
+export HOME=$fixture/extensions-user
+export XDG_STATE_HOME=$fixture/extensions-state
+extensions_destination=$HOME/.vscode/extensions/extensions.json
+extension_target=$HOME/.local/share/provider/tool-1.0.0
+extension_link=$HOME/.vscode/extensions/tool-1.0.0
+extensions_managed=$fixture/extensions-managed.json
+extensions_links=$fixture/extensions-links.json
+mkdir -p "${extensions_destination%/*}" "$extension_target"
+cat >"$extensions_managed" <<EOF
+[{"identifier":{"id":"example.tool"},"location":{"path":"$extension_target"},"relativeLocation":"tool-1.0.0"}]
+EOF
+cat >"$extensions_links" <<EOF
+[{"path":"$extension_link","target":"$extension_target"}]
+EOF
+invalid_links=$fixture/invalid-extension-links.json
+test_object_destination=$HOME/test-object.json
+printf '%s\n' '{}' >"$test_object_destination"
+dev_profile_state_begin \
+  test-object json "$test_object_destination" "$test_object_destination"
+if dev_profile_state_commit "$extensions_links" 2>/dev/null; then
+  _fail 'profile state rejects extension links on a non-extension receipt'
+else
+  _pass 'profile state rejects extension links on a non-extension receipt'
+fi
+dev_profile_state_abort
+
+cat >"$invalid_links" <<EOF
+[{"path":"$HOME/other/extensions/tool-1.0.0","target":"$extension_target"}]
+EOF
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+if dev_profile_state_commit "$invalid_links" 2>/dev/null; then
+  _fail 'profile state rejects an extension link outside its registry directory'
+else
+  _pass 'profile state rejects an extension link outside its registry directory'
+fi
+dev_profile_state_abort
+
+cat >"$invalid_links" <<EOF
+[
+  {"path":"$extension_link","target":"$extension_target"},
+  {"path":"$extension_link","target":"$extension_target"}
+]
+EOF
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+if dev_profile_state_commit "$invalid_links" 2>/dev/null; then
+  _fail 'profile state rejects duplicate extension link paths'
+else
+  _pass 'profile state rejects duplicate extension link paths'
+fi
+dev_profile_state_abort
+
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+cp "$extensions_managed" "$extensions_destination"
+ln -s "$extension_target" "$extension_link"
+dev_profile_state_commit "$extensions_links"
+cat >"$extensions_destination" <<EOF
+[
+  {"identifier":{"id":"example.tool"},"location":{"path":"$extension_target"},"relativeLocation":"tool-1.0.0"},
+  {"identifier":{"id":"user.extension"},"metadata":{"source":"gallery"}}
+]
+EOF
+extension_receipt_key=$(_dev_profile_state_key \
+  vscode-extensions "$extensions_destination")
+extension_quarantine=${extensions_destination%/*}/.dot-profile-retire.$extension_receipt_key-1/${extension_link##*/}
+export DOT_TEST_CRASH_DESTINATION=$extension_quarantine
+export DOT_TEST_CRASH_MARKER=$fixture/link-quarantine-crashed
+PATH=$fixture/crashing-bin:$PATH
+if _run_crashing_retirement 2>/dev/null; then
+  _fail 'profile state simulates interruption after link quarantine'
+else
+  _pass 'profile state simulates interruption after link quarantine'
+fi
+PATH=$original_path
+_assert_file_exists 'link quarantine interruption leaves a recovery journal' \
+  "$XDG_STATE_HOME/dot/overlays/dev/merge-receipts-v1/.retiring/manifest.json"
+_dev_profile_state_retirement_recover "$(_dev_profile_state_root)"
+_assert_eq 'link quarantine recovery restores the managed registry entry' \
+  '["example.tool","user.extension"]' \
+  "$(jq -cS '[.[].identifier.id]' "$extensions_destination")"
+if [[ -L $extension_link && $(readlink "$extension_link") == "$extension_target" ]]; then
+  _pass 'link quarantine recovery restores the managed link'
+else
+  _fail 'link quarantine recovery restores the managed link'
+fi
+export DOT_TEST_FAIL_LINK_MARKER=$fixture/link-delete-failed
+export DOT_TEST_FAIL_MARKER=$DOT_TEST_FAIL_LINK_MARKER
+export DOT_TEST_FAIL_DESTINATION=${extensions_destination%/*}/.dot-profile-retire.$extension_receipt_key-1/${extension_link##*/}
+original_path=$PATH
+PATH=$fixture/failing-bin:$PATH
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state retirement reports an extension link quarantine failure'
+else
+  _pass 'profile state retirement reports an extension link quarantine failure'
+fi
+_assert_eq 'extension quarantine failure restores the managed registry entry' \
+  '["example.tool","user.extension"]' \
+  "$(jq -cS '[.[].identifier.id]' "$extensions_destination")"
+if [[ -L $extension_link && $(readlink "$extension_link") == "$extension_target" ]]; then
+  _pass 'extension quarantine failure preserves the managed link'
+else
+  _fail 'extension quarantine failure preserves the managed link'
+fi
+receipt_root=$(_dev_profile_state_root)
+_assert_eq 'extension quarantine failure preserves its receipt' '1' \
+  "$(printf '%s\n' "$receipt_root"/*.json | wc -l | tr -d '[:space:]')"
+PATH=$original_path
+dev_profile_state_retire_all
+_assert_eq 'profile state removes a managed extension registration only' \
+  '["user.extension"]' \
+  "$(jq -cS '[.[].identifier.id]' "$extensions_destination")"
+if [[ ! -e $extension_link && ! -L $extension_link ]]; then
+  _pass 'profile state removes an unchanged managed extension link'
+else
+  _fail 'profile state removes an unchanged managed extension link'
+fi
+
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+cp "$extensions_managed" "$extensions_destination"
+ln -s "$extension_target" "$extension_link"
+dev_profile_state_commit "$extensions_links"
+cat >"$extensions_destination" <<EOF
+[
+  {"identifier":{"id":"example.tool"},"location":{"path":"$extension_target"},"relativeLocation":"tool-1.0.0"},
+  {"identifier":{"id":"user.extension"},"metadata":{"source":"gallery"}}
+]
+EOF
+mkdir -p "$fixture/failing-receipt-rm-bin"
+export DOT_TEST_REAL_RM
+DOT_TEST_REAL_RM=$(command -v rm)
+cat >"$fixture/failing-receipt-rm-bin/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+destination=${!#}
+if [[ ${destination%/*} == "$DOT_TEST_RECEIPT_ROOT" &&
+  ${destination##*/} == *.json &&
+  ! -e $DOT_TEST_FAIL_RECEIPT_MARKER ]]; then
+  : >"$DOT_TEST_FAIL_RECEIPT_MARKER"
+  exit 1
+fi
+exec "$DOT_TEST_REAL_RM" "$@"
+EOF
+chmod +x "$fixture/failing-receipt-rm-bin/rm"
+export DOT_TEST_FAIL_RECEIPT_MARKER=$fixture/receipt-delete-failed
+export DOT_TEST_RECEIPT_ROOT=$receipt_root
+PATH=$fixture/failing-receipt-rm-bin:$PATH
+if dev_profile_state_retire_all 2>/dev/null; then
+  _fail 'profile state reports committed retirement with pending receipt cleanup'
+else
+  _pass 'profile state reports committed retirement with pending receipt cleanup'
+fi
+_assert_eq 'receipt cleanup failure keeps the retired registry state' \
+  '["user.extension"]' \
+  "$(jq -cS '[.[].identifier.id]' "$extensions_destination")"
+if [[ ! -e $extension_link && ! -L $extension_link ]]; then
+  _pass 'receipt cleanup failure keeps the link retired'
+else
+  _fail 'receipt cleanup failure keeps the link retired'
+fi
+_assert_eq 'receipt cleanup failure keeps the active receipt for retry' '1' \
+  "$(find "$receipt_root" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d '[:space:]')"
+_assert_file_exists 'receipt cleanup failure retains a committed journal' \
+  "$receipt_root/.retiring/manifest.json"
+"$DOT_TEST_REAL_RM" -f "$DOT_TEST_FAIL_RECEIPT_MARKER"
+if dev_profile_state_tracked \
+  vscode-extensions json "$extensions_destination" 2>/dev/null; then
+  _fail 'tracked ownership rejects a committed journal with blocked cleanup'
+else
+  _pass 'tracked ownership rejects a committed journal with blocked cleanup'
+fi
+"$DOT_TEST_REAL_RM" -f "$DOT_TEST_FAIL_RECEIPT_MARKER"
+if dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed" \
+  2>/dev/null; then
+  _fail 'begin rejects a committed journal with blocked cleanup'
+  dev_profile_state_abort || true
+else
+  _pass 'begin rejects a committed journal with blocked cleanup'
+fi
+PATH=$original_path
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+cp "$extensions_managed" "$extensions_destination"
+ln -s "$extension_target" "$extension_link"
+dev_profile_state_commit "$extensions_links"
+_assert_file_exists 'reactivation writes a new receipt after committed cleanup' \
+  "$receipt_root/$extension_receipt_key.json"
+_assert_eq 'reactivation removes the old committed journal' '0' \
+  "$(find "$receipt_root" -maxdepth 1 -type d -name '.retiring' | wc -l | tr -d '[:space:]')"
+dev_profile_state_retire_all
+
+retargeted_target=$HOME/local-development/tool-1.0.0
+mkdir -p "$retargeted_target"
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+cp "$extensions_managed" "$extensions_destination"
+ln -s "$extension_target" "$extension_link"
+dev_profile_state_commit "$extensions_links"
+ln -sfn "$retargeted_target" "$extension_link"
+dev_profile_state_retire_all
+if [[ -L $extension_link && $(readlink "$extension_link") == "$retargeted_target" ]]; then
+  _pass 'profile state preserves a retargeted extension link'
+else
+  _fail 'profile state preserves a retargeted extension link'
+fi
+
+export HOME=$fixture/producer-user
+export XDG_STATE_HOME=$fixture/producer-state
+export _DEV_PROFILE_STATE_ENGINE=$engine
+producer_target=$HOME/.local/share/provider/producer-tool-1.0.0
+producer_extensions=$HOME/.vscode/extensions
+mkdir -p "$producer_target" "$producer_extensions"
+cat >"$producer_target/package.json" <<'EOF'
+{"name":"producer-tool","publisher":"example","version":"1.0.0"}
+EOF
+_test_load_dot_merge_api || {
+  _fail 'VS Code producer loads the standalone Dot hook API'
+  _test_summary
+}
+dot_hook_source() { return 0; }
+dot_wsl_windows_home() { return 1; }
+# shellcheck source=/dev/null
+. "$repo_root/home/.local/lib/dotfiles/merge-hooks.d/vscode.sh" || {
+  _fail 'VS Code producer hook loads in the installed fixture'
+  _test_summary
+}
+_vscode_local_extensions() {
+  printf 'example.producer-tool\t%s\t\n' "$producer_target"
+}
+if ! _vscode_merge_extensions_tracked "$producer_extensions"$'\t'$'\t'; then
+  _fail 'VS Code producer records ownership in the installed fixture'
+  _test_summary
+fi
+producer_registry=$producer_extensions/extensions.json
+producer_link=$producer_extensions/producer-tool-1.0.0
+producer_receipt_root=$(_dev_profile_state_root) || {
+  _fail 'VS Code producer resolves the profile-state receipt root'
+  _test_summary
+}
+producer_receipt_key=$(_dev_profile_state_key \
+  vscode-extensions "$producer_registry") || {
+  _fail 'VS Code producer computes its profile-state receipt key'
+  _test_summary
+}
+producer_receipt=$producer_receipt_root/$producer_receipt_key.json
+_assert_file_exists 'VS Code producer records extension ownership' "$producer_receipt"
+if [[ -L $producer_link && $(readlink "$producer_link") == "$producer_target" ]]; then
+  _pass 'VS Code producer installs the managed extension link'
+else
+  _fail 'VS Code producer installs the managed extension link'
+fi
+jq '. + [{"identifier":{"id":"user.extension"}}]' \
+  "$producer_registry" >"$fixture/producer-registry.json"
+mv "$fixture/producer-registry.json" "$producer_registry"
+dev_profile_state_retire_all
+_assert_eq 'VS Code producer-to-retirement preserves user registrations' \
+  '["user.extension"]' \
+  "$(jq -cS '[.[].identifier.id]' "$producer_registry")"
+if [[ ! -e $producer_link && ! -L $producer_link ]]; then
+  _pass 'VS Code producer-to-retirement removes its managed link'
+else
+  _fail 'VS Code producer-to-retirement removes its managed link'
+fi
+
+_assert_eq 'profile state lifecycle leaves no transaction temporaries' '0' \
+  "$(find "$fixture" \
+    \( -name 'dev-profile-*' -o -name '*.rollback.*' \
+    -o -name '.dot-profile-retire.*' -o -name '.retiring' \) |
+    wc -l | tr -d '[:space:]')"
+
+_test_summary
