@@ -103,8 +103,8 @@ single_sha() {
   [[ $value =~ ^[0-9a-f]{40}$ ]] || fail "$file does not contain a full lowercase commit SHA"
   [[ $value == "$expected" ]] || fail "$file contains an unexpected commit SHA"
 }
-single_sha .github/cgraf78-actions.lock de3f6086e36a77eec8ee62f2c9871266e4b5c05c
-single_sha .github/dot.lock 6e0efca35aa3b09e7f61ed0d79866f5a490bb852
+single_sha .github/cgraf78-actions.lock dc7be3dcf6da264083f229d78818c2ad087a3d34
+single_sha .github/dot.lock a96eeba1564925e0e0857492e0e3feeaf0d14964
 
 expected_source=$'version=1\nrepository=cgraf78/dotfiles\ncommit=faadad51a469a9651f6357850da852c3818390f5\nlicense_path=.github/LICENSE'
 [[ $(<.github/dotfiles-source.lock) == "$expected_source" ]] || fail 'source lock is not canonical'
@@ -167,7 +167,7 @@ if grep -E '^required_commands=.*(^|[[:space:]])cmp([[:space:]]|$)' test/run >/d
   fail 'controlled runtime PATH must not require cmp after bootstrap validation'
 fi
 
-expected_provider_lock=$'version=1\ncheckrun=638c4dc8a1012c4552a1c42e412a310b8c175c70\nsley=7cf7b2ed9b3b3f68b22e5ac1d6edcc5f652d7125\ngit_tools=7434dd9072906812084270debc55e63568626463\nagentguard=02ec2f41907cabd344c7fbdf57300dcc969e3a3f'
+expected_provider_lock=$'version=1\ncheckrun=06a5e4cdf31365c4e120fab179c8214753921155\nsley=f4cc2e418d47e918d1b6a1b5ca1bc05855f46279\ngit_tools=f47683ebca2cbbd3dac750f3107bb60a9ca6e65f\nagentguard=05b8affcbdb55e6cecb5ad412ddf34ddac0ad403'
 [[ $(<.github/provider-test.lock) == "$expected_provider_lock" ]] ||
   fail 'provider compatibility lock is not canonical'
 grep -Fx '  provider-compatibility:' "$workflow" >/dev/null || fail 'provider compatibility job is missing'

@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   shell:
-    uses: cgraf78/actions/.github/workflows/shell-ci.yml@de3f6086e36a77eec8ee62f2c9871266e4b5c05c
+    uses: cgraf78/actions/.github/workflows/shell-ci.yml@dc7be3dcf6da264083f229d78818c2ad087a3d34
     with:
       setup: none
       matrix-set: full
@@ -35,29 +35,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/checkrun
-          ref: 638c4dc8a1012c4552a1c42e412a310b8c175c70
+          ref: 06a5e4cdf31365c4e120fab179c8214753921155
           path: .provider-checkouts/checkrun
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/sley
-          ref: 7cf7b2ed9b3b3f68b22e5ac1d6edcc5f652d7125
+          ref: f4cc2e418d47e918d1b6a1b5ca1bc05855f46279
           path: .provider-checkouts/sley
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/git-tools
-          ref: 7434dd9072906812084270debc55e63568626463
+          ref: f47683ebca2cbbd3dac750f3107bb60a9ca6e65f
           path: .provider-checkouts/git-tools
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/agentguard
-          ref: 02ec2f41907cabd344c7fbdf57300dcc969e3a3f
+          ref: 05b8affcbdb55e6cecb5ad412ddf34ddac0ad403
           path: .provider-checkouts/agentguard
           persist-credentials: false
       - name: Install compatibility prerequisites
-        uses: cgraf78/actions/.github/actions/shell-ci-prereqs@de3f6086e36a77eec8ee62f2c9871266e4b5c05c
+        uses: cgraf78/actions/.github/actions/shell-ci-prereqs@dc7be3dcf6da264083f229d78818c2ad087a3d34
         with:
           matrix-name: Ubuntu
           profiles: base,jq,python,lua,neovim,zsh,procps
@@ -136,7 +136,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cgraf78/actions/.github/actions/verify-consumer-sync@de3f6086e36a77eec8ee62f2c9871266e4b5c05c
+      - uses: cgraf78/actions/.github/actions/verify-consumer-sync@dc7be3dcf6da264083f229d78818c2ad087a3d34
 
       - name: Verify public repository and license
         env:
