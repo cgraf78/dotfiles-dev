@@ -81,8 +81,7 @@ fi
 
 required_files=(
   .selene.toml vim.yml
-  .github/cgraf78-actions.lock .github/dependabot.yml .github/dot.lock
-  .github/provider-test.lock
+  .github/cgraf78-actions.lock .github/dependabot.yml
   .github/dot-test-suites.txt
   .github/repository-settings-endpoints.txt .github/shellcheck-files.txt
   .github/workflows/retry-infrastructure.yml .github/workflows/test.yml
@@ -91,6 +90,10 @@ required_files=(
   test/lib/wait-github-state.sh
 )
 for path in "${required_files[@]}"; do [[ -f $path ]] || fail "missing required file: $path"; done
+for retired_lock in .github/dot.lock .github/provider-test.lock; do
+  [[ ! -e $retired_lock && ! -L $retired_lock ]] ||
+    fail "retired CI lock must stay absent: $retired_lock"
+done
 
 single_sha() {
   local file=$1 expected=$2 value
@@ -100,7 +103,20 @@ single_sha() {
   [[ $value == "$expected" ]] || fail "$file contains an unexpected commit SHA"
 }
 single_sha .github/cgraf78-actions.lock b97bd729afec784785bd01ebd43321225ef47bb7
-single_sha .github/dot.lock a96eeba1564925e0e0857492e0e3feeaf0d14964
+# shellcheck disable=SC2016 # Match the literal defaulting expression.
+grep -F 'dot_revision=${DOT_TEST_DOT_REVISION:-main}' test/run >/dev/null ||
+  fail 'capability tests do not default to current Dot main'
+grep -F 'checkout --quiet --detach FETCH_HEAD' test/run >/dev/null ||
+  fail 'capability tests do not freeze the resolved Dot revision per run'
+grep -F 'clean_git_env=(' test/run >/dev/null ||
+  fail 'Dot bootstrap does not define an isolated Git environment'
+grep -F 'GIT_CONFIG_GLOBAL=/dev/null' test/run >/dev/null ||
+  fail 'Dot bootstrap does not disable inherited global Git config'
+grep -F 'GIT_CONFIG_NOSYSTEM=1' test/run >/dev/null ||
+  fail 'Dot bootstrap does not disable inherited system Git config'
+# shellcheck disable=SC2016 # Match the literal bootstrap checkout path.
+grep -F 'ci_git init --quiet "$dot_checkout"' test/run >/dev/null ||
+  fail 'Dot bootstrap does not use its isolated Git boundary'
 
 if command -v sha256sum >/dev/null 2>&1; then
   license_hash=$(sha256sum LICENSE | awk '{print $1}')
@@ -153,9 +169,6 @@ if grep -E '^required_commands=.*(^|[[:space:]])cmp([[:space:]]|$)' test/run >/d
   fail 'controlled runtime PATH must not require cmp after bootstrap validation'
 fi
 
-expected_provider_lock=$'version=1\ncheckrun=06a5e4cdf31365c4e120fab179c8214753921155\nsley=f4cc2e418d47e918d1b6a1b5ca1bc05855f46279\ngit_tools=f47683ebca2cbbd3dac750f3107bb60a9ca6e65f\nagentguard=05b8affcbdb55e6cecb5ad412ddf34ddac0ad403'
-[[ $(<.github/provider-test.lock) == "$expected_provider_lock" ]] ||
-  fail 'provider compatibility lock is not canonical'
 grep -Fx '  provider-compatibility:' "$workflow" >/dev/null || fail 'provider compatibility job is missing'
 grep -Fx '        run: test/run --provider-compatibility' "$workflow" >/dev/null ||
   fail 'provider compatibility runner is not wired'
@@ -205,14 +218,30 @@ grep -F 'CAPABILITY_TEST_NVIM: ${{ runner.temp }}/neovim-0.12.2/bin/nvim' \
   "$workflow" >/dev/null || fail 'provider compatibility does not receive explicit Neovim'
 grep -F '    nvim-dev' test/run >/dev/null ||
   fail 'provider compatibility does not execute nvim-dev coverage'
-while IFS='=' read -r provider sha; do
-  case $provider in version) continue ;; esac
+provider_checkout_ref() {
+  local repository=$1
+  awk -v repository="cgraf78/$repository" '
+    $1 == "repository:" {
+      in_checkout = ($2 == repository)
+      if (in_checkout) found++
+      next
+    }
+    in_checkout && $1 == "ref:" {
+      refs++
+      value = $2
+      in_checkout = 0
+    }
+    END {
+      if (found == 1 && refs == 1) print value
+      else exit 1
+    }
+  ' "$workflow"
+}
+for provider in checkrun sley git_tools agentguard; do
   repository=${provider//_/-}
-  grep -F "          repository: cgraf78/$repository" "$workflow" >/dev/null ||
-    fail "provider checkout is missing: $repository"
-  grep -F "          ref: $sha" "$workflow" >/dev/null ||
-    fail "provider checkout pin drifted: $repository"
-done <.github/provider-test.lock
+  [[ $(provider_checkout_ref "$repository") == main ]] ||
+    fail "provider checkout does not follow current main: $repository"
+done
 
 declare -a expected_shell_files=()
 declare -a actual_shell_files=()

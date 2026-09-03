@@ -252,7 +252,7 @@ if [[ -n ${DOT_TEST_CHECKRUN_ROOT:-} || -n ${DOT_TEST_SLEY_ROOT:-} ||
   : "${DOT_TEST_CHECKRUN_ROOT:?provider compatibility requires Checkrun}"
   : "${DOT_TEST_SLEY_ROOT:?provider compatibility requires Sley}"
   : "${DOT_TEST_AGENTGUARD_ROOT:?provider compatibility requires AgentGuard}"
-  provider_scope=immutable
+  provider_scope=current
   checkrun_command=$DOT_TEST_CHECKRUN_ROOT/bin/checkrun
   checkrun_nvim_fixture=$DOT_TEST_CHECKRUN_ROOT/lib/checkrun/nvim.lua
   sley_extension=$DOT_TEST_SLEY_ROOT/share/sley/vscode/sley-tools-0.0.1/extension.js
@@ -428,7 +428,7 @@ while IFS=$'\t' read -r association_key association_value; do
 done < <(jq -r '.languages[] | select(.association) | [.association.key, .association.value] | @tsv' "$fixture")
 
 nvim_bin=${NVIM_TEST_BIN:-$(command -v nvim)}
-if [[ $provider_scope == immutable ]]; then
+if [[ $provider_scope == current ]]; then
   _assert_no_low_level_dispatch "$registry" "$work/low-level-dispatch-violations.txt" \
     "$agentguard_classifier"
 fi
@@ -531,7 +531,7 @@ for item in fixture["languages"]:
 PY
 _assert_exit 'Actual Checkrun plans match shared format and lint expectations' 0 "$?"
 
-if [[ $provider_scope == immutable ]]; then
+if [[ $provider_scope == current ]]; then
   codex_native=$DOT_TEST_AGENTGUARD_ROOT/share/agentguard/integrations/codex/hooks.toml
   codex_trust=$root/.local/lib/dotfiles/merge-hooks.d/lib/codex/refresh-trust.py
   codex_unmapped=$(
