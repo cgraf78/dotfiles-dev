@@ -64,6 +64,15 @@ capture() {
     --output "$output"
 }
 
+adopt() {
+  local policy=$1 managed=$2 current=$3 output=$4
+  python3 "$engine" adopt \
+    --policy "$policy" \
+    --managed "$managed" \
+    --current "$current" \
+    --output "$output"
+}
+
 printf '%s\n' '{"editor":{"fontSize":12},"user":true}' >"$fixture/before.json"
 printf '%s\n' '{"editor":{"fontSize":14},"user":true,"dev":1}' >"$fixture/applied.json"
 printf '%s\n' '{"editor":{"fontSize":14},"user":false,"later":"kept","dev":1}' >"$fixture/current.json"
@@ -147,6 +156,18 @@ capture vscode-keybindings "$fixture/keybindings-before.json" \
 _assert_eq 'profile state refresh captures a conflicting user binding as baseline' \
   '[{"command":"user.new","key":"ctrl+tab","when":"terminalFocus"}]' \
   "$(jq -cS . "$fixture/keybindings-captured.json")"
+
+adopt vscode-keybindings "$fixture/keybindings-applied.json" \
+  "$fixture/keybindings-applied.json" "$fixture/keybindings-adopted.json"
+_assert_eq 'profile state adopts identical keybindings as an empty array baseline' \
+  '[]' "$(jq -cS . "$fixture/keybindings-adopted.json")"
+
+printf '%s\n' '[{"identifier":{"id":"fixture.managed"}}]' \
+  >"$fixture/extensions-managed.json"
+adopt vscode-extensions "$fixture/extensions-managed.json" \
+  "$fixture/extensions-managed.json" "$fixture/extensions-adopted.json"
+_assert_eq 'profile state adopts identical extensions as an empty array baseline' \
+  '[]' "$(jq -cS . "$fixture/extensions-adopted.json")"
 
 printf '%s\n' \
   '{"terminal.integrated.commandsToSkipShell":["user.command"]}' \
