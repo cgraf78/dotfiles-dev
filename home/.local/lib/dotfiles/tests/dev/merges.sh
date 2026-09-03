@@ -2019,10 +2019,6 @@ JSON
       # object after Settings Sync carries it elsewhere.
       _assert_eq "vscode keybindings: retirement records are globally available from all.d" \
         '[]' "$(jq -c '.misplaced' "$report")"
-      # The capability repository starts with the frozen final generation, so
-      # its standalone Git history cannot prove pre-extraction ownership. D4's
-      # locked source-history gate owns that one cross-repository assertion.
-      _pass "vscode keybindings: D4 owns pre-extraction retirement provenance"
       _assert_eq "vscode keybindings: PR 90 review-build proof adds no other targets" \
         '[]' "$(jq -c '.review_proof_extra' "$report")"
       _assert_eq "vscode keybindings: PR 90 review-build proof retains every canonical target" \
