@@ -7,6 +7,7 @@ program	home/.config/shdeps/hooks.d/cmakelang.sh
 program	home/.config/shdeps/hooks.d/editorconfig-checker.sh
 program	home/.config/shdeps/hooks.d/garrytan/gstack.sh
 program	home/.config/shdeps/hooks.d/google-java-format.sh
+program	home/.config/shdeps/hooks.d/obra/superpowers.sh
 program	home/.config/shdeps/hooks.d/php-cs-fixer.sh
 program	home/.config/shdeps/hooks.d/python-minimum.sh
 program	home/.config/shdeps/hooks.d/rubocop.sh
@@ -44,10 +45,12 @@ program	home/.local/lib/dotfiles/merge-hooks.d/gstack.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/codex/api.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/lib/superpowers-muse-sync
 program	home/.local/lib/dotfiles/merge-hooks.d/mise.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/muse.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/opencode.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/sapling.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/superpowers.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/vscode.sh
 program	home/.local/lib/dotfiles/sley-hooks/validate-commit-msg
 program	home/.local/lib/dotfiles/tests/agent-yolo-wrappers-test

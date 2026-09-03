@@ -471,6 +471,28 @@ _assert_file_content "gstack: post and uninstall delegate to the provider" "$(pr
 unset GSTACK_CALLS
 unset -f post uninstall
 
+echo "=== superpowers Muse skills ==="
+_superpowers_dep=$(awk '$1 == "obra/superpowers" { print; exit }' "$REAL_HOME/.config/shdeps/30-dev.conf")
+_assert_eq "superpowers: skill sources stay a pinned checkout" "github:repo" "$(awk '{ print $2 }' <<<"$_superpowers_dep")"
+_superpowers_hook="$REAL_HOME/.config/shdeps/hooks.d/obra/superpowers.sh"
+_superpowers_mock=$(_tmpdir)/superpowers-muse-sync
+_superpowers_calls=$(_tmpdir)/calls
+cat >"$_superpowers_mock" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$SUPERPOWERS_CALLS"
+EOF
+chmod +x "$_superpowers_mock"
+export SUPERPOWERS_CALLS=$_superpowers_calls
+export SUPERPOWERS_MUSE_SYNC=$_superpowers_mock
+# shellcheck source=/dev/null
+. "$_superpowers_hook"
+post
+uninstall
+_assert_file_content "superpowers: post and uninstall delegate to the provider" "$(printf 'sync\nuninstall')" "$_superpowers_calls"
+unset SUPERPOWERS_CALLS SUPERPOWERS_MUSE_SYNC
+unset -f post uninstall
+unset _superpowers_muse_sync
+
 _hive_memory_dep=$(awk '$1 == "cgraf78/hive-memory" { print; exit }' "$REAL_HOME/.config/shdeps/30-dev.conf")
 _assert_eq "hive-memory: dependency uses native github updater" "github" "$(awk '{ print $2 }' <<<"$_hive_memory_dep")"
 _assert_eq "hive-memory: dependency exposes hm command" "hm" "$(awk '{ print $3 }' <<<"$_hive_memory_dep")"
