@@ -24,7 +24,7 @@ jobs:
       termux-command: test/run --termux
 
   provider-compatibility:
-    name: Immutable provider compatibility
+    name: Current provider compatibility
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -35,25 +35,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/checkrun
-          ref: 06a5e4cdf31365c4e120fab179c8214753921155
+          ref: main
           path: .provider-checkouts/checkrun
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/sley
-          ref: f4cc2e418d47e918d1b6a1b5ca1bc05855f46279
+          ref: main
           path: .provider-checkouts/sley
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/git-tools
-          ref: f47683ebca2cbbd3dac750f3107bb60a9ca6e65f
+          ref: main
           path: .provider-checkouts/git-tools
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cgraf78/agentguard
-          ref: 05b8affcbdb55e6cecb5ad412ddf34ddac0ad403
+          ref: main
           path: .provider-checkouts/agentguard
           persist-credentials: false
       - name: Install compatibility prerequisites
