@@ -1,5 +1,5 @@
 # Repository-only lint context for the dev-owned Neovim modules. The deployed
-# global fallback remains byte-identical to the frozen source policy.
+# global fallback remains byte-identical to the deployed policy.
 std = "vim+lua51"
 
 [rules]
