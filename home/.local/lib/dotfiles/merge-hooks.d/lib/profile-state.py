@@ -18,6 +18,15 @@ class Conflict(Exception):
 MISSING = object()
 
 
+def _empty_document_like(document: Any) -> dict[str, Any] | list[Any]:
+    """Return an empty document preserving the parsed top-level shape."""
+    if isinstance(document, list):
+        return []
+    if isinstance(document, dict):
+        return {}
+    raise ValueError("profile-state document must be an object or array")
+
+
 def _identity(policy: str, path: tuple[str, ...], value: Any) -> str | None:
     """Return the stable identity used by an explicitly mergeable array."""
     if policy in {"claude", "muse"}:
@@ -388,46 +397,49 @@ def main() -> int:
 
     if arguments.command == "reverse":
         try:
+            current = _read(arguments.current)
             result = reverse(
                 arguments.policy,
                 _read(arguments.before),
                 _read(arguments.applied),
-                _read(arguments.current),
+                current,
             )
+            if result is MISSING:
+                result = _empty_document_like(current)
         except (Conflict, json.JSONDecodeError, OSError, ValueError) as error:
             print(f"profile-state: {error}", file=os.sys.stderr)
             return 1
-        if result is MISSING:
-            result = {}
         _write(arguments.output, result)
         return 0
     if arguments.command == "adopt":
         try:
+            current = _read(arguments.current)
             result = adopt(
                 arguments.policy,
                 _read(arguments.managed),
-                _read(arguments.current),
+                current,
             )
+            if result is MISSING:
+                result = _empty_document_like(current)
         except (json.JSONDecodeError, OSError, ValueError) as error:
             print(f"profile-state: {error}", file=os.sys.stderr)
             return 1
-        if result is MISSING:
-            result = {}
         _write(arguments.output, result)
         return 0
     if arguments.command == "capture":
         try:
+            current = _read(arguments.current)
             result = capture(
                 arguments.policy,
                 _read(arguments.before),
                 _read(arguments.applied),
-                _read(arguments.current),
+                current,
             )
+            if result is MISSING:
+                result = _empty_document_like(current)
         except (json.JSONDecodeError, OSError, ValueError) as error:
             print(f"profile-state: {error}", file=os.sys.stderr)
             return 1
-        if result is MISSING:
-            result = {}
         _write(arguments.output, result)
         return 0
     if arguments.command == "publish-in-place":
