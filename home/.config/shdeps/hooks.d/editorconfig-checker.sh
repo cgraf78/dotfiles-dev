@@ -1,9 +1,9 @@
 # shellcheck shell=bash
 # Hook for editorconfig-checker — lints .editorconfig files.
 #
-# The upstream release binary is named `ec`; some packages expose
-# `editorconfig-checker` instead. Keep both names discoverable without hiding
-# release/package update policy behind a custom install hook.
+# The upstream v4+ release binary is named `editorconfig-checker`; keep `ec`
+# discoverable as a compat wrapper. Do not hide release/package update policy
+# behind a custom install hook.
 
 _editorconfig_checker_cmd() {
   local candidate name path_dir
