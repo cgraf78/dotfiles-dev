@@ -27,10 +27,13 @@ estimate.
 
 ## Repository maintenance
 
-The schema and Mise-lock refresh workflows require a newly generated deploy key
-scoped only to this repository. Configure its private half as the
+The schema and Mise-lock refresh workflows use a dedicated write deploy key
+scoped only to this repository. Its private half is stored as the
 `DOTFILES_DEV_MAINTENANCE_DEPLOY_KEY` Actions secret; no key or credential is
-copied from another repository.
+shared with another repository. The schema refresh runs daily and the Mise-lock
+refresh runs weekly; their workflow files are authoritative for the exact UTC
+schedules. Both also support manual dispatch and publish pull requests that
+auto-merge only after the protected test matrix passes.
 
 Run both public-boundary scans with this repository's allowlist:
 
