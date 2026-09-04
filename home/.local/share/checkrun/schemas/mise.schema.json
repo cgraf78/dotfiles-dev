@@ -1248,6 +1248,23 @@
           "description": "Require lockfile URLs to be present during installation.",
           "type": "boolean"
         },
+        "locked_scopes": {
+          "default": [
+            "global",
+            "project",
+            "system"
+          ],
+          "description": "Config scopes where invocation-wide locked mode is enforced.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "project",
+              "global",
+              "system"
+            ]
+          }
+        },
         "locked_verify_provenance": {
           "default": false,
           "description": "Re-verify provenance at install time even when the lockfile already has provenance.",
@@ -1735,6 +1752,22 @@
               "default": false,
               "description": "Deny filesystem writes by default for `mise run` and `mise exec`.",
               "type": "boolean"
+            }
+          }
+        },
+        "self_update": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "api_url": {
+              "default": "https://api.github.com",
+              "description": "GitHub API base URL used by `mise self-update`.",
+              "type": "string"
+            },
+            "repository": {
+              "default": "jdx/mise",
+              "description": "GitHub repository used by `mise self-update`.",
+              "type": "string"
             }
           }
         },
@@ -4723,6 +4756,7 @@
                         "type": "string",
                         "enum": [
                           "allow",
+                          "limit",
                           "deny",
                           "reject"
                         ],
@@ -4805,6 +4839,13 @@
                           "type": "string"
                         }
                       },
+                      "requires": {
+                        "type": "array",
+                        "description": "write Requires dependencies in the [Unit] section",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "exec_start": {
                         "type": "string",
                         "minLength": 1,
@@ -4855,6 +4896,24 @@
                         "additionalProperties": {
                           "type": "string"
                         }
+                      },
+                      "environment_file": {
+                        "type": "array",
+                        "description": "write one EnvironmentFile entry per path in the [Service] section",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "nice": {
+                        "type": "integer",
+                        "minimum": -20,
+                        "maximum": 19,
+                        "description": "write Nice in the [Service] section"
+                      },
+                      "umask": {
+                        "type": "string",
+                        "pattern": "^(?:[0-7]{1,3}|0[0-7]{3})$",
+                        "description": "write UMask in the [Service] section"
                       },
                       "working_directory": {
                         "type": "string",
@@ -5047,6 +5106,27 @@
                                   "minProperties": 1
                                 }
                               }
+                            },
+                            {
+                              "required": [
+                                "environment_file"
+                              ],
+                              "properties": {
+                                "environment_file": {
+                                  "type": "array",
+                                  "minItems": 1
+                                }
+                              }
+                            },
+                            {
+                              "required": [
+                                "nice"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "umask"
+                              ]
                             },
                             {
                               "required": [
