@@ -61,7 +61,7 @@ _assert_contains 'Dev layer preserves LazyVim dotfile support' \
   "$dev_extras_content"
 _assert_not_contains 'Custom plugin specs do not import LazyVim extras too late' \
   'lazyvim.plugins.extras.' \
-  "$(rg --follow -n 'lazyvim\.plugins\.extras\.' "$HOME/.config/nvim/lua/plugins" || true)"
+  "$(grep -R -n 'lazyvim\.plugins\.extras\.' "$HOME/.config/nvim/lua/plugins" || true)"
 _assert_file_missing 'Retired filename-ordered dev overrides are absent' \
   "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"
 _assert_file_missing 'Retired filename-ordered Mason policy is absent' \

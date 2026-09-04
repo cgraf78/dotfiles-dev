@@ -394,8 +394,8 @@ PY
 _assert_exit 'Actual Checkrun capabilities and registry match the shared fixture' 0 "$?"
 
 # Load the production hook against the active composed HOME. The helper is
-# inherited from base when installed and supplied by the D3 owner harness
-# only for standalone unit execution.
+# inherited from base when installed and supplied by the standalone owner
+# harness only for standalone unit execution.
 # shellcheck disable=SC1090
 if . "$HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"; then
   _pass 'Installed workflow test loads the composed Dot merge API'

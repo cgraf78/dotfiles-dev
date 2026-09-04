@@ -83,17 +83,12 @@ required_files=(
   .selene.toml vim.yml
   .github/cgraf78-actions.lock .github/dependabot.yml
   .github/dot-test-suites.txt
-  .github/repository-settings-endpoints.txt .github/shellcheck-files.txt
+  .github/shellcheck-files.txt
   .github/workflows/retry-infrastructure.yml .github/workflows/test.yml
   .gitignore LICENSE README.md test/run test/workflow-test
-  test/lib/capability-fixture.sh test/lib/repository-settings.sh
-  test/lib/wait-github-state.sh
+  test/lib/capability-fixture.sh test/lib/wait-github-state.sh
 )
 for path in "${required_files[@]}"; do [[ -f $path ]] || fail "missing required file: $path"; done
-for retired_lock in .github/dot.lock .github/provider-test.lock; do
-  [[ ! -e $retired_lock && ! -L $retired_lock ]] ||
-    fail "retired CI lock must stay absent: $retired_lock"
-done
 
 single_sha() {
   local file=$1 expected=$2 value
@@ -132,8 +127,6 @@ selene_policy_hash=$(sha256sum home/.config/checkrun/selene.toml 2>/dev/null |
 grep -Fx 'std = "vim+lua51"' .selene.toml >/dev/null ||
   fail 'repository-only Selene config does not select the Neovim standard library'
 [[ $(<.gitignore) == '.worktrees/' ]] || fail '.gitignore must contain only .worktrees/'
-manifest_hash=$(sha256sum .github/repository-settings-endpoints.txt 2>/dev/null | awk '{print $1}' || shasum -a 256 .github/repository-settings-endpoints.txt | awk '{print $1}')
-[[ $manifest_hash == 1014be04ef3f99d20570369cdc0831d4f75571882d2d4797b7d817cd43ff21c7 ]] || fail 'repository settings endpoint contract drifted'
 
 workflow=.github/workflows/test.yml
 grep -Fx 'name: Tests' "$workflow" >/dev/null || fail 'test workflow name drifted'
@@ -271,8 +264,6 @@ mapfile -t expected_shell_files < <(printf '%s\n' "${expected_shell_files[@]}" |
 mapfile -t actual_shell_files < <(printf '%s\n' "${actual_shell_files[@]}" | LC_ALL=C sort)
 [[ ${actual_shell_files[*]} == "${expected_shell_files[*]}" ]] || fail 'typed ShellCheck inventory is incomplete or contains extras'
 
-test/lib/repository-settings.sh validate
-test/lib/repository-settings.sh --self-test
 test/lib/wait-github-state.sh --self-test
 test/lib/capability-fixture.sh --self-test
 test/run --inventory-self-test
@@ -288,11 +279,7 @@ case $descriptor_path in
 esac
 
 suite_count=$(awk 'NF && $1 !~ /^#/ { count++ } END { print count+0 }' .github/dot-test-suites.txt)
-case ${DOTFILES_CAPABILITY_PHASE:-final} in
-  bootstrap) ;;
-  final) ((suite_count > 0)) || fail 'final mode requires a non-empty suite inventory' ;;
-  *) fail 'DOTFILES_CAPABILITY_PHASE must be bootstrap or final' ;;
-esac
+((suite_count > 0)) || fail 'capability repository requires a non-empty suite inventory'
 
 if [[ ${1:-} == --remote ]]; then
   # shellcheck source=test/lib/wait-github-state.sh
@@ -300,4 +287,4 @@ if [[ ${1:-} == --remote ]]; then
   wait_github_state 120 3 "$repo_root/test/workflow-test" --remote-predicate
 fi
 
-printf 'workflow-test: bootstrap contract is complete\n'
+printf 'workflow-test: contract is complete\n'

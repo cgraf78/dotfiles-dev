@@ -28,10 +28,9 @@ estimate.
 ## Repository maintenance
 
 The schema and Mise-lock refresh workflows require a newly generated deploy key
-scoped only to this repository. Provisioning that key and configuring its
-private half as the `DOTFILES_DEV_MAINTENANCE_DEPLOY_KEY` Actions secret is a
-Phase B pre-merge prerequisite; no key or credential is copied from another
-repository.
+scoped only to this repository. Configure its private half as the
+`DOTFILES_DEV_MAINTENANCE_DEPLOY_KEY` Actions secret; no key or credential is
+copied from another repository.
 
 Run both public-boundary scans with this repository's allowlist:
 
