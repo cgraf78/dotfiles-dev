@@ -83,7 +83,6 @@ program	home/.local/lib/dotfiles/tests/vscode-extensions-test
 program	home/.local/lib/dotfiles/tests/vscode-sley-test
 program	home/.local/lib/dotfiles/tests/workflow-consistency-test
 program	test/lib/capability-fixture.sh
-program	test/lib/repository-settings.sh
 program	test/lib/wait-github-state.sh
 program	test/run
 program	test/workflow-test
