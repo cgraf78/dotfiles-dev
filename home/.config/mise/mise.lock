@@ -232,89 +232,89 @@ url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildif
 url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132233"
 
 [[tools."aqua:biomejs/biome"]]
-version = "2.5.11"
+version = "2.5.12"
 backend = "aqua:biomejs/biome"
 
 [tools."aqua:biomejs/biome"."platforms.linux-arm64"]
-checksum = "sha256:b1e422c4cf5de788553f612b3952deadd6cb7669b35659197af14c4b1f763fab"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854961"
+checksum = "sha256:4c1c9908e5cfd5d327e4ac3205baa13b1d3dfd24f184ed289a0c0ef1b2e0274f"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-linux-arm64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381059"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.linux-arm64-musl"]
-checksum = "sha256:d279c5e36af85d712a906284af0d2dd43d4baee8a36e2139f072c891fbeacfd9"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854959"
+checksum = "sha256:8de4de4b3225f89d5596ccb85a071aac2173d8af2a5f21f2fbc3837e9765d455"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-linux-arm64-musl"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381053"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.linux-x64"]
-checksum = "sha256:629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
+checksum = "sha256:e2475688799c9e78dd25ba5cf676676ffe74caf182a35082b1d22039151fdf63"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-linux-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381054"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.linux-x64-musl"]
-checksum = "sha256:6ae4389db2e140734af826963e677a6a78dca9690bb089127aef50d8f9edbadb"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854967"
+checksum = "sha256:0c4da931bcfd70be34e49aba3296ab0c51d177ae55da67190a4371bd1c89d0ad"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-linux-x64-musl"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381061"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.macos-arm64"]
-checksum = "sha256:7a067b00fdf8eeefb7f5f5f247b7dac1bb23adfeaea380a91293353b8e2eba2b"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-darwin-arm64"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854963"
+checksum = "sha256:0e8d513eb6c612236b47ccf0e218ac3917d863d41f853c65c38410774daa26ed"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-darwin-arm64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381062"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.macos-x64"]
-checksum = "sha256:74f6d1845e5c1a47ebafd42ba4a90ed174b4bb7a669d70acc1fd925894dbb168"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-darwin-x64"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854965"
+checksum = "sha256:0680097ec839fadc82451634680e39b9b7e48cc4334ef920525850b4d8f54a8b"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-darwin-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381057"
 provenance = "github-attestations"
 
 [tools."aqua:biomejs/biome"."platforms.windows-x64"]
-checksum = "sha256:8bdf679275458a444f7befb8dacc38001625645cc498facf3cc114d77239f1cd"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-win32-x64.exe"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854960"
+checksum = "sha256:59f88d04ab25f8634639c337ef70a79927504b6379a1ec3ff4e87f7c15dd5dce"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.12/biome-win32-x64.exe"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/542381049"
 provenance = "github-attestations"
 
 [[tools."aqua:crate-ci/typos"]]
-version = "1.50.0"
+version = "1.50.1"
 backend = "aqua:crate-ci/typos"
 
 [tools."aqua:crate-ci/typos"."platforms.linux-arm64"]
-checksum = "sha256:a520651f52199efc91a27aa2b82362e93d50e7d96386d3d48b28c2ad06b9ae4e"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534125470"
+checksum = "sha256:a48feb58c517977ca953e634507c72819d64df8717c33ced3e43868d174fd39e"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539857357"
 
 [tools."aqua:crate-ci/typos"."platforms.linux-arm64-musl"]
-checksum = "sha256:a520651f52199efc91a27aa2b82362e93d50e7d96386d3d48b28c2ad06b9ae4e"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534125470"
+checksum = "sha256:a48feb58c517977ca953e634507c72819d64df8717c33ced3e43868d174fd39e"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539857357"
 
 [tools."aqua:crate-ci/typos"."platforms.linux-x64"]
-checksum = "sha256:a1497c9626ba0bab731b3e37c12ac9051bbfa2a253463d4d574c28f190b5497b"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534125001"
+checksum = "sha256:edf0545109aee6a22751d04ddecb97c45be47d3aa0409564fb895eeeace91b1e"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539858793"
 
 [tools."aqua:crate-ci/typos"."platforms.linux-x64-musl"]
-checksum = "sha256:a1497c9626ba0bab731b3e37c12ac9051bbfa2a253463d4d574c28f190b5497b"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534125001"
+checksum = "sha256:edf0545109aee6a22751d04ddecb97c45be47d3aa0409564fb895eeeace91b1e"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539858793"
 
 [tools."aqua:crate-ci/typos"."platforms.macos-arm64"]
-checksum = "sha256:3c9e3cdc20fbed3812c1f2060650398e88af0c0a251bbe069398752dd71513ed"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534128210"
+checksum = "sha256:2c940734b44b6e199e165278b662b7e17c68f068471a2a8a5e491ce635414ae6"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539861019"
 
 [tools."aqua:crate-ci/typos"."platforms.macos-x64"]
-checksum = "sha256:ab88faa54ab9ceac55c6fc2a9841ceab8ef883ed46522dbcbde2ec7a110350b0"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534129540"
+checksum = "sha256:b31ccf2f21154b2bc8d2a84f395f746106edda0feec4817fbecdb12216df53bd"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539861041"
 
 [tools."aqua:crate-ci/typos"."platforms.windows-x64"]
-checksum = "sha256:a48abe229e6fd48729ee891b2c410c41bfa9dc15ca77815e723c4b66c311c53c"
-url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534129526"
+checksum = "sha256:8740867a0d9e44a62f0803e37a669ec3c6cd17ab63cd49d00e14a96d3e03ccc3"
+url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539862554"
 
 [[tools."aqua:golangci/golangci-lint"]]
 version = "2.13.2"
@@ -643,38 +643,38 @@ url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/3849249
 provenance = "github-attestations"
 
 [[tools."aqua:rust-lang/rust-analyzer"]]
-version = "2026-08-24"
+version = "2026-08-31"
 backend = "aqua:rust-lang/rust-analyzer"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.linux-arm64"]
-checksum = "sha256:3463f9115c725fc5dfb002431833ec83d1f1f9c4c35b76ad5f47b92c58a521f1"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-aarch64-unknown-linux-gnu.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179314"
+checksum = "sha256:d7617a9a7760cb615ae2d6e3b3a9456a0719959daad766fdda45bf58ec13661d"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-aarch64-unknown-linux-gnu.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537512920"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.linux-x64"]
-checksum = "sha256:c4d409690b98d84ce98174829362a59214825d72304fe2504f4b906a116b51fe"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-x86_64-unknown-linux-gnu.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179627"
+checksum = "sha256:a775f9edb543bb0c077da339b783e89446092986cde921c9d8e1733b091080c6"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-x86_64-unknown-linux-gnu.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537513235"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.linux-x64-musl"]
-checksum = "sha256:8f495b8b68a91c4335789f47f020584a2309e62ff71aae874816f396b141a8dd"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-x86_64-unknown-linux-musl.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179665"
+checksum = "sha256:bdae6a5aebeffff92a7e474e9c8763f12fd9fab935f66d0bd487c7f1fbddf239"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-x86_64-unknown-linux-musl.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537513255"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.macos-arm64"]
-checksum = "sha256:5f4557c2ea4d62f80f1ffeea2646d0d56fab7172a0db11f3065c4d246b763989"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-aarch64-apple-darwin.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179278"
+checksum = "sha256:5de5c20b8b49bdc9339ef537b4029af7f97214fb88d6fc86af57ab9344467625"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-aarch64-apple-darwin.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537512875"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.macos-x64"]
-checksum = "sha256:822cc4369562fc2ed26d1cf3953ef93927d8fdda4302d82e2eec407e2734eefd"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-x86_64-apple-darwin.gz"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179576"
+checksum = "sha256:a3b3e06da42b4df781891359ccbb57d6a84f311f0506de5f98dd0553460b1f8d"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-x86_64-apple-darwin.gz"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537513186"
 
 [tools."aqua:rust-lang/rust-analyzer"."platforms.windows-x64"]
-checksum = "sha256:f6d80045e6f475606f62d294fa3b618304fd24d2ff86160495440f23d5f7fcdb"
-url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-24/rust-analyzer-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/527179606"
+checksum = "sha256:44106ca5d62e8eb2d6597f8572b5df9dad9799b53630f69114234eeebf8bc899"
+url = "https://github.com/rust-lang/rust-analyzer/releases/download/2026-08-31/rust-analyzer-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rust-lang/rust-analyzer/releases/assets/537513202"
 
 [[tools."aqua:tamasfe/taplo"]]
 version = "0.10.0"
@@ -709,43 +709,43 @@ url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-windows-x
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257323062"
 
 [[tools."aqua:zizmorcore/zizmor"]]
-version = "1.29.0"
+version = "1.30.0"
 backend = "aqua:zizmorcore/zizmor"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-arm64"]
-checksum = "sha256:415eaa7c0a06479a701b8e44a3e812c1047decc848ec4bede7bd6bbf49f22d20"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263143"
+checksum = "sha256:018a024d6b6d09733b07f6ef42838d984c23ec04bc9b2acd55f7d67826aeafe5"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.0/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/537081734"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-arm64-musl"]
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-x64"]
-checksum = "sha256:dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263145"
+checksum = "sha256:ec8c95cd800845abb9bbc5f377ec7c57d2eb8e2386a00a201d3a74ee4092e5ed"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.0/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/537081732"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-x64-musl"]
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.macos-arm64"]
-checksum = "sha256:720322fade9e83a9c7953944c438f2ba942636b86b96a8f0e6b15ce94c8a6b6f"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263141"
+checksum = "sha256:c9c5d83730efb86f2cd71b487605c00a4d63903e4f9458485ed5eac3b1924ab1"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.0/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/537081737"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.macos-x64"]
-checksum = "sha256:648b72ab9941a7f2a8d65d7b68a8e76cef789538c8df3a3950384d38423375b0"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263144"
+checksum = "sha256:343c85c8f709edf14bf3c8781d53574975ecbb2d23c80ed1eab4932ab0a72343"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.0/zizmor-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/537081736"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.windows-x64"]
-checksum = "sha256:68a6bc6888f10bf0d53658c75885e7c1b7a0588d4c1fbc3f0ca280ad7324bf06"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263142"
+checksum = "sha256:a2fcf298b84d3d8498a3d718bb63f0abe26823bf68a11f0f439620f8f2f878f0"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.0/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/537081735"
 provenance = "github-attestations"
 
 [[tools."github:kristoff-it/superhtml"]]
@@ -831,5 +831,5 @@ version = "0.5.4"
 backend = "ubi:reteps/dockerfmt"
 
 [[tools."ubi:rvben/rumdl"]]
-version = "0.2.62"
+version = "0.2.64"
 backend = "ubi:rvben/rumdl"
