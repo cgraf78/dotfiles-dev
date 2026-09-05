@@ -1491,6 +1491,24 @@
             "type": "string"
           }
         },
+        "packslip": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "exec": {
+              "default": false,
+              "description": "Run a tool's own command at install time to produce a resource its packslip offers only as an exec entry, such as an agent skill.",
+              "type": "boolean"
+            },
+            "stampers": {
+              "description": "Hosts whose signed stamp lists say which packslip releases may be installed, each with its pin.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "paranoid": {
           "description": "Enables extra-secure behavior.",
           "type": "boolean"
@@ -1790,6 +1808,32 @@
         "silent": {
           "description": "Suppress all `mise run|watch` output except errors—including what tasks output.",
           "type": "boolean"
+        },
+        "skills": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "properties": {
+            "auto_sync": {
+              "default": false,
+              "description": "Link the active tools' agent skills into the project after `mise install` and `mise use`.",
+              "type": "boolean"
+            },
+            "dir": {
+              "default": ".claude/skills",
+              "description": "Where `mise skills sync` links skills: a path under the project root, or under the home directory with `--global`.",
+              "type": "string"
+            },
+            "fetch": {
+              "default": true,
+              "description": "Fetch the agent skills a tool's packslip declares when installing it.",
+              "type": "boolean"
+            },
+            "prune": {
+              "default": false,
+              "description": "Remove links mise made for skills that are no longer active when syncing.",
+              "type": "boolean"
+            }
+          }
         },
         "slsa": {
           "default": true,
@@ -4001,6 +4045,12 @@
         "bun": {
           "$ref": "#/$defs/deps_provider"
         },
+        "aube": {
+          "$ref": "#/$defs/deps_provider"
+        },
+        "deno": {
+          "$ref": "#/$defs/deps_provider"
+        },
         "go": {
           "$ref": "#/$defs/deps_provider"
         },
@@ -4023,6 +4073,9 @@
           "$ref": "#/$defs/deps_provider"
         },
         "flutter": {
+          "$ref": "#/$defs/deps_provider"
+        },
+        "git-submodule": {
           "$ref": "#/$defs/deps_provider"
         }
       },
@@ -4147,6 +4200,10 @@
                 "type": "string",
                 "description": "source file or directory"
               },
+              "content": {
+                "type": "string",
+                "description": "literal inline file content; alternative to source"
+              },
               "mode": {
                 "type": "string",
                 "description": "how to apply a whole-file source to the target; omitted uses dotfiles.default_mode",
@@ -4197,7 +4254,29 @@
                 "type": "string",
                 "description": "comment prefix for edit marker lines; inferred from the file extension when omitted"
               }
-            }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "content"
+                ],
+                "properties": {
+                  "source": false,
+                  "manifest": false,
+                  "mode": false,
+                  "exclude": false,
+                  "block": false,
+                  "line": false,
+                  "template": false,
+                  "comment": false
+                }
+              },
+              {
+                "properties": {
+                  "content": false
+                }
+              }
+            ]
           }
         ]
       }
@@ -4389,6 +4468,15 @@
                   "adopt": {
                     "type": "boolean",
                     "description": "adopt an existing identical brew-cask app artifact instead of replacing it"
+                  },
+                  "state": {
+                    "type": "string",
+                    "description": "desired package state; only pacman currently supports absent",
+                    "enum": [
+                      "present",
+                      "absent"
+                    ],
+                    "default": "present"
                   }
                 },
                 "additionalProperties": false
