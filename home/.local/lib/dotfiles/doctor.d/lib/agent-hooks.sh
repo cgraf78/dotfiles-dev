@@ -87,16 +87,30 @@ _dr_check_grok_compat() {
     return 0
   fi
 
-  # Structured keys, not display text: Grok defaults these cells to true when
-  # the section is absent, so "hooks = false" as a substring is not enough.
+  # Structured keys, not display text. Avoid tomllib: CentOS Stream 9 and some
+  # macOS CI Pythons are 3.9. Parse only [compat.claude] boolean assignments.
   status=0
   python3 - "$cfg" "$expect_hooks" "$expect_rules" <<'PY' || status=$?
 import sys
-import tomllib
 from pathlib import Path
 
-data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-claude = data.get("compat", {}).get("claude", {})
+claude = {}
+in_section = False
+for raw in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("["):
+        in_section = line == "[compat.claude]"
+        continue
+    if not in_section or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if value in ("true", "false"):
+        claude[key] = value == "true"
+
 expect_hooks = sys.argv[2] == "1"
 expect_rules = sys.argv[3] == "1"
 ok = True
