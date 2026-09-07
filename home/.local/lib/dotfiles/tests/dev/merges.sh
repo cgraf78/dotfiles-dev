@@ -5002,6 +5002,152 @@ JSON
   rm -rf "$TEST_HOME/.config/dot/merge-hooks.d/claude/settings.d"
   mkdir -p "$TEST_HOME/.config/dot/merge-hooks.d/claude/settings.d"
 
+  echo "=== Grok config merge hook ==="
+
+  grok_config_home="$TEST_HOME/grok-config-merge-home"
+  grok_config_dst="$grok_config_home/.grok/config.toml"
+  grok_config_user_hooks="$grok_config_home/.grok/hooks/user.json"
+  grok_config_native_hooks="$grok_config_home/.grok/hooks/agentguard.json"
+  grok_config_native_rules="$grok_config_home/.grok/rules/agent-rules.md"
+  grok_config_family="$grok_config_home/.config/dot/merge-hooks.d/grok-config/config.d"
+  mkdir -p \
+    "$grok_config_family" \
+    "$grok_config_home/.grok/hooks" \
+    "$grok_config_home/.grok/rules"
+  cp "$REAL_HOME/.config/dot/merge-hooks.d/grok-config/config.d/10-compat.toml" \
+    "$grok_config_family/10-compat.toml"
+
+  _grok_config_seed_toml() {
+    cat >"$grok_config_dst" <<'TOML'
+[cli]
+installer = "internal"
+
+[marketplace]
+default_skills_installs_purged = true
+
+[[marketplace.sources]]
+name = "xAI Official"
+git = "https://example.test/marketplace.git"
+
+[ui]
+permission_mode = "always-approve"
+
+[compat.claude]
+hooks = true
+skills = true
+TOML
+  }
+
+  _grok_config_probe() {
+    python3 - "$grok_config_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+claude = data.get("compat", {}).get("claude", {})
+sources = data["marketplace"]["sources"]
+print(
+    "|".join(
+        [
+            str(claude.get("hooks", "<unset>")).lower(),
+            str(claude.get("rules", "<unset>")).lower(),
+            str(claude.get("agents", "<unset>")).lower(),
+            str(claude.get("skills", "<unset>")).lower(),
+            data["ui"]["permission_mode"],
+            sources[0]["name"],
+        ]
+    )
+)
+PY
+  }
+
+  _run_grok_config_merge() (
+    unset -f merge 2>/dev/null
+    # shellcheck source=/dev/null
+    . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/grok-config.sh"
+    HOME="$grok_config_home" merge
+  )
+
+  grok_config_gate_output=$(
+    # shellcheck disable=SC2329 # Invoked by the sourced merge hook.
+    _dot_tool_present() { return 1; }
+    export -f _dot_tool_present
+    printf '{"keep":true}\n' >"$grok_config_user_hooks"
+    printf 'theme="dark"\n' >"$grok_config_dst"
+    _run_grok_config_merge 2>&1
+  )
+  grok_config_gate_status=$?
+  _assert_exit "Grok config merge: absent grok is a successful no-op" \
+    0 "$grok_config_gate_status"
+  _assert_eq "Grok config merge: absent grok emits no output" \
+    "" "$grok_config_gate_output"
+  _assert_eq "Grok config merge: absent grok preserves config.toml" \
+    'theme="dark"' "$(cat "$grok_config_dst")"
+
+  grok_yq_bin=$(_merge_hook_mikefarah_yq 2>/dev/null || true)
+  if [[ -n $grok_yq_bin ]]; then
+    _grok_config_seed_toml
+    printf '{"keep":true}\n' >"$grok_config_user_hooks"
+    grok_config_output=$(_run_grok_config_merge 2>&1)
+    grok_config_status=$?
+    _assert_exit "Grok config merge: no native targets is a no-op" \
+      0 "$grok_config_status"
+    _assert_eq "Grok config merge: no native targets leaves Claude-compat enabled" \
+      "true|<unset>|<unset>|true|always-approve|xAI Official" \
+      "$(_grok_config_probe)"
+
+    printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
+    grok_config_output=$(_run_grok_config_merge 2>&1)
+    grok_config_status=$?
+    _assert_exit "Grok config merge: native hooks only refreshes config.toml" \
+      0 "$grok_config_status"
+    _assert_contains "Grok config merge: logs the Grok config layer" \
+      "Grok config" "$grok_config_output"
+    _assert_eq "Grok config merge: native hooks only disables hooks" \
+      "false|<unset>|<unset>|true|always-approve|xAI Official" \
+      "$(_grok_config_probe)"
+
+    _grok_config_seed_toml
+    rm -f "$grok_config_native_hooks"
+    printf '# grok rules\n' >"$grok_config_native_rules"
+    _run_grok_config_merge >/dev/null
+    _assert_eq "Grok config merge: native rules only disables rules/agents" \
+      "true|false|false|true|always-approve|xAI Official" \
+      "$(_grok_config_probe)"
+
+    _grok_config_seed_toml
+    printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
+    printf '{"keep":true}\n' >"$grok_config_user_hooks"
+    grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    _run_grok_config_merge >/dev/null
+    _assert_eq "Grok config merge: both native targets disable hooks/rules/agents" \
+      "false|false|false|true|always-approve|xAI Official" \
+      "$(_grok_config_probe)"
+    grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
+      "$grok_config_hooks_hash" "$grok_config_hooks_after"
+
+    grok_config_again_status=0
+    _run_grok_config_merge >/dev/null || grok_config_again_status=$?
+    _assert_exit "Grok config merge: second run is idempotent" \
+      0 "$grok_config_again_status"
+    _assert_eq "Grok config merge: second run keeps the same Claude-compat cells" \
+      "false|false|false|true|always-approve|xAI Official" \
+      "$(_grok_config_probe)"
+
+    printf 'not toml {' >"$grok_config_dst"
+    grok_config_corrupt_output=$(_run_grok_config_merge 2>&1)
+    grok_config_corrupt_status=$?
+    _assert_exit "Grok config merge: preserves a corrupt destination" \
+      1 "$grok_config_corrupt_status"
+    _assert_contains "Grok config merge: reports a corrupt destination" \
+      "corrupt" "$grok_config_corrupt_output"
+    _assert_eq "Grok config merge: corrupt destination bytes are unchanged" \
+      "not toml {" "$(cat "$grok_config_dst")"
+  else
+    echo "SKIP: Grok config merge tests require mikefarah yq"
+  fi
+  unset -f _run_grok_config_merge _grok_config_seed_toml _grok_config_probe merge 2>/dev/null
+
   # ---------------------------------------------------------------------------
   # Tests: codex merge hook
   # ---------------------------------------------------------------------------
