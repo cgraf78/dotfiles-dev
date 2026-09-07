@@ -15,7 +15,8 @@ XDG_CACHE_HOME=$HOME/.cache
 export HOME GIT_CONFIG_GLOBAL XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME \
   XDG_CACHE_HOME
 mkdir -p "$HOME/.config/opencode/plugins" "$HOME/.claude" "$HOME/.gemini" \
-  "$HOME/.config/muse" "$HOME/.codex" "$HOME/bin" "$HOME/provider"
+  "$HOME/.grok/hooks" "$HOME/.config/muse" "$HOME/.codex" "$HOME/bin" \
+  "$HOME/provider"
 
 git config --global user.name 'Fixture User'
 # shellcheck disable=SC2088 # Git stores this portable include literally.
@@ -65,10 +66,11 @@ def owned($agent): type == "string" and contains("AGENTGUARD_NAME=" + $agent + "
   .value = [.value[] | .hooks = [.hooks[] | select((.command | owned($agent)) | not)] | select((.hooks | length) > 0)] |
   select((.value | length) > 0))) | if (.hooks | length) == 0 then del(.hooks) else . end
 EOF
-for agent in claude gemini muse; do
+for agent in claude gemini grok muse; do
   case $agent in
     claude) target=$HOME/.claude/settings.json ;;
     gemini) target=$HOME/.gemini/settings.json ;;
+    grok) target=$HOME/.grok/hooks/agentguard.json ;;
     muse) target=$HOME/.config/muse/settings.json ;;
   esac
   printf '{"keep":true,"hooks":{"Event":[{"hooks":[{"command":"env AGENTGUARD_NAME=%s x agent-hook-run"},{"command":"user-hook"}]}]}}\n' \
@@ -174,7 +176,7 @@ else
   _fail 'profile deactivation did not unregister gstack integrations'
 fi
 for target in "$HOME/.claude/settings.json" "$HOME/.gemini/settings.json" \
-  "$HOME/.config/muse/settings.json"; do
+  "$HOME/.grok/hooks/agentguard.json" "$HOME/.config/muse/settings.json"; do
   if grep -Fq 'AGENTGUARD_NAME=' "$target"; then
     _fail "profile deactivation retained AgentGuard hooks in $target"
   else
@@ -200,13 +202,13 @@ _assert_eq 'profile deactivation preserves user Codex hooks' user-hook \
 printf 'unmanaged\n' >"$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
 before_repeat=$(git hash-object --no-filters -- \
   "$HOME/.gitconfig" "$HOME/.hgrc" "$HOME/.claude/settings.json" \
-  "$HOME/.gemini/settings.json" "$HOME/.config/muse/settings.json" \
-  "$HOME/.codex/config.toml")
+  "$HOME/.gemini/settings.json" "$HOME/.grok/hooks/agentguard.json" \
+  "$HOME/.config/muse/settings.json" "$HOME/.codex/config.toml")
 deactivate
 after_repeat=$(git hash-object --no-filters -- \
   "$HOME/.gitconfig" "$HOME/.hgrc" "$HOME/.claude/settings.json" \
-  "$HOME/.gemini/settings.json" "$HOME/.config/muse/settings.json" \
-  "$HOME/.codex/config.toml")
+  "$HOME/.gemini/settings.json" "$HOME/.grok/hooks/agentguard.json" \
+  "$HOME/.config/muse/settings.json" "$HOME/.codex/config.toml")
 _assert_eq 'profile deactivation is idempotent' "$before_repeat" "$after_repeat"
 _assert_eq 'profile deactivation preserves an unmanaged OpenCode file' \
   unmanaged "$(<"$HOME/.config/opencode/plugins/dotfiles-agentguard.js")"

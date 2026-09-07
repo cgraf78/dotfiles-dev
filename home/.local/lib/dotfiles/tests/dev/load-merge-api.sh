@@ -475,6 +475,7 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
       gh) _dot_tool_any_command gh ;;
       git) _dot_tool_any_command git ;;
       grafhome-ca) _dot_tool_any_command grafhome-ca ;;
+      grok) _dot_tool_any_command grok ;;
       gstack) _dot_tool_any_command gstack-register ;;
       hive-memory) _dot_tool_any_command hm ;;
       ignore) _dot_tool_any_command rg fd fdfind ;;

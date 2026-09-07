@@ -52,7 +52,7 @@ CMP
   _run_agent_cli_gate_for_test() (
     local agent="$1" cli_present="$2"
 
-    unset -f merge codex claude gemini opencode muse 2>/dev/null
+    unset -f merge codex claude gemini grok opencode muse 2>/dev/null
     # shellcheck source=/dev/null
     . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/$agent.sh"
     case "$agent" in
@@ -60,7 +60,7 @@ CMP
         # shellcheck disable=SC2329 # Invoked indirectly by the sourced hook.
         dot_codex_config_merge() { : >"$agent_gate_marker"; }
         ;;
-      claude | gemini | muse)
+      claude | gemini | grok | muse)
         # shellcheck disable=SC2329 # Invoked indirectly by the sourced hook.
         _merge_hook_jq_available() {
           : >"$agent_gate_marker"
@@ -83,11 +83,12 @@ CMP
     HOME="$agent_gate_home" PATH="$agent_gate_empty_path" merge
   )
 
-  for agent in codex claude gemini opencode muse; do
+  for agent in codex claude gemini grok opencode muse; do
     case "$agent" in
       codex) agent_gate_target="$agent_gate_home/.codex/config.toml" ;;
       claude) agent_gate_target="$agent_gate_home/.claude/settings.json" ;;
       gemini) agent_gate_target="$agent_gate_home/.gemini/settings.json" ;;
+      grok) agent_gate_target="$agent_gate_home/.grok/hooks/agentguard.json" ;;
       opencode)
         agent_gate_target="$agent_gate_home/.config/opencode/plugins/dotfiles-agentguard.js"
         ;;
@@ -270,6 +271,7 @@ OPENCODE_PLUGIN
     "$agentguard_fixture/_shared" \
     "$agentguard_fixture/claude" \
     "$agentguard_fixture/gemini" \
+    "$agentguard_fixture/grok" \
     "$agentguard_fixture/muse"
 
   # These fixtures intentionally use made-up events and commands. This suite
@@ -277,7 +279,7 @@ OPENCODE_PLUGIN
   # to provider-owned reconciliation, commits its result atomically, and then
   # applies local policy. AgentGuard's own suite owns the real command-ownership
   # predicate and per-agent vocabulary.
-  for json_agent in claude gemini muse; do
+  for json_agent in claude gemini grok muse; do
     printf '{"hooks":{"ProviderEvent":[{"hooks":[{"type":"command","command":"provider-%s-v2"}]}]}}\n' \
       "$json_agent" >"$agentguard_fixture/$json_agent/hooks.json"
   done
@@ -321,10 +323,11 @@ JQ
     HOME="$home" merge
   )
 
-  for json_agent in claude gemini muse; do
+  for json_agent in claude gemini grok muse; do
     case "$json_agent" in
       claude) json_target="$json_agent_home/.claude/settings.json" ;;
       gemini) json_target="$json_agent_home/.gemini/settings.json" ;;
+      grok) json_target="$json_agent_home/.grok/hooks/agentguard.json" ;;
       muse) json_target="$json_agent_home/.config/muse/settings.json" ;;
     esac
     mkdir -p "${json_target%/*}"
@@ -368,14 +371,16 @@ JSON
   rm -f \
     "$agentguard_fixture/claude/hooks.json" \
     "$agentguard_fixture/gemini/hooks.json" \
+    "$agentguard_fixture/grok/hooks.json" \
     "$agentguard_fixture/muse/hooks.json"
-  for json_agent in claude gemini muse; do
+  for json_agent in claude gemini grok muse; do
     case "$json_agent" in
       claude) json_target="$json_agent_home/.claude/settings.json" ;;
       gemini) json_target="$json_agent_home/.gemini/settings.json" ;;
+      grok) json_target="$json_agent_home/.grok/hooks/agentguard.json" ;;
       muse) json_target="$json_agent_home/.config/muse/settings.json" ;;
     esac
-    if [[ "$json_agent" != "gemini" ]]; then
+    if [[ "$json_agent" != "gemini" && "$json_agent" != "grok" ]]; then
       json_last_good="$json_agent_home/$json_agent-last-good.json"
       cp "$json_target" "$json_last_good"
       rm -f "$json_target"
@@ -390,11 +395,12 @@ JSON
       "AgentGuard $json_agent integration unavailable" "$json_merge_output"
   done
   _assert_eq "agent consumers: missing provider assets preserve live native hooks" \
-    "provider-claude-v2|provider-gemini-v2|provider-muse-v2" \
+    "provider-claude-v2|provider-gemini-v2|provider-grok-v2|provider-muse-v2" \
     "$(
       jq -r '.hooks.ProviderEvent[0].hooks[0].command' \
         "$json_agent_home/.claude/settings.json" \
         "$json_agent_home/.gemini/settings.json" \
+        "$json_agent_home/.grok/hooks/agentguard.json" \
         "$json_agent_home/.config/muse/settings.json" |
         paste -sd '|' -
     )"
