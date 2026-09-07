@@ -91,6 +91,24 @@ PLUGIN
   _assert_contains 'Doctor accepts the managed OpenCode plugin' \
     'OpenCode AgentGuard plugin installed' "$result"
 
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
+    DOT_GROK_COMMAND=missing-grok-binary \
+    _doctor_records _dr_check_grok_agentguard)
+  _assert_not_contains 'Doctor skips Grok AgentGuard when grok is absent' \
+    'Grok AgentGuard' "$result"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$doctor_bin/grok"
+  chmod +x "$doctor_bin/grok"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_agentguard)
+  _assert_contains 'Doctor warns when Grok AgentGuard hooks are absent' \
+    'Grok AgentGuard hooks missing' "$result"
+  mkdir -p "$doctor_home/.grok/hooks"
+  printf '{}\n' >"$doctor_home/.grok/hooks/agentguard.json"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_agentguard)
+  _assert_contains 'Doctor accepts installed Grok AgentGuard hooks' \
+    'Grok AgentGuard hooks installed' "$result"
+
   drift=$(_dr_lsp_policy_diff 'bashls neocmake vtsls' 'bashls neocmake vtsls')
   expected=$(printf 'missing=\nstale=')
   _assert_eq 'Doctor reports no LSP policy drift for equal sets' "$expected" "$drift"

@@ -52,6 +52,18 @@ _dr_check_opencode_agentguard() {
   fi
 }
 
+_dr_check_grok_agentguard() {
+  command -v "${DOT_GROK_COMMAND:-grok}" >/dev/null 2>&1 || return 0
+
+  local hooks="$HOME/.grok/hooks/agentguard.json"
+
+  if [[ -f "$hooks" ]]; then
+    _dr_ok "Grok AgentGuard hooks installed" "$(_dr_tilde "$hooks")"
+  else
+    _dr_warn "Grok AgentGuard hooks missing" "run 'dot update'"
+  fi
+}
+
 _dr_check_agent_hooks() {
   _dr_section "Agent hooks"
 
@@ -59,6 +71,7 @@ _dr_check_agent_hooks() {
   local stop_hook="$HOME/.local/bin/agent-hook-stop"
 
   _dr_check_opencode_agentguard
+  _dr_check_grok_agentguard
 
   if [[ ! -x "$pre_bash" ]]; then
     _dr_warn "agent pre-bash hook unavailable" "$(_dr_tilde "$pre_bash")"

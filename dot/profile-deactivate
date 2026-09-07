@@ -212,6 +212,7 @@ deactivate() {
   _dev_deactivate_gstack || status=1
   _dev_deactivate_agent_json claude "$HOME/.claude/settings.json" || status=1
   _dev_deactivate_agent_json gemini "$HOME/.gemini/settings.json" || status=1
+  _dev_deactivate_agent_json grok "$HOME/.grok/hooks/agentguard.json" || status=1
   _dev_deactivate_agent_json muse "$HOME/.config/muse/settings.json" || status=1
   _dev_deactivate_codex || status=1
   return "$status"
