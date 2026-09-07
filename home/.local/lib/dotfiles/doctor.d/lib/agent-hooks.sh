@@ -64,6 +64,59 @@ _dr_check_grok_agentguard() {
   fi
 }
 
+_dr_check_grok_compat() {
+  command -v "${DOT_GROK_COMMAND:-grok}" >/dev/null 2>&1 || return 0
+
+  local cfg="$HOME/.grok/config.toml"
+  local hooks="$HOME/.grok/hooks/agentguard.json"
+  local rules="$HOME/.grok/rules/agent-rules.md"
+  local expect_hooks=0 expect_rules=0 status
+
+  [[ -f $hooks && ! -L $hooks ]] && expect_hooks=1
+  [[ -f $rules && ! -L $rules ]] && expect_rules=1
+  # Native replacements are what make disable safe. Before they exist, Claude
+  # compat is still the live Grok coverage and this overlay must not nag.
+  [[ $expect_hooks -eq 1 || $expect_rules -eq 1 ]] || return 0
+
+  if [[ ! -f $cfg ]]; then
+    _dr_warn "Grok Claude-compat cells missing" "run 'dot update'"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    _dr_warn "Grok Claude-compat cells unverified" "python3 is required"
+    return 0
+  fi
+
+  # Structured keys, not display text: Grok defaults these cells to true when
+  # the section is absent, so "hooks = false" as a substring is not enough.
+  status=0
+  python3 - "$cfg" "$expect_hooks" "$expect_rules" <<'PY' || status=$?
+import sys
+import tomllib
+from pathlib import Path
+
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+claude = data.get("compat", {}).get("claude", {})
+expect_hooks = sys.argv[2] == "1"
+expect_rules = sys.argv[3] == "1"
+ok = True
+if expect_hooks and claude.get("hooks") is not False:
+    ok = False
+if expect_rules and (
+    claude.get("rules") is not False or claude.get("agents") is not False
+):
+    ok = False
+sys.exit(0 if ok else 1)
+PY
+  if [[ $status -eq 0 ]]; then
+    _dr_ok "Grok disables Claude-compat hooks/rules/agents" \
+      "$(_dr_tilde "$cfg")"
+  else
+    _dr_warn "Grok Claude-compat hooks/rules/agents still enabled" \
+      "run 'dot update'"
+  fi
+}
+
 _dr_check_agent_hooks() {
   _dr_section "Agent hooks"
 
@@ -72,6 +125,7 @@ _dr_check_agent_hooks() {
 
   _dr_check_opencode_agentguard
   _dr_check_grok_agentguard
+  _dr_check_grok_compat
 
   if [[ ! -x "$pre_bash" ]]; then
     _dr_warn "agent pre-bash hook unavailable" "$(_dr_tilde "$pre_bash")"

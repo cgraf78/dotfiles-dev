@@ -41,6 +41,7 @@ program	home/.local/lib/dotfiles/merge-hooks.d/codex.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gemini.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gh.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/git.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/grok-config.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/grok.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gstack.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh

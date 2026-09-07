@@ -5,7 +5,8 @@ dot_dev_doctor_test() {
   local doctor_home doctor_bin result drift expected health_log direct_tool
   local relative_link relative_target symlink_root symlink_alias
   local agent_home installed_config installed_config_before installed_doctor_output
-  local installed_section fixture_health=false
+  local installed_section fixture_health=false owner_root source_doctor host_doctor
+  local grok_compat_path
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -15,6 +16,9 @@ dot_dev_doctor_test() {
     75-nvim-dev.sh
   )
 
+  owner_root=$(_dev_repo_root)
+  source_doctor=$owner_root/home/.local/lib/dotfiles/doctor.d
+  host_doctor=${DOT_TEST_HOST_HOME:-$HOME}/.local/lib/dotfiles/doctor.d
   extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-}
   [[ -z $extension_home ]] || fixture_health=true
   DOT_DOCTOR_RESULT_FILE=$(_tmpdir)/doctor-results.tsv
@@ -23,10 +27,21 @@ dot_dev_doctor_test() {
     extension_home=$(_tmpdir)/api-home
     mkdir -p "$extension_home/.local/lib/dotfiles/doctor.d/lib"
     for path in "${modules[@]}"; do
-      cp "$HOME/.local/lib/dotfiles/doctor.d/$path" \
-        "$extension_home/.local/lib/dotfiles/doctor.d/$path"
+      if [[ -f $source_doctor/$path ]]; then
+        cp "$source_doctor/$path" \
+          "$extension_home/.local/lib/dotfiles/doctor.d/$path"
+      else
+        cp "$host_doctor/$path" \
+          "$extension_home/.local/lib/dotfiles/doctor.d/$path"
+      fi
     done
-    for path in "$HOME"/.local/lib/dotfiles/doctor.d/lib/*.sh; do
+    # Base-owned doctor helpers are not in this overlay checkout. Seed them
+    # from the composed host home, then overlay-owned libs win on name clash.
+    for path in "$host_doctor"/lib/*.sh; do
+      [[ -f $path ]] || continue
+      cp "$path" "$extension_home/.local/lib/dotfiles/doctor.d/lib/${path##*/}"
+    done
+    for path in "$source_doctor"/lib/*.sh; do
       cp "$path" "$extension_home/.local/lib/dotfiles/doctor.d/lib/${path##*/}"
     done
   fi
@@ -108,6 +123,58 @@ PLUGIN
     _doctor_records _dr_check_grok_agentguard)
   _assert_contains 'Doctor accepts installed Grok AgentGuard hooks' \
     'Grok AgentGuard hooks installed' "$result"
+
+  rm -rf "$doctor_home/.grok"
+  grok_compat_path="$doctor_bin:/usr/bin:/bin"
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
+    DOT_GROK_COMMAND=missing-grok-binary \
+    _doctor_records _dr_check_grok_compat)
+  _assert_not_contains 'Doctor skips Grok Claude-compat when grok is absent' \
+    'Grok Claude-compat' "$result"
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_not_contains \
+    'Doctor skips Grok Claude-compat when native replacements are absent' \
+    'Grok Claude-compat' "$result"
+  mkdir -p "$doctor_home/.grok/hooks" "$doctor_home/.grok/rules"
+  printf '{"hooks":{}}\n' >"$doctor_home/.grok/hooks/agentguard.json"
+  printf '# grok rules\n' >"$doctor_home/.grok/rules/agent-rules.md"
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor warns when Grok Claude-compat cells are absent' \
+    $'warn\tGrok Claude-compat cells missing' "$result"
+  cat >"$doctor_home/.grok/config.toml" <<'TOML'
+[compat.claude]
+hooks = true
+rules = true
+agents = true
+TOML
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor warns when Grok Claude-compat cells stay enabled' \
+    $'warn\tGrok Claude-compat hooks/rules/agents still enabled' "$result"
+  cat >"$doctor_home/.grok/config.toml" <<'TOML'
+[compat.claude]
+hooks = false
+rules = true
+agents = true
+TOML
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor warns when Grok Claude-compat cells are only partly disabled' \
+    $'warn\tGrok Claude-compat hooks/rules/agents still enabled' "$result"
+  cat >"$doctor_home/.grok/config.toml" <<'TOML'
+[compat.claude]
+hooks = false
+rules = false
+agents = false
+skills = true
+TOML
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor accepts disabled Grok Claude-compat cells' \
+    $'ok\tGrok disables Claude-compat hooks/rules/agents' "$result"
+  rm -f "$doctor_bin/grok"
 
   drift=$(_dr_lsp_policy_diff 'bashls neocmake vtsls' 'bashls neocmake vtsls')
   expected=$(printf 'missing=\nstale=')

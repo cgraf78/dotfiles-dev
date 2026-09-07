@@ -1,0 +1,18 @@
+# Disable Claude-compat discovery that duplicates first-class Grok surfaces.
+#
+# hooks: native AgentGuard lives in ~/.grok/hooks/agentguard.json. Claude
+# settings.json hooks still set AGENTGUARD_NAME=claude, so Grok would run two
+# copies and Claude Stop additionalContext would keep the turn alive.
+# rules/agents: native home policy is ~/.grok/rules/; ~/.claude/CLAUDE.md is
+# the same aggregate via compat.claude.agents, and ~/.claude/rules/ via
+# compat.claude.rules.
+#
+# The merge hook applies each key only after its native Grok replacement
+# exists, so this file can land before those files do.
+#
+# Leave skills, mcps, and sessions unset so those Claude-compat cells keep
+# their Grok defaults.
+[compat.claude]
+hooks = false
+rules = false
+agents = false
