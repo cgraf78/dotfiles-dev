@@ -34,6 +34,13 @@ user-owned.
 (`cwd`, `model`, `context`, `session-name`). Nested merge keeps other `[ui]`
 keys such as `permission_mode`.
 
+`40-skills.toml` disables bulky Claude-shaped `gstack-*` skills on Grok and
+keeps a short allowlist (`gstack-investigate`, `gstack-review`, `gstack-ship`,
+`gstack-health`, `gstack-document-generate`, `gstack-document-release`,
+`gstack-landing-report`, `gstack-retro`). Overlay-owned
+`~/.grok/skills/hive-memory-attach/` is unmanaged by gstack-register and
+points Grok at `hm context` / `hm search` instead of native `[memory]`.
+
 The merge is recursive and source-wins for keys the layer names. Other tables
 in `~/.grok/config.toml` (`[ui]`, marketplace sources, auth-adjacent CLI state)
 are preserved. Sibling files such as `~/.grok/hooks/*.json` are out of scope;

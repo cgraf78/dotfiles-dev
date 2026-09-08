@@ -8,7 +8,8 @@ reconcile the current checkout with installed agents.
 The ownership boundary is intentionally narrow:
 
 - `gstack-register` owns discovery, generated skill transforms, Claude,
-  Codex, Gemini, and OpenCode target shapes, caching, migration, and cleanup;
+  Codex, Gemini, Grok, Muse, and OpenCode target shapes, caching,
+  migration, and cleanup;
 - dotfiles owns the `cgraf78/gstack-register` and `garrytan/gstack` dependency
   declarations, the actual exclusion choices in
   `~/.config/gstack-register/skills-exclude`, and activation timing; and

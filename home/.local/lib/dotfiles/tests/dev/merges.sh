@@ -5016,6 +5016,12 @@ JSON
     "$grok_config_home/.grok/rules"
   cp "$REAL_HOME/.config/dot/merge-hooks.d/grok-config/config.d/"*.toml \
     "$grok_config_family/"
+  grok_hive_skill="$REAL_HOME/.grok/skills/hive-memory-attach/SKILL.md"
+  grok_hive_name=""
+  [[ -f $grok_hive_skill ]] &&
+    grok_hive_name=$(sed -n 's/^name: //p' "$grok_hive_skill" | head -n 1)
+  _assert_eq "Grok Hive Memory skill is tracked in the overlay home" \
+    "hive-memory-attach" "$grok_hive_name"
 
   _grok_config_seed_toml() {
     cat >"$grok_config_dst" <<'TOML'
@@ -5048,6 +5054,7 @@ sources = data["marketplace"]["sources"]
 disabled = data.get("plugins", {}).get("disabled", [])
 deny = data.get("permission", {}).get("deny", [])
 status_line = data.get("ui", {}).get("status_line", {})
+skill_disabled = data.get("skills", {}).get("disabled", [])
 print(
     "|".join(
         [
@@ -5065,6 +5072,12 @@ print(
             "Bash(rm -rf *)" if "Bash(rm -rf *)" in deny else "<no-rm-deny>",
             status_line.get("type", "<unset>"),
             ",".join(status_line.get("items", [])),
+            "gstack-autoplan"
+            if "gstack-autoplan" in skill_disabled
+            else "<no-autoplan>",
+            "keep-investigate"
+            if "gstack-investigate" not in skill_disabled
+            else "<investigate-disabled>",
         ]
     )
 )
@@ -5103,7 +5116,7 @@ PY
     _assert_exit "Grok config merge: no native targets is a successful skip" \
       0 "$grok_config_status"
     _assert_eq "Grok config merge: no native targets leaves mcps unset" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
     grok_config_deny=$(
       python3 - "$grok_config_dst" <<'PY'
@@ -5126,7 +5139,7 @@ PY
     _assert_contains "Grok config merge: logs the Grok config layer" \
       "Grok config" "$grok_config_output"
     _assert_eq "Grok config merge: native hooks only disables hooks; mcps stay unset" \
-      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5134,7 +5147,7 @@ PY
     printf '# grok rules\n' >"$grok_config_native_rules"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: native rules only disables rules/agents" \
-      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5143,7 +5156,7 @@ PY
     grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
     grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
@@ -5154,7 +5167,7 @@ PY
     _assert_exit "Grok config merge: second run is idempotent" \
       0 "$grok_config_again_status"
     _assert_eq "Grok config merge: second run keeps the same Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5178,7 +5191,7 @@ PY
     _assert_eq "Grok config merge: ungated tables survive empty compat.claude" \
       "true" "$grok_config_relay"
     _assert_eq "Grok config merge: gated-empty compat.claude leaves user hooks" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|gstack-autoplan|keep-investigate" \
       "$(_grok_config_probe)"
     rm -f "$grok_config_family/99-gated.toml"
 
