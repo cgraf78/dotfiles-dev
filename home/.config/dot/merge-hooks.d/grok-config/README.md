@@ -25,6 +25,11 @@ ralph-loop `decision:block` only when a rule or loop is active, and
 security-guidance's Stop dispatcher reads Claude snake_case stdin so it
 fails open on Grok. Superpowers SessionStart stdout is ignored.
 
+`20-safety.toml` sets `[sandbox] profile = "workspace"` and a conservative
+`[permission] deny` list (`Bash(rm -rf *)` plus Read/Edit of SSH, GnuPG, and
+common credential files). It does not set `ui.permission_mode`; that key stays
+user-owned.
+
 The merge is recursive and source-wins for keys the layer names. Other tables
 in `~/.grok/config.toml` (`[ui]`, marketplace sources, auth-adjacent CLI state)
 are preserved. Sibling files such as `~/.grok/hooks/*.json` are out of scope;

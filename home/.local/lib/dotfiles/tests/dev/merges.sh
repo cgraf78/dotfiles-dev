@@ -5046,6 +5046,7 @@ data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 claude = data.get("compat", {}).get("claude", {})
 sources = data["marketplace"]["sources"]
 disabled = data.get("plugins", {}).get("disabled", [])
+deny = data.get("permission", {}).get("deny", [])
 print(
     "|".join(
         [
@@ -5059,6 +5060,8 @@ print(
             "security-guidance"
             if "security-guidance" in disabled
             else "<no-plugin-disable>",
+            data.get("sandbox", {}).get("profile", "<unset>"),
+            "Bash(rm -rf *)" if "Bash(rm -rf *)" in deny else "<no-rm-deny>",
         ]
     )
 )
@@ -5097,8 +5100,20 @@ PY
     _assert_exit "Grok config merge: no native targets is a successful skip" \
       0 "$grok_config_status"
     _assert_eq "Grok config merge: no native targets leaves mcps unset" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
+    grok_config_deny=$(
+      python3 - "$grok_config_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print("\n".join(data.get("permission", {}).get("deny", [])))
+PY
+    )
+    _assert_contains "Grok config merge: denies ~/.ssh credential reads" \
+      "Read(~/.ssh/**)" "$grok_config_deny"
+    _assert_not_contains "Grok config merge: deny rules do not embed a home path" \
+      "/home/" "$grok_config_deny"
 
     printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
     grok_config_output=$(_run_grok_config_merge 2>&1)
@@ -5108,7 +5123,7 @@ PY
     _assert_contains "Grok config merge: logs the Grok config layer" \
       "Grok config" "$grok_config_output"
     _assert_eq "Grok config merge: native hooks only disables hooks; mcps stay unset" \
-      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5116,7 +5131,7 @@ PY
     printf '# grok rules\n' >"$grok_config_native_rules"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: native rules only disables rules/agents" \
-      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5125,7 +5140,7 @@ PY
     grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
     grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
@@ -5136,7 +5151,7 @@ PY
     _assert_exit "Grok config merge: second run is idempotent" \
       0 "$grok_config_again_status"
     _assert_eq "Grok config merge: second run keeps the same Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5145,22 +5160,22 @@ PY
 [compat.claude]
 hooks = false
 
-[sandbox]
-profile = "workspace"
+[relay]
+enabled = true
 TOML
     _run_grok_config_merge >/dev/null
-    grok_config_sandbox=$(
+    grok_config_relay=$(
       python3 - "$grok_config_dst" <<'PY'
 import sys, tomllib
 from pathlib import Path
 data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(data.get("sandbox", {}).get("profile", "<unset>"))
+print(str(data.get("relay", {}).get("enabled", "<unset>")).lower())
 PY
     )
     _assert_eq "Grok config merge: ungated tables survive empty compat.claude" \
-      "workspace" "$grok_config_sandbox"
+      "true" "$grok_config_relay"
     _assert_eq "Grok config merge: gated-empty compat.claude leaves user hooks" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)" \
       "$(_grok_config_probe)"
     rm -f "$grok_config_family/99-gated.toml"
 
