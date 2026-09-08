@@ -1,0 +1,6 @@
+# Opt in to Grok's builtin pager status line. Nested [ui.status_line] must
+# merge without replacing user-owned [ui] keys such as permission_mode.
+
+[ui.status_line]
+type = "builtin"
+items = ["cwd", "model", "context", "session-name"]

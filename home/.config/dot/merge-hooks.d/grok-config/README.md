@@ -30,6 +30,10 @@ fails open on Grok. Superpowers SessionStart stdout is ignored.
 common credential files). It does not set `ui.permission_mode`; that key stays
 user-owned.
 
+`30-statusline.toml` enables `[ui.status_line]` as Grok's builtin row
+(`cwd`, `model`, `context`, `session-name`). Nested merge keeps other `[ui]`
+keys such as `permission_mode`.
+
 The merge is recursive and source-wins for keys the layer names. Other tables
 in `~/.grok/config.toml` (`[ui]`, marketplace sources, auth-adjacent CLI state)
 are preserved. Sibling files such as `~/.grok/hooks/*.json` are out of scope;
