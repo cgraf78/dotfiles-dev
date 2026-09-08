@@ -1,0 +1,35 @@
+# Workspace sandbox plus conservative deny rules. Do not set
+# ui.permission_mode here; live config already owns always-approve.
+#
+# Deny rules use Grok compact syntax from the permissions guide.
+# ~-prefixed patterns match the tool path before home expansion; **/
+# patterns catch the same credential files after expansion without
+# embedding a username. Do not deny the whole home directory.
+
+[sandbox]
+profile = "workspace"
+
+[permission]
+deny = [
+  "Bash(rm -rf *)",
+  "Read(~/.ssh/**)",
+  "Edit(~/.ssh/**)",
+  "Read(**/.ssh/**)",
+  "Edit(**/.ssh/**)",
+  "Read(~/.gnupg/**)",
+  "Edit(~/.gnupg/**)",
+  "Read(**/.gnupg/**)",
+  "Edit(**/.gnupg/**)",
+  "Read(**/.netrc)",
+  "Edit(**/.netrc)",
+  "Read(**/.npmrc)",
+  "Edit(**/.npmrc)",
+  "Read(**/.pypirc)",
+  "Edit(**/.pypirc)",
+  "Read(**/.aws/credentials)",
+  "Edit(**/.aws/credentials)",
+  "Read(**/.config/gh/hosts.yml)",
+  "Edit(**/.config/gh/hosts.yml)",
+  "Read(**/.git-credentials)",
+  "Edit(**/.git-credentials)",
+]
