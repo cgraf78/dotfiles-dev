@@ -10,12 +10,13 @@
 # config (defaults true). Empty Claude MCP is harmless; useful skills such
 # as Superpowers stay enabled.
 #
-# plugins.disabled is only for plugins whose Stop additionalContext would
-# keep a Grok turn alive on every completion. security-guidance's Stop
-# hook emits additionalContext / asyncRewake; Grok treats additionalContext
-# as keep-working. hookify and ralph-loop use decision:block only when a
-# rule or loop is active, which is the same contract as Grok, so they
-# stay enabled. Superpowers SessionStart stdout is ignored.
+# Do not set [plugins] disabled. Plugin hooks still load when
+# compat.claude.hooks is false, but the Stop keep-working plugins Grok
+# currently loads (hookify, ralph-loop, security-guidance) either
+# decision:block only when a rule/loop/finding is active or miss Grok's
+# camelCase stdin (hookEventName) and fail open. Superpowers SessionStart
+# stdout is ignored. Omitting the table also avoids jq * replacing a
+# user-owned plugins.disabled array with an empty list.
 #
 # The merge hook still gates hooks on ~/.grok/hooks/agentguard.json and
 # rules/agents on ~/.grok/rules/agent-rules.md.
@@ -23,6 +24,3 @@
 hooks = false
 rules = false
 agents = false
-
-[plugins]
-disabled = ["security-guidance"]

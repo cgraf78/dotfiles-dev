@@ -18,10 +18,12 @@ Grok defaults every Claude-compat cell to `true` when the section is absent.
 The layer sets hooks/rules/agents. `skills`, `mcps`, and `sessions` stay unset
 so those cells keep Grok's defaults, and any user-owned value stays in place.
 
-`[plugins] disabled` lists only `security-guidance`. Its Stop hook emits
-`additionalContext` / `asyncRewake`, and Grok treats Stop additionalContext
-as keep-working. hookify, ralph-loop, Superpowers, and Claude-only plugins
-without that Stop mismatch stay enabled.
+The layer does not set `[plugins] disabled`. Plugin hooks still load when
+`compat.claude.hooks` is false, but none of the currently loaded plugin
+Stop hooks keep a Grok turn alive on every completion: hookify and
+ralph-loop `decision:block` only when a rule or loop is active, and
+security-guidance's Stop dispatcher reads Claude snake_case stdin so it
+fails open on Grok. Superpowers SessionStart stdout is ignored.
 
 The merge is recursive and source-wins for keys the layer names. Other tables
 in `~/.grok/config.toml` (`[ui]`, marketplace sources, auth-adjacent CLI state)
