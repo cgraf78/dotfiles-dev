@@ -1,15 +1,17 @@
 # Hive Memory Config
 
-This directory documents the local configuration instance for the standalone
-Hive Memory tool. The tool implementation lives in the `cgraf78/hive-memory`
-dependency repo; overlays or machine-local files own store-specific policy such
-as storage roots and default store names.
+This directory owns the portable configuration for the standalone Hive Memory
+tool. The tool implementation lives in the `cgraf78/hive-memory` dependency
+repo. Hive automatically layers an optional sibling `config.local.toml` over
+the tracked `config.toml`; private overlays may intentionally track that local
+file when an override is durable across their machines.
 
 ## Boundaries
 
-- Keep storage locations, default scopes, agent permissions, privacy policy, and
-  offline behavior in `config.toml` when an overlay or local machine needs Hive
-  Memory enabled.
+- Keep portable store defaults, scopes, agent permissions, privacy policy, and
+  offline behavior in this profile's `config.toml`.
+- Keep private or machine-specific store roots in `config.local.toml`. Tables
+  merge recursively; scalars and arrays replace the base value.
 - Keep startup context on the relevance strategy by default so durable
   preferences and project facts are automatic while incidents, references, and
   raw notes remain searchable instead of being injected into every session.

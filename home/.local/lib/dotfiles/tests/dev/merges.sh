@@ -5738,6 +5738,14 @@ if [[ "${1:-}" == "--config" ]]; then
   shift 2
 fi
 case "$1 $2" in
+  "stores show")
+    [[ "${HIVE_MEMORY_STORES_SHOW_RC:-0}" == 0 ]] || exit "$HIVE_MEMORY_STORES_SHOW_RC"
+    if [[ -n ${HIVE_MEMORY_STORES_SHOW_JSON:-} ]]; then
+      printf '%s\n' "$HIVE_MEMORY_STORES_SHOW_JSON"
+    else
+      printf '{}\n'
+    fi
+    ;;
   "stores init")
     root=""
     while [ "$#" -gt 0 ]; do
@@ -5761,7 +5769,7 @@ HM
 
   _run_hive_merge() {
     local old_path="$PATH" rc
-    unset -f merge _hive_memory_config _hive_memory_default_store_spec \
+    unset -f merge _hive_memory_config _hive_memory_effective_store_spec \
       _hive_memory_cloud_root_for \
       _hive_memory_warn _hive_memory_init_default_store \
       _hive_memory_check_config _hive_memory_remove_legacy_core hm 2>/dev/null
@@ -5773,6 +5781,8 @@ HM
     }
     export HIVE_MEMORY_HM_LOG="$_HIVE_LOG"
     export HIVE_MEMORY_STORES_LIST_RC="${HIVE_MEMORY_STORES_LIST_RC:-}"
+    export HIVE_MEMORY_STORES_SHOW_RC="${HIVE_MEMORY_STORES_SHOW_RC:-}"
+    export HIVE_MEMORY_STORES_SHOW_JSON="${HIVE_MEMORY_STORES_SHOW_JSON:-}"
     export PATH="$_HIVE_BIN:$PATH"
     hash -r
     merge >/dev/null
@@ -5794,6 +5804,12 @@ root = "${HOME}/gdrive/hive-memory/personal"
 description = "Personal memory"
 sensitivity = "private"
 TOML
+  }
+
+  _hive_show_json() {
+    local name="$1" root="$2" description="$3" sensitivity="$4" available="$5"
+    printf '{"name":"%s","config":{"root":"%s","expected_id":null,"description":"%s","sensitivity":"%s"},"manifest":null,"available":%s,"effective_agent_policy":null}' \
+      "$name" "$root" "$description" "$sensitivity" "$available"
   }
 
   _HIVE_LEGACY_HOME=$(_tmpdir)
@@ -5980,6 +5996,9 @@ HM
   unset HIVE_MEMORY_CONFIG XDG_CONFIG_HOME
   mkdir -p "$TEST_HOME/.config/hive-memory" "$TEST_HOME/gdrive"
   _write_hive_personal_config
+  export HIVE_MEMORY_STORES_SHOW_JSON
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json personal \
+    "$TEST_HOME/gdrive/hive-memory/personal" "Personal memory" private false)
   : >"$_HIVE_LOG"
   _run_hive_merge 2>/dev/null
   _assert_file_exists "hive hook: initializes configured default store" \
@@ -5990,6 +6009,40 @@ HM
   _assert_not_contains "hive hook: skips update-time doctor" \
     "doctor --quick" "$(cat "$_HIVE_LOG")"
 
+  rm -rf "$TEST_HOME/gdrive/hive-memory/personal"
+  cat >"$TEST_HOME/.config/hive-memory/config.local.toml" <<'TOML'
+[stores.personal]
+root = "${HOME}/gdrive/hive-memory/personal"
+TOML
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json personal \
+    "$TEST_HOME/gdrive/hive-memory/personal" "Personal memory" private false)
+  : >"$_HIVE_LOG"
+  _run_hive_merge 2>/dev/null
+  _assert_file_exists "hive hook: initializes effective layered store root" \
+    "$TEST_HOME/gdrive/hive-memory/personal/manifest.toml"
+  _assert_contains "hive hook: asks Hive for effective layered store config" \
+    "--config $TEST_HOME/.config/hive-memory/config.toml stores show --json" \
+    "$(cat "$_HIVE_LOG")"
+
+  _HIVE_LITERAL_ROOT="$TEST_HOME/provider-\$HOME"
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json personal \
+    "$_HIVE_LITERAL_ROOT" "Personal memory" private false)
+  : >"$_HIVE_LOG"
+  _run_hive_merge 2>/dev/null
+  _assert_contains "hive hook: preserves provider-resolved root bytes" \
+    "stores init personal --root $_HIVE_LITERAL_ROOT" "$(cat "$_HIVE_LOG")"
+
+  rm -rf "$TEST_HOME/gdrive/hive-memory/personal"
+  export HIVE_MEMORY_STORES_SHOW_RC=7
+  : >"$_HIVE_LOG"
+  _hive_invalid_layer_output=$(_run_hive_merge 2>&1)
+  unset HIVE_MEMORY_STORES_SHOW_RC
+  _assert_contains "hive hook: invalid layered config warns without initializing" \
+    "effective config unavailable" "$_hive_invalid_layer_output"
+  _assert_not_contains "hive hook: invalid layered config skips store init" \
+    "stores init" "$(cat "$_HIVE_LOG")"
+  unset HIVE_MEMORY_STORES_SHOW_JSON
+
   _HIVE_XDG_CONFIG=$(_tmpdir)/config
   _HIVE_XDG_STORE=$(_tmpdir)/store
   mkdir -p "$_HIVE_XDG_CONFIG/hive-memory"
@@ -5999,6 +6052,9 @@ default_store = "xdg"
 [stores.xdg]
   root = "$_HIVE_XDG_STORE"
 TOML
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json xdg \
+    "$_HIVE_XDG_STORE" "" private false)
+  export HIVE_MEMORY_STORES_SHOW_JSON
   : >"$_HIVE_LOG"
   _hive_xdg_no_home_rc=0
   _hive_xdg_no_home_output=$(
@@ -6029,6 +6085,9 @@ default_store = "newline"
 [stores.newline]
 root = "$_HIVE_NEWLINE_STORE"
 TOML
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json newline \
+    "$_HIVE_NEWLINE_STORE" "" private false)
+  export HIVE_MEMORY_STORES_SHOW_JSON
   : >"$_HIVE_LOG"
   HIVE_MEMORY_CONFIG="$_HIVE_NEWLINE_CONFIG" _run_hive_merge 2>/dev/null
   _assert_file_exists "hive hook: explicit config preserves trailing newline bytes" \
@@ -6038,7 +6097,7 @@ TOML
 
   : >"$_HIVE_LOG"
   _run_hive_merge 2>/dev/null
-  _init_count=$(grep -c '^stores init personal' "$_HIVE_LOG" || true)
+  _init_count=$(grep -c 'stores init personal' "$_HIVE_LOG" || true)
   _assert_eq "hive hook: existing manifest skips init" "0" "$_init_count"
   _assert_contains "hive hook: existing manifest still checks config" \
     "--config $TEST_HOME/.config/hive-memory/config.toml stores list --json" \
@@ -6048,6 +6107,9 @@ TOML
 
   mkdir -p "$TEST_HOME/.config/hive-memory"
   _write_hive_personal_config
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json personal \
+    "$TEST_HOME/gdrive/hive-memory/personal" "Personal memory" private false)
+  export HIVE_MEMORY_STORES_SHOW_JSON
   : >"$_HIVE_LOG"
   _hive_missing_cloud_output=$(_run_hive_merge 2>&1)
   _assert_contains "hive hook: missing cloud root warns during update" \
@@ -6077,6 +6139,9 @@ root = "${HOME}/.local/share/hive-memory/local"
 description = "Local memory"
 sensitivity = "private"
 TOML
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json local \
+    "$TEST_HOME/.local/share/hive-memory/local" "Local memory" private false)
+  export HIVE_MEMORY_STORES_SHOW_JSON
   : >"$_HIVE_LOG"
   _hive_local_output=$(_run_hive_merge 2>&1)
   _assert_not_contains "hive hook: local root does not require gdrive" \
@@ -6094,6 +6159,9 @@ default_store = "local"
 root = "${HOME}/.local/share/hive-memory/sensitivity-only"
 sensitivity = "private"
 TOML
+  HIVE_MEMORY_STORES_SHOW_JSON=$(_hive_show_json local \
+    "$TEST_HOME/.local/share/hive-memory/sensitivity-only" "" private false)
+  export HIVE_MEMORY_STORES_SHOW_JSON
   : >"$_HIVE_LOG"
   _run_hive_merge 2>/dev/null
   _hive_sensitivity_args=$(cat "$_HIVE_LOG")
