@@ -6,24 +6,24 @@ from `config.d/` into `~/.grok/config.toml`.
 
 The fragment is local policy, not a Grok runtime adapter. It turns off the
 Claude-compat cells that would otherwise duplicate first-class Grok hooks,
-home rules, skills, and MCP config after those native targets exist:
+home rules, and MCP config after those native targets exist:
 
 - `compat.claude.hooks` — `~/.claude/settings.json` AgentGuard and Claude
   plugin hooks
 - `compat.claude.rules` — `~/.claude/rules/` and project `.claude/rules/`
 - `compat.claude.agents` — `~/.claude/CLAUDE.md` and project `.claude/CLAUDE*.md`
-- `compat.claude.skills` — `~/.claude/skills/` and Claude plugin skills
 - `compat.claude.mcps` — Claude MCP config
 
 Grok defaults every Claude-compat cell to `true` when the section is absent.
-The layer sets those five keys so Claude discovery stays off. `sessions` stays
-unset so that cell keeps Grok's default, and any user-owned value stays in
-place.
+The layer sets hooks/rules/agents/mcps. `skills` and `sessions` stay unset so
+those cells keep Grok's defaults (Claude skills stay on), and any user-owned
+value stays in place.
 
-`[plugins] disabled` lists the Claude plugins `grok inspect` currently loads
-from `~/.claude/plugins/` (plain plugin names, not `name@marketplace` keys).
-Disabling them in addition to `compat.claude.skills = false` keeps plugin
-hooks such as hookify Stop keep-working from firing.
+`[plugins] disabled` lists only hook-bearing or Claude-only plugins (plain
+names, not `name@marketplace` keys): hookify, ralph-loop, security-guidance,
+memory-sync, claude-md-management, plugin-dev, status-line, claude-code-setup,
+and skill-creator. Superpowers, commit-commands, code-review, feature-dev,
+pr-review-toolkit, frontend-design, github, and code-simplifier stay enabled.
 
 The merge is recursive and source-wins for keys the layer names. Other tables
 in `~/.grok/config.toml` (`[ui]`, marketplace sources, auth-adjacent CLI state)
