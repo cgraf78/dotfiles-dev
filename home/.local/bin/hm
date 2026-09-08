@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Dotfiles-owned front door for the generic `hm` binary.
 #
-# Hive Memory stays vendor-neutral. This launcher only maps AgentGuard's shared
-# runtime identity into Hive Memory's environment contract before delegation.
+# Hive Memory stays vendor-neutral. This launcher only maps runtime identity
+# and workspace hints into Hive Memory's environment contract before
+# delegation.
 
 set -euo pipefail
 
@@ -41,9 +42,23 @@ if [[ -n "$_hm_agent" ]]; then
   fi
 
   if [[ -z "${HIVE_MEMORY_PROJECT:-}" && "${HIVE_MEMORY_PROJECT_INFER:-1}" != 0 ]]; then
-    # Gemini exposes a more precise current-project hint than the child cwd.
-    # This is Hive context mapping, not duplicated agent/session detection.
-    export HIVE_MEMORY_PROJECT="${GEMINI_PROJECT_DIR:-$PWD}"
+    # Grok exposes GROK_WORKSPACE_ROOT on hook processes; Gemini exposes
+    # GEMINI_PROJECT_DIR; cwd remains the fallback. Choose the hint from the
+    # already-resolved agent so a foreign vendor env cannot steal another
+    # runtime's Hive project. Do not treat CLAUDE_PROJECT_DIR as a Grok hint:
+    # AgentGuard already classifies Grok before Claude, and a Claude-compat
+    # alias could mis-scope a Claude session.
+    case "$_hm_agent" in
+      grok)
+        export HIVE_MEMORY_PROJECT="${GROK_WORKSPACE_ROOT:-$PWD}"
+        ;;
+      gemini)
+        export HIVE_MEMORY_PROJECT="${GEMINI_PROJECT_DIR:-$PWD}"
+        ;;
+      *)
+        export HIVE_MEMORY_PROJECT="$PWD"
+        ;;
+    esac
   fi
 fi
 
