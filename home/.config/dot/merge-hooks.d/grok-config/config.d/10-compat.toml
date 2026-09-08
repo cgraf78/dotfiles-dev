@@ -6,12 +6,20 @@
 # rules/agents: native home policy is ~/.grok/rules/; ~/.claude/CLAUDE.md is
 # the same aggregate via compat.claude.agents, and ~/.claude/rules/ via
 # compat.claude.rules.
+# Leave skills and mcps unset so Grok keeps scanning Claude skills and MCP
+# config (defaults true). Empty Claude MCP is harmless; useful skills such
+# as Superpowers stay enabled.
 #
-# The merge hook applies each key only after its native Grok replacement
-# exists, so this file can land before those files do.
+# Do not set [plugins] disabled. Plugin hooks still load when
+# compat.claude.hooks is false, but the Stop keep-working plugins Grok
+# currently loads (hookify, ralph-loop, security-guidance) either
+# decision:block only when a rule/loop/finding is active or miss Grok's
+# camelCase stdin (hookEventName) and fail open. Superpowers SessionStart
+# stdout is ignored. Omitting the table also avoids jq * replacing a
+# user-owned plugins.disabled array with an empty list.
 #
-# Leave skills, mcps, and sessions unset so those Claude-compat cells keep
-# their Grok defaults.
+# The merge hook still gates hooks on ~/.grok/hooks/agentguard.json and
+# rules/agents on ~/.grok/rules/agent-rules.md.
 [compat.claude]
 hooks = false
 rules = false
