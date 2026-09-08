@@ -97,6 +97,14 @@ dot_dev_static_test() {
   check_not_contains 'Checkrun schema payloads remain schema-validatable' .config/checkrun/ignore '*/.local/share/checkrun/schemas/*.schema.json'
   check_contains 'Checkrun schema payloads skip formatting only' .config/checkrun/format-ignore '*/.local/share/checkrun/schemas/*.schema.json'
   check_contains 'Checkrun schema payloads skip spelling only' .config/checkrun/spell-ignore '*/.local/share/checkrun/schemas/*.schema.json'
+  check_file 'Grok Hive Memory skill is overlay-owned' \
+    .grok/skills/hive-memory-attach/SKILL.md
+  check_contains 'Grok Hive Memory skill declares its name' \
+    .grok/skills/hive-memory-attach/SKILL.md 'name: hive-memory-attach'
+  check_contains 'gstack roster includes Grok' \
+    .config/dot/merge-hooks.d/gstack/README.md Grok
+  check_contains 'gstack roster includes Muse' \
+    .config/dot/merge-hooks.d/gstack/README.md Muse
 
   shell_fixture=$(_tmpdir)
   shell_bin=$shell_fixture/.local/bin
