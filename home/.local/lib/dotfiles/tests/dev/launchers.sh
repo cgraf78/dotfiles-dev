@@ -92,7 +92,9 @@ MOCK
   # only the environment each case supplies, regardless of which agent runs
   # dot test. Later env operands intentionally override this baseline.
   HM_LAUNCHER_SCRUB_ENV=(
+    CLAUDE_PROJECT_DIR=
     GEMINI_PROJECT_DIR=
+    GROK_WORKSPACE_ROOT=
     HM_AGENTGUARD_API="$HM_AGENTGUARD_API"
     HM_TEST_AGENT=unknown
     HM_TEST_SESSION=
@@ -134,6 +136,60 @@ MOCK
     GEMINI_PROJECT_DIR="$_hm_gemini_project" "$HM_LAUNCHER_BIN/hm" env-probe)
   _assert_contains "hm launcher: uses Gemini's precise project hint" \
     "project=$_hm_gemini_project" "$_hm_gemini_probe"
+
+  _hm_grok_project="$HM_LAUNCHER_HOME/grok-project"
+  _hm_grok_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=grok \
+    HM_TEST_SESSION="grok-session" \
+    GROK_WORKSPACE_ROOT="$_hm_grok_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: uses Grok's precise project hint" \
+    "project=$_hm_grok_project" "$_hm_grok_probe"
+
+  _hm_grok_both_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=grok \
+    HM_TEST_SESSION="grok-session" \
+    GROK_WORKSPACE_ROOT="$_hm_grok_project" \
+    GEMINI_PROJECT_DIR="$_hm_gemini_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: Grok keeps its workspace when Gemini is also set" \
+    "project=$_hm_grok_project" "$_hm_grok_both_probe"
+
+  _hm_gemini_both_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=gemini \
+    HM_TEST_SESSION="gemini-session" \
+    GROK_WORKSPACE_ROOT="$_hm_grok_project" \
+    GEMINI_PROJECT_DIR="$_hm_gemini_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: Gemini keeps its workspace when Grok is also set" \
+    "project=$_hm_gemini_project" "$_hm_gemini_both_probe"
+
+  _hm_grok_gemini_only_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=grok \
+    HM_TEST_SESSION="grok-session" \
+    GEMINI_PROJECT_DIR="$_hm_gemini_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: Grok ignores Gemini's project hint" \
+    "project=$(pwd)" "$_hm_grok_gemini_only_probe"
+
+  _hm_gemini_grok_only_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=gemini \
+    HM_TEST_SESSION="gemini-session" \
+    GROK_WORKSPACE_ROOT="$_hm_grok_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: Gemini ignores Grok's project hint" \
+    "project=$(pwd)" "$_hm_gemini_grok_only_probe"
+
+  _hm_claude_compat_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=grok \
+    HM_TEST_SESSION="grok-session" \
+    CLAUDE_PROJECT_DIR="$HM_LAUNCHER_HOME/claude-compat" \
+    "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: ignores Claude-compat alias for Grok project" \
+    "project=$(pwd)" "$_hm_claude_compat_probe"
+
+  _hm_other_hint_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" HM_TEST_AGENT=codex \
+    HM_TEST_SESSION="codex-session" \
+    GROK_WORKSPACE_ROOT="$_hm_grok_project" \
+    GEMINI_PROJECT_DIR="$_hm_gemini_project" "$HM_LAUNCHER_BIN/hm" env-probe)
+  _assert_contains "hm launcher: other agents keep cwd when vendor hints are set" \
+    "project=$(pwd)" "$_hm_other_hint_probe"
 
   _hm_explicit_only_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
     HOME="$HM_LAUNCHER_HOME" HIVE_MEMORY_AGENT_ID="custom-agent" \
