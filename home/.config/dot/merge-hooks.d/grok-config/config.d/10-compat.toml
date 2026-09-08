@@ -6,14 +6,16 @@
 # rules/agents: native home policy is ~/.grok/rules/; ~/.claude/CLAUDE.md is
 # the same aggregate via compat.claude.agents, and ~/.claude/rules/ via
 # compat.claude.rules.
-# mcps: Claude MCP config was empty; do not inherit it. Leave skills unset
-# so Grok keeps scanning Claude skills (default true). Useful plugin skills
-# such as Superpowers stay enabled; only hook-bearing or Claude-only plugins
-# are disabled.
+# Leave skills and mcps unset so Grok keeps scanning Claude skills and MCP
+# config (defaults true). Empty Claude MCP is harmless; useful skills such
+# as Superpowers stay enabled.
 #
-# plugins.disabled uses the grok inspect plugin names. Claude plugin Stop
-# hooks such as hookify keep the Grok turn alive even when
-# compat.claude.hooks is false.
+# plugins.disabled is only for plugins whose Stop additionalContext would
+# keep a Grok turn alive on every completion. security-guidance's Stop
+# hook emits additionalContext / asyncRewake; Grok treats additionalContext
+# as keep-working. hookify and ralph-loop use decision:block only when a
+# rule or loop is active, which is the same contract as Grok, so they
+# stay enabled. Superpowers SessionStart stdout is ignored.
 #
 # The merge hook still gates hooks on ~/.grok/hooks/agentguard.json and
 # rules/agents on ~/.grok/rules/agent-rules.md.
@@ -21,17 +23,6 @@
 hooks = false
 rules = false
 agents = false
-mcps = false
 
 [plugins]
-disabled = [
-  "claude-code-setup",
-  "claude-md-management",
-  "hookify",
-  "memory-sync",
-  "plugin-dev",
-  "ralph-loop",
-  "security-guidance",
-  "skill-creator",
-  "status-line",
-]
+disabled = ["security-guidance"]

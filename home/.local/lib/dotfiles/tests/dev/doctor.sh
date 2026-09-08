@@ -170,24 +170,12 @@ TOML
 hooks = false
 rules = false
 agents = false
-skills = false
+skills = true
 mcps = true
 TOML
   result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
     _doctor_records _dr_check_grok_compat)
-  _assert_contains 'Doctor warns when Grok Claude-compat MCPs stay enabled' \
-    $'warn\tGrok Claude-compat discovery still enabled' "$result"
-  cat >"$doctor_home/.grok/config.toml" <<'TOML'
-[compat.claude]
-hooks = false
-rules = false
-agents = false
-skills = true
-mcps = false
-TOML
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
-    _doctor_records _dr_check_grok_compat)
-  _assert_contains 'Doctor accepts Claude skills while other Claude-compat cells are off' \
+  _assert_contains 'Doctor accepts Claude skills and MCPs while hooks/rules/agents are off' \
     $'ok\tGrok disables Claude-compat discovery' "$result"
   rm -f "$doctor_bin/grok"
 

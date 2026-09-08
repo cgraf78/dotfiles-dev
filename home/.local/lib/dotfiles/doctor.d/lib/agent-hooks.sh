@@ -76,8 +76,7 @@ _dr_check_grok_compat() {
   [[ -f $rules && ! -L $rules ]] && expect_rules=1
   # Native replacements are what make disable safe. Before they exist, Claude
   # compat is still the live Grok coverage and this overlay must not nag.
-  # mcps have no extra native-file gate; Claude MCP config is empty and
-  # should stay off once any other native target exists. skills stay on.
+  # skills and mcps stay on. Only hooks/rules/agents are gated.
   [[ $expect_hooks -eq 1 || $expect_rules -eq 1 ]] || return 0
 
   if [[ ! -f $cfg ]]; then
@@ -121,8 +120,6 @@ if expect_hooks and claude.get("hooks") is not False:
 if expect_rules and (
     claude.get("rules") is not False or claude.get("agents") is not False
 ):
-    ok = False
-if claude.get("mcps") is not False:
     ok = False
 sys.exit(0 if ok else 1)
 PY

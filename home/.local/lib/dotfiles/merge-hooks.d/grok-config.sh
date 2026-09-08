@@ -18,9 +18,9 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 # hooks still wait on ~/.grok/hooks/agentguard.json, and rules/agents wait on
 # ~/.grok/rules/agent-rules.md, so an out-of-order land cannot strip
 # Claude-compat AgentGuard or home rules with nothing to take their place.
-# skills and mcps apply whenever the layer names them. This overlay names
-# mcps=false and leaves skills unset so Claude skills stay on. The grok CLI
-# gate is `_dot_tool_present grok` from base compat.sh.
+# skills and mcps apply whenever the layer names them. This overlay leaves
+# both unset so Claude skills and MCP config stay on. The grok CLI gate is
+# `_dot_tool_present grok` from base compat.sh.
 
 # Shared TOML serializer used by Codex and profile-state. Keep Grok on that
 # writer so array-of-tables round-trip instead of using yq's TOML emitter,

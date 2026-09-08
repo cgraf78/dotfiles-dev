@@ -5056,7 +5056,9 @@ print(
             str(claude.get("mcps", "<unset>")).lower(),
             data["ui"]["permission_mode"],
             sources[0]["name"],
-            "hookify" if "hookify" in disabled else "<no-hookify>",
+            "security-guidance"
+            if "security-guidance" in disabled
+            else "<no-security-guidance>",
         ]
     )
 )
@@ -5095,7 +5097,7 @@ PY
     _assert_exit "Grok config merge: no native targets still refreshes config.toml" \
       0 "$grok_config_status"
     _assert_eq "Grok config merge: no native targets applies mcps/plugins" \
-      "true|<unset>|<unset>|true|false|always-approve|xAI Official|hookify" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
 
     printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
@@ -5106,7 +5108,7 @@ PY
     _assert_contains "Grok config merge: logs the Grok config layer" \
       "Grok config" "$grok_config_output"
     _assert_eq "Grok config merge: native hooks only also applies mcps" \
-      "false|<unset>|<unset>|true|false|always-approve|xAI Official|hookify" \
+      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5114,7 +5116,7 @@ PY
     printf '# grok rules\n' >"$grok_config_native_rules"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: native rules only disables rules/agents" \
-      "true|false|false|true|false|always-approve|xAI Official|hookify" \
+      "true|false|false|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5123,7 +5125,7 @@ PY
     grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
-      "false|false|false|true|false|always-approve|xAI Official|hookify" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
     grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
@@ -5134,7 +5136,7 @@ PY
     _assert_exit "Grok config merge: second run is idempotent" \
       0 "$grok_config_again_status"
     _assert_eq "Grok config merge: second run keeps the same Claude-compat cells" \
-      "false|false|false|true|false|always-approve|xAI Official|hookify" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -5158,7 +5160,7 @@ PY
     _assert_eq "Grok config merge: ungated tables survive empty compat.claude" \
       "workspace" "$grok_config_sandbox"
     _assert_eq "Grok config merge: gated-empty compat.claude leaves user hooks" \
-      "true|<unset>|<unset>|true|false|always-approve|xAI Official|hookify" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|security-guidance" \
       "$(_grok_config_probe)"
     rm -f "$grok_config_family/99-gated.toml"
 
