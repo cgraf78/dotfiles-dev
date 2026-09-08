@@ -1,0 +1,70 @@
+# Portable Hive Memory policy for development profiles. Hive automatically
+# layers an optional sibling config.local.toml over this tracked public base.
+schema_version = 1
+
+default_store = "personal"
+host_id = "auto"
+user_id = "auto"
+
+[stores.personal]
+root = "${HOME}/.local/share/hive-memory/personal"
+description = "Personal memory"
+sensitivity = "private"
+
+[storage]
+kind = "filesystem"
+case_sensitive = "auto"
+atomic_rename = "auto"
+fsync = "best-effort"
+
+[defaults]
+write_scope = "global"
+search_scopes = ["global", "project"]
+context_sources = ["curated", "remembered"]
+event_sidecar = "always"
+context_strategy = "relevance"
+search_backend = "tantivy"
+hook_context_max_tokens = 4000
+context_cache_max_age = "7d"
+
+[agents.claude]
+default_store = "personal"
+read_stores = ["personal"]
+write_stores = ["personal"]
+allow_all_stores = false
+
+[agents.codex]
+default_store = "personal"
+read_stores = ["personal"]
+write_stores = ["personal"]
+allow_all_stores = false
+
+[agents.gemini]
+default_store = "personal"
+read_stores = ["personal"]
+write_stores = ["personal"]
+allow_all_stores = false
+
+[agents.grok]
+default_store = "personal"
+read_stores = ["personal"]
+write_stores = ["personal"]
+allow_all_stores = false
+
+[privacy]
+allow_all_stores_flag = true
+secret_refuses_cloud_roots = true
+allow_secret_writes = false
+allow_hook_secret_writes = false
+
+[offline]
+enabled = true
+mode = "auto"
+
+[performance]
+context_warm_p95_ms = 200
+context_cold_p95_ms = 500
+context_store_size_target = 5000
+
+[classifier]
+mode = "auto"

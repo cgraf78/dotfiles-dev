@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+CONFIG="$SOURCE_HOME/.config/hive-memory/config.toml"
+
+python3 - "$CONFIG" <<'PY'
+import sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+with open(sys.argv[1], "rb") as config_file:
+    config = tomllib.load(config_file)
+
+if config["default_store"] != "personal":
+    raise SystemExit("unexpected default store")
+if config["stores"]["personal"]["root"] != "${HOME}/.local/share/hive-memory/personal":
+    raise SystemExit("unexpected portable store root")
+for key in ("data_dir", "state_dir", "cache_dir"):
+    if key in config:
+        raise SystemExit(f"unexpected root path key: {key}")
+expected_agent = {
+    "default_store": "personal",
+    "read_stores": ["personal"],
+    "write_stores": ["personal"],
+    "allow_all_stores": False,
+}
+agents = config.get("agents") or {}
+for name in ("claude", "codex", "gemini", "grok"):
+    if agents.get(name) != expected_agent:
+        raise SystemExit(f"unexpected agents.{name} policy: {agents.get(name)!r}")
+PY
+
+printf 'hive-memory config: ok\n'
+printf '\nResults: 6 passed, 0 failed\n'
+[[ -z ${DOT_TEST_REPORTER:-} ]] || "$DOT_TEST_REPORTER" complete 6 0

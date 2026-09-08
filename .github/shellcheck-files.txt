@@ -73,6 +73,7 @@ program	home/.local/lib/dotfiles/tests/dev/static.sh
 program	home/.local/lib/dotfiles/tests/git-shell-workflows-test
 program	home/.local/lib/dotfiles/tests/githook-test
 program	home/.local/lib/dotfiles/tests/gstack-register-test
+program	home/.local/lib/dotfiles/tests/hive-memory-config-test
 program	home/.local/lib/dotfiles/tests/lua-dev-test
 program	home/.local/lib/dotfiles/tests/mise-refresh-workflow-test
 program	home/.local/lib/dotfiles/tests/nvim-dev-test

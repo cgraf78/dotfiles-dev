@@ -85,20 +85,16 @@ _hive_memory_remove_legacy_core() {
   rmdir "$legacy_dir" "${legacy_dir%/*}" 2>/dev/null || true
 }
 
-_hive_memory_default_store_spec() {
+_hive_memory_effective_store_spec() {
   local config="$1"
 
-  python3 - "$config" <<'PY'
-import os
+  hm --config "$config" stores show --json | python3 -c '
+import json
 import sys
-import tomllib
 
-config_path = sys.argv[1]
-with open(config_path, "rb") as f:
-    config = tomllib.load(f)
-
-store_name = config.get("default_store", "")
-store = config.get("stores", {}).get(store_name, {})
+data = json.load(sys.stdin)
+store_name = data.get("name", "")
+store = data.get("config", {})
 root = store.get("root", "")
 
 if not store_name or not root:
@@ -108,14 +104,15 @@ print(
     "\n".join(
         [
             store_name,
-            os.path.expandvars(root),
-            store.get("description", ""),
-            store.get("sensitivity", ""),
+            root,
+            store.get("description") or "",
+            store.get("sensitivity") or "",
+            "true" if data.get("available", False) else "false",
             "__DOT_HIVE_MEMORY_SPEC_END__",
         ]
     )
 )
-PY
+'
 }
 
 _hive_memory_cloud_root_for() {
@@ -139,11 +136,14 @@ _hive_memory_cloud_root_for() {
 
 _hive_memory_init_default_store() {
   local config="$1"
-  local spec store root description sensitivity line
+  local spec store root description sensitivity available line
   local -a fields=()
 
-  if ! spec=$(_hive_memory_default_store_spec "$config" 2>/dev/null); then
-    _hive_memory_warn "default store config is incomplete"
+  # Ask Hive for its effective layered configuration rather than parsing the
+  # primary TOML ourselves. This keeps config.local.toml precedence, expansion,
+  # validation, and future schema behavior owned by the provider.
+  if ! spec=$(_hive_memory_effective_store_spec "$config" 2>/dev/null); then
+    _hive_memory_warn "effective config unavailable"
     return 0
   fi
 
@@ -160,9 +160,10 @@ _hive_memory_init_default_store() {
   root="${fields[1]:-}"
   description="${fields[2]:-}"
   sensitivity="${fields[3]:-}"
+  available="${fields[4]:-}"
   [[ -n "$store" && -n "$root" ]] || return 0
 
-  [[ -f "$root/manifest.toml" ]] && return 0
+  [[ "$available" == true ]] && return 0
 
   # Do not create a cloud-drive mount itself. Configs under ~/gdrive are personal
   # overlay policy; if that sync root is absent, warn and leave recovery to the
@@ -174,7 +175,7 @@ _hive_memory_init_default_store() {
     return 0
   fi
 
-  local -a init_args=(stores init "$store" --root "$root")
+  local -a init_args=(--config "$config" stores init "$store" --root "$root")
   [[ -n "$description" ]] && init_args+=(--description "$description")
   [[ -n "$sensitivity" ]] && init_args+=(--sensitivity "$sensitivity")
 

@@ -9,6 +9,7 @@ home/.local/lib/dotfiles/tests/dev-update-test
 home/.local/lib/dotfiles/tests/git-shell-workflows-test
 home/.local/lib/dotfiles/tests/githook-test
 home/.local/lib/dotfiles/tests/gstack-register-test
+home/.local/lib/dotfiles/tests/hive-memory-config-test
 home/.local/lib/dotfiles/tests/lua-dev-test
 home/.local/lib/dotfiles/tests/mise-refresh-workflow-test
 home/.local/lib/dotfiles/tests/nvim-dev-test
