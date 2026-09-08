@@ -152,28 +152,55 @@ TOML
   result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor warns when Grok Claude-compat cells stay enabled' \
-    $'warn\tGrok Claude-compat hooks/rules/agents still enabled' "$result"
+    $'warn\tGrok Claude-compat discovery still enabled' "$result"
   cat >"$doctor_home/.grok/config.toml" <<'TOML'
 [compat.claude]
 hooks = false
 rules = true
 agents = true
+skills = false
+mcps = false
 TOML
   result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor warns when Grok Claude-compat cells are only partly disabled' \
-    $'warn\tGrok Claude-compat hooks/rules/agents still enabled' "$result"
+    $'warn\tGrok Claude-compat discovery still enabled' "$result"
   cat >"$doctor_home/.grok/config.toml" <<'TOML'
 [compat.claude]
 hooks = false
 rules = false
 agents = false
 skills = true
+mcps = false
+TOML
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor warns when Grok Claude-compat skills stay enabled' \
+    $'warn\tGrok Claude-compat discovery still enabled' "$result"
+  cat >"$doctor_home/.grok/config.toml" <<'TOML'
+[compat.claude]
+hooks = false
+rules = false
+agents = false
+skills = false
+mcps = true
+TOML
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+    _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor warns when Grok Claude-compat MCPs stay enabled' \
+    $'warn\tGrok Claude-compat discovery still enabled' "$result"
+  cat >"$doctor_home/.grok/config.toml" <<'TOML'
+[compat.claude]
+hooks = false
+rules = false
+agents = false
+skills = false
+mcps = false
 TOML
   result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor accepts disabled Grok Claude-compat cells' \
-    $'ok\tGrok disables Claude-compat hooks/rules/agents' "$result"
+    $'ok\tGrok disables Claude-compat discovery' "$result"
   rm -f "$doctor_bin/grok"
 
   drift=$(_dr_lsp_policy_diff 'bashls neocmake vtsls' 'bashls neocmake vtsls')

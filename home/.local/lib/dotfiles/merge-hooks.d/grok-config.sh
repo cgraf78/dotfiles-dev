@@ -12,12 +12,14 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 # hook knowing those environment names.
 #
 # This hook does not write ~/.grok/hooks/; AgentGuard's Grok fragment is a
-# separate merge. It only sets named [compat.claude] cells so the rest of
-# config.toml, including other Claude-compat cells, stays user-owned.
+# separate merge. It writes named [compat.claude] cells plus any other
+# overlay-owned tables in the same layer so user-owned keys stay in place.
 #
-# Do not disable a Claude-compat cell until its native Grok replacement is a
-# regular file. Otherwise an out-of-order land strips Claude-compat AgentGuard
-# or home rules with nothing to take their place. The grok CLI gate is
+# hooks still wait on ~/.grok/hooks/agentguard.json, and rules/agents wait on
+# ~/.grok/rules/agent-rules.md, so an out-of-order land cannot strip
+# Claude-compat AgentGuard or home rules with nothing to take their place.
+# skills and mcps apply whenever the layer names them: Grok's own skills
+# directory and empty MCP list are the replacements. The grok CLI gate is
 # `_dot_tool_present grok` from base compat.sh.
 
 # Shared TOML serializer used by Codex and profile-state. Keep Grok on that
@@ -39,7 +41,9 @@ _grok_config_native_rules() {
 }
 
 # Drop Claude-compat keys whose native Grok replacement is not installed yet.
-# Prints JSON, or nothing when the layer has no cells left to apply.
+# skills/mcps apply whenever the layer names them. Other top-level tables
+# survive even if every gated compat.claude cell is stripped. Prints JSON, or
+# nothing when the filtered layer is {}.
 _grok_config_ready_layer_json() {
   local src=$1 yq_bin=$2
   local hooks_ready=false rules_ready=false
@@ -48,13 +52,33 @@ _grok_config_ready_layer_json() {
   _grok_config_native_rules && rules_ready=true
   "$yq_bin" eval --input-format toml --output-format json '.' "$src" |
     jq -c --argjson hooks "$hooks_ready" --argjson rules "$rules_ready" '
-      .compat.claude as $c |
-      .compat.claude = (
-        {}
-        + (if $hooks then {hooks: $c.hooks} else {} end)
-        + (if $rules then {rules: $c.rules, agents: $c.agents} else {} end)
-      ) |
-      if (.compat.claude | length) == 0 then empty else . end
+      def take($obj; $key):
+        if ($obj | type) == "object" and ($obj | has($key))
+        then {($key): $obj[$key]}
+        else {}
+        end;
+      (.compat.claude // null) as $c |
+      if ($c | type) != "object" then
+        .
+      else
+        .compat.claude = (
+          {}
+          + take($c; "skills")
+          + take($c; "mcps")
+          + (if $hooks then take($c; "hooks") else {} end)
+          + (if $rules then take($c; "rules") + take($c; "agents") else {} end)
+        )
+      end |
+      if (.compat.claude? | type) == "object" and
+        (.compat.claude | length) == 0
+      then del(.compat.claude)
+      else .
+      end |
+      if (.compat? | type) == "object" and (.compat | length) == 0
+      then del(.compat)
+      else .
+      end |
+      if . == {} then empty else . end
     '
 }
 

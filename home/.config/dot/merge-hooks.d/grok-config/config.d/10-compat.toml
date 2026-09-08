@@ -6,13 +6,39 @@
 # rules/agents: native home policy is ~/.grok/rules/; ~/.claude/CLAUDE.md is
 # the same aggregate via compat.claude.agents, and ~/.claude/rules/ via
 # compat.claude.rules.
+# skills/mcps: Grok's own ~/.grok/skills/ and empty MCP list replace Claude
+# skill/MCP discovery. The merge hook applies these without a native-file gate.
 #
-# The merge hook applies each key only after its native Grok replacement
-# exists, so this file can land before those files do.
+# plugins.disabled uses the grok inspect plugin names. Claude plugin hooks
+# such as hookify Stop keep-working still fire if the plugin stays enabled
+# even after compat.claude.skills is false.
 #
-# Leave skills, mcps, and sessions unset so those Claude-compat cells keep
-# their Grok defaults.
+# The merge hook still gates hooks on ~/.grok/hooks/agentguard.json and
+# rules/agents on ~/.grok/rules/agent-rules.md.
 [compat.claude]
 hooks = false
 rules = false
 agents = false
+skills = false
+mcps = false
+
+[plugins]
+disabled = [
+  "claude-code-setup",
+  "claude-md-management",
+  "code-review",
+  "code-simplifier",
+  "commit-commands",
+  "feature-dev",
+  "frontend-design",
+  "github",
+  "hookify",
+  "memory-sync",
+  "plugin-dev",
+  "pr-review-toolkit",
+  "ralph-loop",
+  "security-guidance",
+  "skill-creator",
+  "status-line",
+  "superpowers",
+]
