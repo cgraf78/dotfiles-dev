@@ -2334,7 +2334,7 @@
           "type": "string"
         },
         "unix_default_inline_shell_args": {
-          "default": "sh -c -o errexit",
+          "default": "sh -o errexit -c",
           "description": "Default shell arguments for Unix to be used for inline commands. For example, `sh -c` for sh.",
           "type": "string"
         },
@@ -4352,7 +4352,23 @@
               },
               "line": {
                 "type": "string",
-                "description": "exact line to ensure exists (appended if absent)"
+                "description": "exact line to ensure exists"
+              },
+              "position": {
+                "type": "string",
+                "default": "append",
+                "description": "where to insert a missing line",
+                "anyOf": [
+                  {
+                    "enum": [
+                      "append",
+                      "prepend"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
               },
               "comment": {
                 "type": "string",
@@ -4371,13 +4387,30 @@
                   "exclude": false,
                   "block": false,
                   "line": false,
+                  "position": false,
+                  "template": false,
+                  "comment": false
+                }
+              },
+              {
+                "required": [
+                  "line"
+                ],
+                "properties": {
+                  "content": false,
+                  "mode": false,
+                  "exclude": false,
+                  "source": false,
+                  "block": false,
                   "template": false,
                   "comment": false
                 }
               },
               {
                 "properties": {
-                  "content": false
+                  "content": false,
+                  "line": false,
+                  "position": false
                 }
               }
             ],
