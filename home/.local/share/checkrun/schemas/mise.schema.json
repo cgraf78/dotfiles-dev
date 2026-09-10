@@ -2209,6 +2209,11 @@
                 "silent"
               ]
             },
+            "quiet": {
+              "default": false,
+              "description": "Suppress mise's own output while executing tasks.",
+              "type": "boolean"
+            },
             "remote_no_cache": {
               "description": "Mise will always fetch the latest tasks from the remote, by default the cache is used.",
               "type": "boolean"
@@ -4440,8 +4445,9 @@
       "description": "machine-global bootstrapping (system packages, repos, macOS defaults, launchd agents, login shell)",
       "properties": {
         "config_roots": {
+          "deprecated": true,
           "type": "array",
-          "description": "independent config roots whose dotfiles and managed files/directories are composed into bootstrap",
+          "description": "deprecated; bootstrap composition across independent config roots needs more design and will be removed in mise 2027.3.3",
           "items": {
             "type": "string"
           }
@@ -4704,6 +4710,25 @@
                         "type": "array",
                         "items": {
                           "$ref": "#/$defs/os_filter_item"
+                        },
+                        "minItems": 1
+                      }
+                    ]
+                  },
+                  "env": {
+                    "description": "mise environments in which this package is enabled",
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
                         },
                         "minItems": 1
                       }
