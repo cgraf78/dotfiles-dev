@@ -78,6 +78,16 @@
       },
       "additionalProperties": false,
       "description": "Configurations that are shared among multiple services."
+    },
+    "jobs": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-zA-Z0-9._-]+$": {
+          "$ref": "#/$defs/job"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Jobs are containers that run to completion."
     }
   },
   "patternProperties": {
@@ -85,175 +95,12 @@
   },
   "additionalProperties": false,
   "$defs": {
-    "service": {
+    "container_spec": {
       "type": "object",
-      "description": "Configuration for a service.",
+      "description": "Attributes of a container specification shared by anything that runs a container: services, jobs, and run-to-completion init containers (pre_start hooks).",
       "properties": {
-        "develop": {
-          "$ref": "#/$defs/development"
-        },
-        "deploy": {
-          "$ref": "#/$defs/deployment"
-        },
         "annotations": {
           "$ref": "#/$defs/list_or_dict"
-        },
-        "attach": {
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "build": {
-          "description": "Configuration options for building the service's image.",
-          "oneOf": [
-            {
-              "type": "string",
-              "description": "Path to the build context. Can be a relative path or a URL."
-            },
-            {
-              "type": "object",
-              "properties": {
-                "context": {
-                  "type": "string",
-                  "description": "Path to the build context. Can be a relative path or a URL."
-                },
-                "dockerfile": {
-                  "type": "string",
-                  "description": "Name of the Dockerfile to use for building the image."
-                },
-                "dockerfile_inline": {
-                  "type": "string",
-                  "description": "Inline Dockerfile content to use instead of a Dockerfile from the build context."
-                },
-                "entitlements": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "List of extra privileged entitlements to grant to the build process."
-                },
-                "args": {
-                  "$ref": "#/$defs/list_or_dict",
-                  "description": "Build-time variables, specified as a map or a list of KEY=VAL pairs."
-                },
-                "ssh": {
-                  "$ref": "#/$defs/list_or_dict",
-                  "description": "SSH agent socket or keys to expose to the build. Format is either a string or a list of 'default|<id>[=<socket>|<key>[,<key>]]'."
-                },
-                "labels": {
-                  "$ref": "#/$defs/list_or_dict",
-                  "description": "Labels to apply to the built image."
-                },
-                "cache_from": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "List of sources the image builder should use for cache resolution"
-                },
-                "cache_to": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Cache destinations for the build cache."
-                },
-                "no_cache": {
-                  "type": [
-                    "boolean",
-                    "string"
-                  ],
-                  "description": "Do not use cache when building the image."
-                },
-                "no_cache_filter": {
-                  "$ref": "#/$defs/string_or_list",
-                  "description": "Do not use build cache for the specified stages."
-                },
-                "additional_contexts": {
-                  "$ref": "#/$defs/list_or_dict",
-                  "description": "Additional build contexts to use, specified as a map of name to context path or URL."
-                },
-                "network": {
-                  "type": "string",
-                  "description": "Network mode to use for the build. Options include 'default', 'none', 'host', or a network name."
-                },
-                "provenance": {
-                  "type": [
-                    "string",
-                    "boolean"
-                  ],
-                  "description": "Add a provenance attestation"
-                },
-                "sbom": {
-                  "type": [
-                    "string",
-                    "boolean"
-                  ],
-                  "description": "Add a SBOM attestation"
-                },
-                "pull": {
-                  "type": [
-                    "boolean",
-                    "string"
-                  ],
-                  "description": "Always attempt to pull a newer version of the image."
-                },
-                "target": {
-                  "type": "string",
-                  "description": "Build stage to target in a multi-stage Dockerfile."
-                },
-                "shm_size": {
-                  "type": [
-                    "integer",
-                    "string"
-                  ],
-                  "description": "Size of /dev/shm for the build container. A string value can use suffix like '2g' for 2 gigabytes."
-                },
-                "extra_hosts": {
-                  "$ref": "#/$defs/extra_hosts",
-                  "description": "Add hostname mappings for the build container."
-                },
-                "isolation": {
-                  "type": "string",
-                  "description": "Container isolation technology to use for the build process."
-                },
-                "privileged": {
-                  "type": [
-                    "boolean",
-                    "string"
-                  ],
-                  "description": "Give extended privileges to the build container."
-                },
-                "secrets": {
-                  "$ref": "#/$defs/service_config_or_secret",
-                  "description": "Secrets to expose to the build. These are accessible at build-time."
-                },
-                "tags": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Additional tags to apply to the built image."
-                },
-                "ulimits": {
-                  "$ref": "#/$defs/ulimits",
-                  "description": "Override the default ulimits for the build container."
-                },
-                "platforms": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Platforms to build for, e.g., 'linux/amd64', 'linux/arm64', or 'windows/amd64'."
-                }
-              },
-              "additionalProperties": false,
-              "patternProperties": {
-                "^x-": {}
-              }
-            }
-          ]
         },
         "blkio_config": {
           "type": "object",
@@ -339,11 +186,6 @@
         "configs": {
           "$ref": "#/$defs/service_config_or_secret",
           "description": "Grant access to Configs on a per-service basis."
-        },
-        "container_name": {
-          "type": "string",
-          "description": "Specify a custom container name, rather than a generated default name.",
-          "pattern": "[a-zA-Z0-9][a-zA-Z0-9_.-]+"
         },
         "cpu_count": {
           "oneOf": [
@@ -438,53 +280,6 @@
             "^x-": {}
           }
         },
-        "depends_on": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/list_of_strings"
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "patternProperties": {
-                "^[a-zA-Z0-9._-]+$": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "patternProperties": {
-                    "^x-": {}
-                  },
-                  "properties": {
-                    "restart": {
-                      "type": [
-                        "boolean",
-                        "string"
-                      ],
-                      "description": "Whether to restart dependent services when this service is restarted."
-                    },
-                    "required": {
-                      "type": "boolean",
-                      "default": true,
-                      "description": "Whether the dependency is required for the dependent service to start."
-                    },
-                    "condition": {
-                      "type": "string",
-                      "enum": [
-                        "service_started",
-                        "service_healthy",
-                        "service_completed_successfully"
-                      ],
-                      "description": "Condition to wait for. 'service_started' waits until the service has started, 'service_healthy' waits until the service is healthy (as defined by its healthcheck), 'service_completed_successfully' waits until the service has completed successfully."
-                    }
-                  },
-                  "required": [
-                    "condition"
-                  ]
-                }
-              }
-            }
-          ],
-          "description": "Express dependency between services. Service dependencies cause services to be started in dependency order. The dependent service will wait for the dependency to be ready before starting."
-        },
         "device_cgroup_rules": {
           "$ref": "#/$defs/list_of_strings",
           "description": "Add rules to the cgroup allowed devices list."
@@ -560,94 +355,6 @@
           "$ref": "#/$defs/list_or_dict",
           "description": "Add environment variables. You can use either an array or a list of KEY=VAL pairs."
         },
-        "expose": {
-          "type": "array",
-          "items": {
-            "type": [
-              "string",
-              "number"
-            ]
-          },
-          "uniqueItems": true,
-          "description": "Expose ports without publishing them to the host machine - they'll only be accessible to linked services."
-        },
-        "extends": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "service": {
-                  "type": "string",
-                  "description": "The name of the service to extend."
-                },
-                "file": {
-                  "type": "string",
-                  "description": "The file path where the service to extend is defined."
-                }
-              },
-              "required": [
-                "service"
-              ],
-              "additionalProperties": false
-            }
-          ],
-          "description": "Extend another service, in the current file or another file."
-        },
-        "provider": {
-          "type": "object",
-          "description": "Specify a service which will not be manage by Compose directly, and delegate its management to an external provider.",
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "type": "string",
-              "description": "External component used by Compose to manage setup and teardown lifecycle of the service."
-            },
-            "options": {
-              "type": "object",
-              "description": "Provider-specific options.",
-              "patternProperties": {
-                "^.+$": {
-                  "oneOf": [
-                    {
-                      "type": [
-                        "string",
-                        "number",
-                        "boolean"
-                      ]
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": [
-                          "string",
-                          "number",
-                          "boolean"
-                        ]
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "additionalProperties": false,
-          "patternProperties": {
-            "^x-": {}
-          }
-        },
-        "external_links": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "uniqueItems": true,
-          "description": "Link to services started outside this Compose application. Specify services as <service_name>:<alias>."
-        },
         "extra_hosts": {
           "$ref": "#/$defs/extra_hosts",
           "description": "Add hostname mappings to the container network interface configuration."
@@ -666,10 +373,6 @@
           },
           "uniqueItems": true,
           "description": "Add additional groups which user inside the container should be member of."
-        },
-        "healthcheck": {
-          "$ref": "#/$defs/healthcheck",
-          "description": "Configure a health check for the container to monitor its health status."
         },
         "hostname": {
           "type": "string",
@@ -697,14 +400,6 @@
         "labels": {
           "$ref": "#/$defs/list_or_dict",
           "description": "Add metadata to containers using Docker labels. You can use either an array or a list."
-        },
-        "links": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "uniqueItems": true,
-          "description": "Link to containers in another service. Either specify both the service name and a link alias (SERVICE:ALIAS), or just the service name."
         },
         "logging": {
           "type": "object",
@@ -918,95 +613,12 @@
           "type": "string",
           "description": "Target platform to run on, e.g., 'linux/amd64', 'linux/arm64', or 'windows/amd64'."
         },
-        "ports": {
-          "type": "array",
-          "description": "Expose container ports. Short format ([HOST:]CONTAINER[/PROTOCOL]).",
-          "items": {
-            "oneOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "description": "A human-readable name for this port mapping."
-                  },
-                  "mode": {
-                    "type": "string",
-                    "description": "The port binding mode, either 'host' for publishing a host port or 'ingress' for load balancing."
-                  },
-                  "host_ip": {
-                    "type": "string",
-                    "description": "The host IP to bind to."
-                  },
-                  "target": {
-                    "type": [
-                      "integer",
-                      "string"
-                    ],
-                    "description": "The port inside the container."
-                  },
-                  "published": {
-                    "type": [
-                      "string",
-                      "integer"
-                    ],
-                    "description": "The publicly exposed port."
-                  },
-                  "protocol": {
-                    "type": "string",
-                    "description": "The port protocol (tcp or udp)."
-                  },
-                  "app_protocol": {
-                    "type": "string",
-                    "description": "Application protocol to use with the port (e.g., http, https, mysql)."
-                  }
-                },
-                "additionalProperties": false,
-                "patternProperties": {
-                  "^x-": {}
-                }
-              }
-            ]
-          },
-          "uniqueItems": true
-        },
-        "pre_start": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/pre_start_hook"
-          },
-          "description": "Init containers to run to completion before the service container is started. Each step runs in its own ephemeral container, in declared order; a non-zero exit fails the bring-up of the service and its dependents."
-        },
-        "post_start": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/service_hook"
-          },
-          "description": "Commands to run after the container starts. If any command fails, the container stops."
-        },
-        "pre_stop": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/service_hook"
-          },
-          "description": "Commands to run before the container stops. If any command fails, the container stop is aborted."
-        },
         "privileged": {
           "type": [
             "boolean",
             "string"
           ],
           "description": "Give extended privileges to the service container."
-        },
-        "profiles": {
-          "$ref": "#/$defs/list_of_strings",
-          "description": "List of profiles for this service. When profiles are specified, services are only started when the profile is activated."
         },
         "pull_policy": {
           "type": "string",
@@ -1024,20 +636,9 @@
           ],
           "description": "Mount the container's filesystem as read only."
         },
-        "restart": {
-          "type": "string",
-          "description": "Restart policy for the service container. Options include: 'no', 'always', 'on-failure', and 'unless-stopped'."
-        },
         "runtime": {
           "type": "string",
           "description": "Runtime to use for this container, e.g., 'runc'."
-        },
-        "scale": {
-          "type": [
-            "integer",
-            "string"
-          ],
-          "description": "Number of containers to deploy for this service."
         },
         "security_opt": {
           "type": "array",
@@ -1062,13 +663,6 @@
           "$ref": "#/$defs/list_or_dict",
           "description": "Kernel parameters to set in the container. You can use either an array or a list."
         },
-        "stdin_open": {
-          "type": [
-            "boolean",
-            "string"
-          ],
-          "description": "Keep STDIN open even if not attached."
-        },
         "stop_grace_period": {
           "type": "string",
           "description": "Time to wait for the container to stop gracefully before sending SIGKILL (e.g., '1s', '1m30s')."
@@ -1084,13 +678,6 @@
         "tmpfs": {
           "$ref": "#/$defs/string_or_list",
           "description": "Mount a temporary filesystem (tmpfs) into the container. Can be a single value or a list."
-        },
-        "tty": {
-          "type": [
-            "boolean",
-            "string"
-          ],
-          "description": "Allocate a pseudo-TTY to service container."
         },
         "ulimits": {
           "$ref": "#/$defs/ulimits",
@@ -1289,8 +876,261 @@
       },
       "patternProperties": {
         "^x-": {}
+      }
+    },
+    "service": {
+      "description": "Configuration for a service.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/container_spec"
+        },
+        {
+          "$ref": "#/$defs/workload_spec"
+        }
+      ],
+      "properties": {
+        "deploy": {
+          "$ref": "#/$defs/deployment"
+        },
+        "develop": {
+          "$ref": "#/$defs/development"
+        },
+        "profiles": {
+          "$ref": "#/$defs/list_of_strings",
+          "description": "List of profiles for this service. When profiles are specified, services are only started when the profile is activated."
+        },
+        "restart": {
+          "type": "string",
+          "description": "Restart policy for the service container. Options include: 'no', 'always', 'on-failure', and 'unless-stopped'."
+        },
+        "scale": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Number of containers to deploy for this service."
+        },
+        "attach": {
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "container_name": {
+          "type": "string",
+          "description": "Specify a custom container name, rather than a generated default name.",
+          "pattern": "[a-zA-Z0-9][a-zA-Z0-9_.-]+"
+        },
+        "provider": {
+          "type": "object",
+          "description": "Specify a service which will not be manage by Compose directly, and delegate its management to an external provider.",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "External component used by Compose to manage setup and teardown lifecycle of the service."
+            },
+            "options": {
+              "type": "object",
+              "description": "Provider-specific options.",
+              "patternProperties": {
+                "^.+$": {
+                  "oneOf": [
+                    {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          }
+        },
+        "extends": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "service": {
+                  "type": "string",
+                  "description": "The name of the service to extend."
+                },
+                "file": {
+                  "type": "string",
+                  "description": "The file path where the service to extend is defined."
+                }
+              },
+              "required": [
+                "service"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Extend another service, in the current file or another file."
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Link to containers in another service. Either specify both the service name and a link alias (SERVICE:ALIAS), or just the service name."
+        },
+        "external_links": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Link to services started outside this Compose application. Specify services as <service_name>:<alias>."
+        },
+        "pre_start": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pre_start_hook"
+          },
+          "description": "Init containers to run to completion before the service container is started. Each step runs in its own ephemeral container, in declared order; a non-zero exit fails the bring-up of the service and its dependents."
+        },
+        "post_start": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/service_hook"
+          },
+          "description": "Commands to run after the container starts. If any command fails, the container stops."
+        },
+        "pre_stop": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/service_hook"
+          },
+          "description": "Commands to run before the container stops. If any command fails, the container stop is aborted."
+        }
       },
-      "additionalProperties": false
+      "unevaluatedProperties": false
+    },
+    "job": {
+      "description": "Configuration for a job. Jobs are containers that run to completion.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/container_spec"
+        },
+        {
+          "$ref": "#/$defs/workload_spec"
+        }
+      ],
+      "required": [
+        "triggers"
+      ],
+      "properties": {
+        "profiles": {
+          "$ref": "#/$defs/list_of_strings",
+          "description": "List of profiles for this job. When profiles are specified, the job is only active when the profile is activated."
+        },
+        "triggers": {
+          "type": "object",
+          "description": "Trigger conditions for the job. At least one trigger attribute must be declared. Setting manual to false forbids manual execution by an explicit run command.",
+          "properties": {
+            "manual": {
+              "type": [
+                "boolean",
+                "string"
+              ],
+              "description": "Whether the job can be triggered manually by an explicit run command. Defaults to true; an explicit false forbids manual execution."
+            },
+            "schedule": {
+              "type": "array",
+              "description": "List of schedules for the job.",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "description": "Crontab expression to schedule the job (e.g. '0 * * * *' for every hour)."
+                  },
+                  {
+                    "$ref": "#/$defs/schedule"
+                  }
+                ]
+              }
+            }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "manual"
+              ]
+            },
+            {
+              "required": [
+                "schedule"
+              ]
+            }
+          ],
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "schedule": {
+      "type": "object",
+      "description": "Schedule configuration for a job trigger.",
+      "required": [
+        "cron"
+      ],
+      "properties": {
+        "cron": {
+          "type": "string",
+          "description": "Crontab expression to schedule the job (e.g. '0 * * * *' for every hour)."
+        },
+        "timezone": {
+          "type": "string",
+          "description": "Timezone used to evaluate the cron expression (e.g. 'Europe/Paris'). Defaults to the platform's local timezone."
+        },
+        "concurrency": {
+          "type": "string",
+          "enum": [
+            "forbid",
+            "queue"
+          ],
+          "description": "Policy applied when the schedule fires while a previous run is still in progress: prevent the new run ('forbid', the default) or queue it ('queue')."
+        },
+        "missed_fires": {
+          "type": "string",
+          "enum": [
+            "one",
+            "skip"
+          ],
+          "description": "Policy applied to fires missed while the platform was unavailable: run a single catch-up ('one', the default) or skip them ('skip')."
+        }
+      },
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      }
     },
     "healthcheck": {
       "type": "object",
@@ -2212,46 +2052,21 @@
     },
     "pre_start_hook": {
       "type": "object",
-      "description": "Configuration for a pre_start init container, run to completion before the service container starts.",
+      "description": "Configuration for a pre_start init container, run to completion before the service container starts. Accepts the full container specification; per #656, attributes not set explicitly are inherited from the service: collection attributes are completed by the hook's declarations (which win on conflicts), scalar attributes are replaced.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/container_spec"
+        }
+      ],
+      "unevaluatedProperties": false,
       "properties": {
-        "command": {
-          "$ref": "#/$defs/command",
-          "description": "Command to execute. Optional when the chosen image's entrypoint already runs the intended command."
-        },
-        "image": {
-          "type": "string",
-          "description": "Image used for the ephemeral container. If omitted, the parent service's image is used."
-        },
-        "user": {
-          "type": "string",
-          "description": "User to run the command as. Defaults to the user declared in image (or to the service's user when image is omitted)."
-        },
-        "privileged": {
-          "type": [
-            "boolean",
-            "string"
-          ],
-          "description": "Whether to run the command with extended privileges."
-        },
-        "working_dir": {
-          "type": "string",
-          "description": "Working directory for the command. Defaults to the service's working directory."
-        },
-        "environment": {
-          "$ref": "#/$defs/list_or_dict",
-          "description": "Environment variables for the command. Appended to or overriding the service environment."
-        },
         "per_replica": {
           "type": [
             "boolean",
             "string"
           ],
-          "description": "Whether the hook runs once per service replica (true), or once for the service as a whole before any replica starts (false, the default)."
+          "description": "When true, the hook runs once per service replica instead of once per service."
         }
-      },
-      "additionalProperties": false,
-      "patternProperties": {
-        "^x-": {}
       }
     },
     "env_file": {
@@ -2530,6 +2345,300 @@
             }
           ]
         }
+      }
+    },
+    "workload_spec": {
+      "type": "object",
+      "description": "Container attributes meaningful for orchestrated workloads (services and jobs) but not for run-to-completion init containers: build, dependency ordering, health reporting, port exposure and interactivity.",
+      "properties": {
+        "build": {
+          "description": "Configuration options for building the service's image.",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Path to the build context. Can be a relative path or a URL."
+            },
+            {
+              "type": "object",
+              "properties": {
+                "context": {
+                  "type": "string",
+                  "description": "Path to the build context. Can be a relative path or a URL."
+                },
+                "dockerfile": {
+                  "type": "string",
+                  "description": "Name of the Dockerfile to use for building the image."
+                },
+                "dockerfile_inline": {
+                  "type": "string",
+                  "description": "Inline Dockerfile content to use instead of a Dockerfile from the build context."
+                },
+                "entitlements": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of extra privileged entitlements to grant to the build process."
+                },
+                "args": {
+                  "$ref": "#/$defs/list_or_dict",
+                  "description": "Build-time variables, specified as a map or a list of KEY=VAL pairs."
+                },
+                "ssh": {
+                  "$ref": "#/$defs/list_or_dict",
+                  "description": "SSH agent socket or keys to expose to the build. Format is either a string or a list of 'default|<id>[=<socket>|<key>[,<key>]]'."
+                },
+                "labels": {
+                  "$ref": "#/$defs/list_or_dict",
+                  "description": "Labels to apply to the built image."
+                },
+                "cache_from": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of sources the image builder should use for cache resolution"
+                },
+                "cache_to": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Cache destinations for the build cache."
+                },
+                "no_cache": {
+                  "type": [
+                    "boolean",
+                    "string"
+                  ],
+                  "description": "Do not use cache when building the image."
+                },
+                "no_cache_filter": {
+                  "$ref": "#/$defs/string_or_list",
+                  "description": "Do not use build cache for the specified stages."
+                },
+                "additional_contexts": {
+                  "$ref": "#/$defs/list_or_dict",
+                  "description": "Additional build contexts to use, specified as a map of name to context path or URL."
+                },
+                "network": {
+                  "type": "string",
+                  "description": "Network mode to use for the build. Options include 'default', 'none', 'host', or a network name."
+                },
+                "provenance": {
+                  "type": [
+                    "string",
+                    "boolean"
+                  ],
+                  "description": "Add a provenance attestation"
+                },
+                "sbom": {
+                  "type": [
+                    "string",
+                    "boolean"
+                  ],
+                  "description": "Add a SBOM attestation"
+                },
+                "pull": {
+                  "type": [
+                    "boolean",
+                    "string"
+                  ],
+                  "description": "Always attempt to pull a newer version of the image."
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Build stage to target in a multi-stage Dockerfile."
+                },
+                "shm_size": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "description": "Size of /dev/shm for the build container. A string value can use suffix like '2g' for 2 gigabytes."
+                },
+                "extra_hosts": {
+                  "$ref": "#/$defs/extra_hosts",
+                  "description": "Add hostname mappings for the build container."
+                },
+                "isolation": {
+                  "type": "string",
+                  "description": "Container isolation technology to use for the build process."
+                },
+                "privileged": {
+                  "type": [
+                    "boolean",
+                    "string"
+                  ],
+                  "description": "Give extended privileges to the build container."
+                },
+                "secrets": {
+                  "$ref": "#/$defs/service_config_or_secret",
+                  "description": "Secrets to expose to the build. These are accessible at build-time."
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Additional tags to apply to the built image."
+                },
+                "ulimits": {
+                  "$ref": "#/$defs/ulimits",
+                  "description": "Override the default ulimits for the build container."
+                },
+                "platforms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Platforms to build for, e.g., 'linux/amd64', 'linux/arm64', or 'windows/amd64'."
+                }
+              },
+              "additionalProperties": false,
+              "patternProperties": {
+                "^x-": {}
+              }
+            }
+          ]
+        },
+        "depends_on": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/list_of_strings"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^[a-zA-Z0-9._-]+$": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "patternProperties": {
+                    "^x-": {}
+                  },
+                  "properties": {
+                    "restart": {
+                      "type": [
+                        "boolean",
+                        "string"
+                      ],
+                      "description": "Whether to restart dependent services when this service is restarted."
+                    },
+                    "required": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Whether the dependency is required for the dependent service to start."
+                    },
+                    "condition": {
+                      "type": "string",
+                      "enum": [
+                        "service_started",
+                        "service_healthy",
+                        "service_completed_successfully"
+                      ],
+                      "description": "Condition to wait for. 'service_started' waits until the service has started, 'service_healthy' waits until the service is healthy (as defined by its healthcheck), 'service_completed_successfully' waits until the service has completed successfully."
+                    }
+                  },
+                  "required": [
+                    "condition"
+                  ]
+                }
+              }
+            }
+          ],
+          "description": "Express dependency between services. Service dependencies cause services to be started in dependency order. The dependent service will wait for the dependency to be ready before starting."
+        },
+        "healthcheck": {
+          "$ref": "#/$defs/healthcheck",
+          "description": "Configure a health check for the container to monitor its health status."
+        },
+        "ports": {
+          "type": "array",
+          "description": "Expose container ports. Short format ([HOST:]CONTAINER[/PROTOCOL]).",
+          "items": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "A human-readable name for this port mapping."
+                  },
+                  "mode": {
+                    "type": "string",
+                    "description": "The port binding mode, either 'host' for publishing a host port or 'ingress' for load balancing."
+                  },
+                  "host_ip": {
+                    "type": "string",
+                    "description": "The host IP to bind to."
+                  },
+                  "target": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "description": "The port inside the container."
+                  },
+                  "published": {
+                    "type": [
+                      "string",
+                      "integer"
+                    ],
+                    "description": "The publicly exposed port."
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "description": "The port protocol (tcp or udp)."
+                  },
+                  "app_protocol": {
+                    "type": "string",
+                    "description": "Application protocol to use with the port (e.g., http, https, mysql)."
+                  }
+                },
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^x-": {}
+                }
+              }
+            ]
+          },
+          "uniqueItems": true
+        },
+        "expose": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "Expose ports without publishing them to the host machine - they'll only be accessible to linked services."
+        },
+        "stdin_open": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "description": "Keep STDIN open even if not attached."
+        },
+        "tty": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "description": "Allocate a pseudo-TTY to service container."
+        }
+      },
+      "patternProperties": {
+        "^x-": {}
       }
     }
   }
