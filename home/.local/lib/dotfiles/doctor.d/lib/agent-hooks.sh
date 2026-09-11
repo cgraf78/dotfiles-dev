@@ -29,6 +29,45 @@ _dr_run_agent_hook() {
   return "$rc"
 }
 
+# Launch one smoke probe in the background. $1=result prefix, $2=hook,
+# $3=payload. Each probe runs the same _dr_run_agent_hook primitive with its
+# own scratch dir, so its environment, payload, and captures are identical to
+# a sequential run; only the wall-clock overlap differs. The hook probes are
+# independent (separate payloads, separate scratch dirs, no shared hook-side
+# state), so overlapping them changes neither records nor side effects.
+# Results land in $1.{rc,stdout,stderr} for _dr_probe_ok to collect.
+_dr_run_agent_hook_async() {
+  local prefix="$1" hook="$2" payload="$3"
+  (
+    # Start from unset captures so a probe that never runs (e.g. mktemp
+    # failure) reports empty output instead of leaking a sibling's results.
+    unset _DR_AGENT_HOOK_STDOUT _DR_AGENT_HOOK_STDERR
+    # Plain assignment, no `local`: this fork cannot leak into the parent.
+    # The `||` guard keeps `set -e` callers from aborting before results land.
+    rc=0
+    _dr_run_agent_hook "$hook" "$payload" || rc=$?
+    printf '%s' "$rc" >"$prefix.rc"
+    printf '%s' "${_DR_AGENT_HOOK_STDOUT-}" >"$prefix.stdout"
+    printf '%s' "${_DR_AGENT_HOOK_STDERR-}" >"$prefix.stderr"
+  ) &
+}
+
+# Collect one background probe launched by _dr_run_agent_hook_async: restore
+# _DR_AGENT_HOOK_STDOUT/_DR_AGENT_HOOK_STDERR exactly as _dr_run_agent_hook
+# would have set them (command substitution strips trailing newlines the same
+# way), then return the recorded exit status. A missing result (the probe fork
+# died before reporting) fails closed as rc 1 with empty captures.
+_dr_probe_ok() {
+  local prefix="$1" rc=1
+  if [[ -f $prefix.rc ]]; then
+    rc=$(<"$prefix.rc")
+    [[ $rc =~ ^[0-9]+$ ]] || rc=1
+  fi
+  _DR_AGENT_HOOK_STDOUT=$(cat "$prefix.stdout" 2>/dev/null || true)
+  _DR_AGENT_HOOK_STDERR=$(cat "$prefix.stderr" 2>/dev/null || true)
+  return "$rc"
+}
+
 _dr_check_opencode_agentguard() {
   command -v "${DOT_OPENCODE_COMMAND:-opencode}" >/dev/null 2>&1 || return 0
 
@@ -147,7 +186,30 @@ _dr_check_agent_hooks() {
     return 0
   fi
 
-  if _dr_run_agent_hook "$pre_bash" '{"tool_input":{"command":"dot status"}}'; then
+  # The three smoke probes need three hook executions (two binaries, two
+  # pre-bash payloads), so run them as one combined background batch: wall
+  # time drops from the sum to roughly the slowest probe. Launch conditions
+  # are the same file tests as before, so a missing pre-bash still returns
+  # before any hook runs, and results are applied below in the original
+  # order, so records are unchanged.
+  local results
+  local -a probe_pids
+  probe_pids=()
+  results=$(mktemp -d 2>/dev/null || mktemp -d -t dot-doctor-agent-hooks) || return 1
+  _dr_run_agent_hook_async "$results/dot-status" "$pre_bash" '{"tool_input":{"command":"dot status"}}'
+  probe_pids+=("$!")
+  _dr_run_agent_hook_async "$results/raw-git" "$pre_bash" '{"tool_input":{"command":"git status -uall"}}'
+  probe_pids+=("$!")
+  if [[ -x "$stop_hook" ]]; then
+    _dr_run_agent_hook_async "$results/stop" "$stop_hook" '{}'
+    probe_pids+=("$!")
+  fi
+  # probe_pids always holds at least the two pre-bash probes here. Under
+  # `set -e` a failing wait would abort before records publish; the probes
+  # report pass/fail through their result files, not through wait.
+  wait "${probe_pids[@]}" || true
+
+  if _dr_probe_ok "$results/dot-status"; then
     _dr_ok "agent pre-bash allows dot status"
   else
     _dr_fail "agent pre-bash failed dot status smoke" \
@@ -155,7 +217,7 @@ _dr_check_agent_hooks() {
   fi
 
   local raw_git_rc=0
-  _dr_run_agent_hook "$pre_bash" '{"tool_input":{"command":"git status -uall"}}' || raw_git_rc=$?
+  _dr_probe_ok "$results/raw-git" || raw_git_rc=$?
   if [[ "$raw_git_rc" -eq 0 ]]; then
     if _dr_is_dotfiles_checkout; then
       _dr_ok "agent pre-bash allows raw git status in checkout"
@@ -171,7 +233,7 @@ _dr_check_agent_hooks() {
   fi
 
   if [[ -x "$stop_hook" ]]; then
-    if _dr_run_agent_hook "$stop_hook" '{}'; then
+    if _dr_probe_ok "$results/stop"; then
       _dr_ok "agent stop hook runs"
     else
       _dr_fail "agent stop hook failed" "${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
@@ -179,4 +241,7 @@ _dr_check_agent_hooks() {
   else
     _dr_warn "agent stop hook unavailable" "$(_dr_tilde "$stop_hook")"
   fi
+  local check_rc=$?
+  rm -rf "$results" 2>/dev/null || true
+  return "$check_rc"
 }
