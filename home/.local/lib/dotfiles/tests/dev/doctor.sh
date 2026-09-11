@@ -7,7 +7,7 @@ dot_dev_doctor_test() {
   local agent_home installed_config installed_config_before installed_doctor_output
   local installed_section fixture_health=false owner_root source_doctor host_doctor
   local grok_compat_path
-  local permissive_home no_pre_home no_stop_home multiline_home
+  local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -400,11 +400,19 @@ SH
     _doctor_records _dr_check_agent_hooks || true)
   _assert_contains 'Agent Hooks doctor rejects raw Git outside a checkout' \
     'agent pre-bash allows raw dotfiles git status' "$result"
-  git init -q "$permissive_home"
+  # test/run stubs _dr_is_dotfiles_checkout to always fail (the capability
+  # fixture must not contain a git repo), so a real `git init` fixture can
+  # never observe the inside-checkout branch in CI. Drive the predicate
+  # directly instead: the lib's inside/outside branching is what's under
+  # test here, not real git discovery (base-owned, tested elsewhere).
+  _checkout_def=$(declare -f _dr_is_dotfiles_checkout)
+  # shellcheck disable=SC2329  # _dr_check_agent_hooks invokes this predicate.
+  _dr_is_dotfiles_checkout() { return 0; }
   result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
     _doctor_records _dr_check_agent_hooks || true)
   _assert_contains 'Agent Hooks doctor allows raw Git inside a checkout' \
     'agent pre-bash allows raw git status in checkout' "$result"
+  eval "$_checkout_def"
 
   no_pre_home=$(_tmpdir)
   mkdir -p "$no_pre_home/.local/bin" "$no_pre_home/.config/shell"
