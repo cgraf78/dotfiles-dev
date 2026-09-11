@@ -1,4 +1,5 @@
 home/.local/lib/dotfiles/tests/agent-yolo-wrappers-test
+home/.local/lib/dotfiles/tests/dev-direnv-test
 home/.local/lib/dotfiles/tests/dev-doctor-test
 home/.local/lib/dotfiles/tests/dev-launchers-test
 home/.local/lib/dotfiles/tests/dev-merges-test

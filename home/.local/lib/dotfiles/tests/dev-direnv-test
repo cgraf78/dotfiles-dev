@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# shellcheck disable=SC1091 # suite-local helper, resolved at runtime.
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+echo '=== direnv hook gate: upward scan ==='
+# shellcheck disable=SC1091 # file under test, resolved under test HOME.
+. "$HOME/.config/shell/interactive.d/70-dev-tool-init.sh"
+
+work=$(_tmpdir)
+scan_rc() {
+  if (cd "$1" && _dot_upward_envrc); then
+    echo 0
+  else
+    echo 1
+  fi
+}
+
+mkdir -p "$work/empty/a/b" "$work/withrc/sub/deep" "$work/dotenv/sub"
+printf 'export DIRVENV_TEST_MARKER=1\n' >"$work/withrc/.envrc"
+printf 'export DIRVENV_TEST_MARKER=1\n' >"$work/dotenv/.env"
+_assert_eq 'scan: no .envrc upward reports clean' '1' "$(scan_rc "$work/empty/a/b")"
+_assert_eq 'scan: finds .envrc two levels up' '0' "$(scan_rc "$work/withrc/sub/deep")"
+_assert_eq 'scan: finds .envrc in the working directory' '0' "$(scan_rc "$work/withrc")"
+_assert_eq 'scan: ignores sibling trees' '1' "$(scan_rc "$work/empty")"
+_assert_eq 'scan: ignores .env files (direnv does not load them)' '1' "$(scan_rc "$work/dotenv/sub")"
+
+mkdir -p "$work/real/sub"
+ln -s "$work/real" "$work/link"
+printf 'export DIRVENV_TEST_MARKER=1\n' >"$work/real/.envrc"
+_assert_eq 'scan: follows symlinked directories to the target' '0' "$(scan_rc "$work/link/sub")"
+mkdir -p "$work/plainlink-target"
+ln -s "$work/plainlink-target" "$work/plainlink"
+_assert_eq 'scan: clean symlinked chain reports clean' '1' "$(scan_rc "$work/plainlink")"
+# direnv resolves physically: an .envrc beside the link target's parent (not
+# beside the logical parent) must still run the hook.
+mkdir -p "$work/phys/real/sub" "$work/wrap"
+ln -s "$work/phys/real" "$work/wrap/link"
+printf 'export DIRVENV_TEST_MARKER=1\n' >"$work/phys/.envrc"
+_assert_eq 'scan: finds physical-only ancestors through links' '0' "$(scan_rc "$work/wrap/link/sub")"
+
+mkdir -p "$work/unreadable"
+printf 'export DIRVENV_TEST_MARKER=1\n' >"$work/unreadable/.envrc"
+chmod 000 "$work/unreadable/.envrc"
+_assert_eq 'scan: unreadable .envrc still runs the hook' '0' "$(scan_rc "$work/unreadable")"
+chmod 644 "$work/unreadable/.envrc"
+mkdir -p "$work/isdir/.envrc"
+_assert_eq 'scan: directory named .envrc still runs the hook' '0' "$(scan_rc "$work/isdir")"
+mkdir -p "$work/brokenlink"
+ln -s "$work/does-not-exist" "$work/brokenlink/.envrc"
+_assert_eq 'scan: broken .envrc symlink still runs the hook' '0' "$(scan_rc "$work/brokenlink")"
+
+mkdir -p "$work/vanished"
+vanished_rc=0
+(cd "$work/vanished" && rmdir "$work/vanished" && _dot_upward_envrc) || vanished_rc=$?
+_assert_eq 'scan: vanished working directory runs the hook' '0' "$vanished_rc"
+empty_pwd_rc=0
+(PWD='' _dot_upward_envrc) || empty_pwd_rc=$?
+_assert_eq 'scan: empty PWD runs the hook' '0' "$empty_pwd_rc"
+root_rc=1
+if (cd / && _dot_upward_envrc); then root_rc=0; fi
+if [[ -e /.envrc ]]; then
+  _assert_eq 'scan: filesystem root with .envrc runs the hook' '0' "$root_rc"
+else
+  _assert_eq 'scan: filesystem root without .envrc reports clean' '1' "$root_rc"
+fi
+
+echo '=== direnv hook gate: bash install ==='
+hook_log=$work/hook.log
+: >"$hook_log"
+# Frozen direnv 2.37.1 hook shape; used when no binary is available, and the
+# installer shape-guard covers drift by falling back to the raw hook.
+fallback_bash=$(
+  cat <<'EOF'
+_direnv_hook() {
+  local previous_exit_status=$?;
+  trap -- '' SIGINT;
+  eval "$("direnv" export bash)";
+  trap - SIGINT;
+  return $previous_exit_status;
+};
+EOF
+)
+if command -v direnv >/dev/null 2>&1 && canned_bash=$(direnv hook bash 2>/dev/null); then
+  :
+else
+  canned_bash=$fallback_bash
+fi
+# Route hook exports through a spy instead of the direnv binary.
+canned_bash=$(printf '%s\n' "$canned_bash" | sed 's|"\([^"]*direnv\)" export|direnv_gate_stub export|')
+direnv_gate_stub() {
+  printf 'EXPORT-CALLED\n' >>"$hook_log"
+}
+# The stub defines the hook only for the direnv call, like the real cache
+# source (sley/git-tools inits define their own integrations instead).
+# shellcheck disable=SC2329 # invoked by the sourced 80-dev file below.
+_tool_init() {
+  if [[ $1 == direnv ]]; then eval "$canned_bash"; fi
+}
+# shellcheck disable=SC1091 # file under test, resolved under test HOME.
+. "$HOME/.config/shell/interactive.d/80-dev-integrations.bash"
+if declare -F _dot_direnv_hook_orig >/dev/null 2>&1; then
+  _pass 'gate: install keeps the raw hook as orig'
+else
+  _fail 'gate: install keeps the raw hook as orig'
+fi
+: >"$hook_log"
+(cd "$work/empty/a/b" && _direnv_hook)
+_assert_file_content 'gate: idle directory skips the export fork' '' "$hook_log"
+(cd "$work/withrc/sub/deep" && _direnv_hook)
+_assert_file_content 'gate: directory with .envrc runs the export' 'EXPORT-CALLED' "$hook_log"
+: >"$hook_log"
+(cd "$work/empty/a/b" && DIRENV_DIFF=stale _direnv_hook)
+_assert_file_content 'gate: loaded diff runs the export for unload' 'EXPORT-CALLED' "$hook_log"
+status_after_false=$(
+  set +e
+  cd "$work/empty/a/b"
+  false
+  _direnv_hook
+  echo $?
+)
+status_after_true=$(
+  set +e
+  cd "$work/empty/a/b"
+  true
+  _direnv_hook
+  echo $?
+)
+_assert_eq 'gate: skipped hook preserves a failing status' '1' "$status_after_false"
+_assert_eq 'gate: skipped hook preserves a passing status' '0' "$status_after_true"
+# Re-sourcing reinstalls over the raw hook exactly once (no stacked exports).
+# shellcheck disable=SC1091 # file under test, resolved under test HOME.
+. "$HOME/.config/shell/interactive.d/80-dev-integrations.bash"
+: >"$hook_log"
+(cd "$work/withrc/sub/deep" && _direnv_hook)
+_assert_file_content 'gate: re-source still exports exactly once' 'EXPORT-CALLED' "$hook_log"
+if declare -f _dot_direnv_hook_orig | grep -q upward; then
+  _fail 'gate: orig stays raw across re-sources (no gate-on-gate recursion)'
+else
+  _pass 'gate: orig stays raw across re-sources (no gate-on-gate recursion)'
+fi
+# A cache-regeneration failure leaves the gate in place instead of recursing:
+# _tool_init no-ops, the hook body is unchanged, the installer stands down.
+_tool_init() { :; }
+# shellcheck disable=SC1091 # file under test, resolved under test HOME.
+. "$HOME/.config/shell/interactive.d/80-dev-integrations.bash"
+: >"$hook_log"
+# A CPU cap instead of `timeout` (not in the controlled test bin): infinite
+# gate-on-gate recursion would spin, never reaching the spy.
+(
+  cd "$work/withrc/sub/deep" && ulimit -t 5 2>/dev/null || true
+  _direnv_hook
+)
+_assert_file_content 'gate: failed re-init keeps a single working gate' 'EXPORT-CALLED' "$hook_log"
+
+if command -v zsh >/dev/null 2>&1; then
+  echo '=== direnv hook gate: zsh install ==='
+  fallback_zsh=$(
+    cat <<'EOF'
+_direnv_hook() {
+  trap -- '' SIGINT;
+  eval "$("direnv" export zsh)";
+  trap - SIGINT;
+}
+EOF
+  )
+  if command -v direnv >/dev/null 2>&1 && canned_zsh=$(direnv hook zsh 2>/dev/null); then
+    :
+  else
+    canned_zsh=$fallback_zsh
+  fi
+  canned_zsh=$(printf '%s\n' "$canned_zsh" | sed 's|"\([^"]*direnv\)" export|direnv_gate_stub export|')
+  zsh_gate_out=$(ZSH_CANNED="$canned_zsh" ZSH_WORK="$work" ZSH_HOME="$HOME" zsh -f -c '
+    hook_log=$1
+    . "$ZSH_HOME/.config/shell/interactive.d/70-dev-tool-init.sh"
+    direnv_gate_stub() { print -r -- EXPORT-CALLED >>"$hook_log"; }
+    _tool_init() { if [[ $1 == direnv ]]; then eval "$ZSH_CANNED"; fi }
+    . "$ZSH_HOME/.config/shell/interactive.d/80-dev-integrations.zsh"
+    (( $+functions[_dot_direnv_hook_orig] )) && print "ORIG=yes" || print "ORIG=no"
+    # The hook also rides chpwd (as it does unmodified); clear it so each
+    # probe below measures exactly one precmd-path call, then cover chpwd
+    # itself separately.
+    chpwd_functions=()
+    : >"$hook_log"
+    ( cd "$ZSH_WORK/empty/a/b" && _direnv_hook )
+    [[ -s $hook_log ]] && print "IDLE=called" || print "IDLE=skipped"
+    ( cd "$ZSH_WORK/withrc/sub/deep" && _direnv_hook )
+    [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "LOADED=called" || print "LOADED=miss"
+    : >"$hook_log"
+    ( cd "$ZSH_WORK/empty/a/b" && DIRENV_DIFF=stale _direnv_hook )
+    [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "UNLOAD=called" || print "UNLOAD=miss"
+    . "$ZSH_HOME/.config/shell/interactive.d/80-dev-integrations.zsh"
+    chpwd_functions=()
+    : >"$hook_log"
+    ( cd "$ZSH_WORK/withrc/sub/deep" && _direnv_hook )
+    [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "RESOURCE=once" || print "RESOURCE=wrong"
+    print ${functions[_dot_direnv_hook_orig]} | grep -q upward && print "ORIGRAW=no" || print "ORIGRAW=yes"
+    chpwd_functions=(_direnv_hook)
+    : >"$hook_log"
+    cd "$ZSH_WORK/withrc/sub/deep"
+    [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "CHPWDLOAD=called" || print "CHPWDLOAD=miss"
+    : >"$hook_log"
+    cd "$ZSH_WORK/empty/a/b"
+    [[ -s $hook_log ]] && print "CHPWDIDLE=called" || print "CHPWDIDLE=skipped"
+  ' _ "$hook_log" 2>/dev/null)
+  _assert_contains 'gate (zsh): install keeps the raw hook as orig' 'ORIG=yes' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): idle directory skips the export fork' 'IDLE=skipped' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): directory with .envrc runs the export' 'LOADED=called' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): loaded diff runs the export for unload' 'UNLOAD=called' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): re-source still exports exactly once' 'RESOURCE=once' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): orig stays raw across re-sources' 'ORIGRAW=yes' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): chpwd into .envrc tree runs the export' 'CHPWDLOAD=called' "$zsh_gate_out"
+  _assert_contains 'gate (zsh): chpwd into idle tree skips the export' 'CHPWDIDLE=skipped' "$zsh_gate_out"
+fi
+
+if command -v direnv >/dev/null 2>&1; then
+  echo '=== direnv hook gate: live binary parity ==='
+  live_xdg=$(_tmpdir)
+  mkdir -p "$live_xdg/direnv" "$work/liverc/sub"
+  printf 'export DIRVENV_LIVE_MARKER=live1\n' >"$work/liverc/.envrc"
+  XDG_CONFIG_HOME=$live_xdg direnv allow "$work/liverc" >/dev/null 2>&1
+  # shellcheck disable=SC2016 # $-expansions belong to the bash -c body.
+  live_env_raw=$(env -u BASH_ENV XDG_CONFIG_HOME="$live_xdg" bash --noprofile --norc -c '
+    cd "$1" && eval "$(direnv export bash)" && env | LC_ALL=C sort
+  ' _ "$work/empty/a/b" 2>/dev/null)
+  # The gate is for the real per-prompt hook; replicate its skip/run decision
+  # against the live binary (skip when the scan is clean and no diff is set).
+  # shellcheck disable=SC2016 # $-expansions belong to the bash -c body.
+  live_env_gated=$(env -u BASH_ENV XDG_CONFIG_HOME="$live_xdg" bash --noprofile --norc -c '
+    . "$1"
+    cd "$2" || exit 5
+    if [[ -n "${DIRENV_DIFF:-}" ]] || _dot_upward_envrc; then eval "$(direnv export bash)"; fi
+    env | LC_ALL=C sort
+  ' _ "$HOME/.config/shell/interactive.d/70-dev-tool-init.sh" "$work/empty/a/b" 2>/dev/null)
+  _assert_eq 'gate: idle live export matches a skip' "$live_env_raw" "$live_env_gated"
+  # shellcheck disable=SC2016 # $-expansions belong to the bash -c body.
+  live_loaded=$(env -u BASH_ENV XDG_CONFIG_HOME="$live_xdg" bash --noprofile --norc -c '
+    . "$1"
+    cd "$2" && _dot_upward_envrc && eval "$(direnv export bash)"
+    printf "%s" "${DIRVENV_LIVE_MARKER-unset}"
+  ' _ "$HOME/.config/shell/interactive.d/70-dev-tool-init.sh" "$work/liverc/sub" 2>/dev/null)
+  _assert_eq 'gate: live load still applies the environment' 'live1' "$live_loaded"
+fi
+
+_test_summary
