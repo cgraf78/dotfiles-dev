@@ -760,6 +760,63 @@ else
   _fail 'VS Code producer-to-retirement removes its managed link'
 fi
 
+export HOME=$fixture/deferred-user
+export XDG_STATE_HOME=$fixture/deferred-state
+deferred_destination=$HOME/live/settings.json
+deferred_managed=$fixture/deferred-managed.json
+mkdir -p "${deferred_destination%/*}"
+printf '%s\n' '{"local":1,"owned":"before"}' >"$deferred_destination"
+printf '%s\n' '{"fresh":"dev","owned":"dev"}' >"$deferred_managed"
+dev_profile_state_begin test-object json "$deferred_destination" "$deferred_managed"
+printf '%s\n' '{"fresh":"dev","local":1,"owned":"dev"}' >"$deferred_destination"
+dev_profile_state_commit
+# A deferred generation must not disturb the live file until the caller
+# publishes its staged result: file watchers (VS Code's restart prompt)
+# react to the intermediate baseline publication otherwise.
+deferred_before=$(cat "$deferred_destination")
+if dev_profile_state_begin test-object json "$deferred_destination" "$deferred_managed" atomic deferred; then
+  _pass 'deferred begin accepts the deferred mode'
+  _assert_eq 'deferred begin leaves the live destination untouched' \
+    "$deferred_before" "$(cat "$deferred_destination")"
+  deferred_work=$fixture/deferred-work.json
+  cp "$_DEV_PROFILE_STATE_BASELINE" "$deferred_work"
+  jq --sort-keys -s '.[0] * .[1]' "$deferred_work" "$deferred_managed" \
+    >"$deferred_work.merged" &&
+    mv "$deferred_work.merged" "$deferred_work"
+  if dev_profile_state_publish_final "$deferred_work"; then
+    _pass 'deferred publish installs the staged final document'
+  else
+    _fail 'deferred publish installs the staged final document'
+  fi
+  dev_profile_state_commit
+  _assert_eq 'deferred transaction converges to managed values' \
+    '{"fresh":"dev","local":1,"owned":"dev"}' "$(jq -cS . "$deferred_destination")"
+  deferred_identity=$(stat -c '%i:%Y' "$deferred_destination" 2>/dev/null ||
+    stat -f '%i:%m' "$deferred_destination")
+  dev_profile_state_begin test-object json "$deferred_destination" "$deferred_managed" atomic deferred
+  cp "$_DEV_PROFILE_STATE_BASELINE" "$deferred_work"
+  jq --sort-keys -s '.[0] * .[1]' "$deferred_work" "$deferred_managed" \
+    >"$deferred_work.merged" &&
+    mv "$deferred_work.merged" "$deferred_work"
+  dev_profile_state_publish_final "$deferred_work"
+  dev_profile_state_commit
+  _assert_eq 'converged deferred transaction leaves the live file untouched' \
+    "$deferred_identity" "$(stat -c '%i:%Y' "$deferred_destination" 2>/dev/null ||
+      stat -f '%i:%m' "$deferred_destination")"
+  printf '%s\n' '{}' >"$deferred_managed"
+  dev_profile_state_begin test-object json "$deferred_destination" "$deferred_managed" atomic deferred
+  cp "$_DEV_PROFILE_STATE_BASELINE" "$deferred_work"
+  jq --sort-keys -s '.[0] * .[1]' "$deferred_work" "$deferred_managed" \
+    >"$deferred_work.merged" &&
+    mv "$deferred_work.merged" "$deferred_work"
+  dev_profile_state_publish_final "$deferred_work"
+  dev_profile_state_commit
+  _assert_eq 'deferred transaction retires removed managed values' \
+    '{"local":1,"owned":"before"}' "$(jq -cS . "$deferred_destination")"
+else
+  _fail 'deferred begin accepts the deferred mode'
+fi
+
 _assert_eq 'profile state lifecycle leaves no transaction temporaries' '0' \
   "$(find "$fixture" \
     \( -name 'dev-profile-*' -o -name '*.rollback.*' \

@@ -898,6 +898,7 @@ _vscode_profile_state_publisher() {
 
 _merge_vscode_config_tracked() {
   local cfg_dir=$1 opts=${2:-} managed_dir publisher keybinding_source
+  local baseline work
   _dev_profile_state_tempdir || return 1
   managed_dir=$REPLY
   keybinding_source=$managed_dir/keybindings-source.json
@@ -920,13 +921,21 @@ _merge_vscode_config_tracked() {
     return 1
   }
 
+  # Deferred transactions build the final document off-live: begin stages
+  # the user baseline without touching the live files, and publish_final
+  # installs the merged result in one guarded write. Live-editing the
+  # baseline first made VS Code's restart prompt fire on every run.
   if ! dev_profile_state_begin vscode-settings jsonc \
-    "$cfg_dir/settings.json" "$managed_dir/settings.json" "$publisher"; then
+    "$cfg_dir/settings.json" "$managed_dir/settings.json" "$publisher" deferred; then
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
-  if ! _vscode_apply_settings_projection \
-    "$managed_dir/settings.json" "$cfg_dir/settings.json" "$opts" ||
+  baseline=$REPLY
+  work=$managed_dir/working-settings.json
+  if ! cp "$baseline" "$work" ||
+    ! _vscode_apply_settings_projection \
+      "$managed_dir/settings.json" "$work" "$opts" ||
+    ! dev_profile_state_publish_final "$work" ||
     ! dev_profile_state_commit; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
@@ -934,12 +943,16 @@ _merge_vscode_config_tracked() {
   fi
 
   if ! dev_profile_state_begin vscode-keybindings jsonc \
-    "$cfg_dir/keybindings.json" "$managed_dir/keybindings.json" "$publisher"; then
+    "$cfg_dir/keybindings.json" "$managed_dir/keybindings.json" "$publisher" deferred; then
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
-  if ! _merge_vscode_keybindings \
-    "$keybinding_source" "$cfg_dir/keybindings.json" ||
+  baseline=$REPLY
+  work=$managed_dir/working-keybindings.json
+  if ! cp "$baseline" "$work" ||
+    ! _merge_vscode_keybindings \
+      "$keybinding_source" "$work" ||
+    ! dev_profile_state_publish_final "$work" ||
     ! dev_profile_state_commit; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
@@ -1333,6 +1346,7 @@ _merge_vscode_remote_mcp_auth() {
 _merge_vscode_remote_settings_tracked() {
   local cfg_dir=$1 managed_dir publisher
   local destination=$cfg_dir/settings.json
+  local baseline work
   _dev_profile_state_tempdir || return 1
   managed_dir=$REPLY
   printf '{}\n' >"$managed_dir/settings.json"
@@ -1349,14 +1363,20 @@ _merge_vscode_remote_settings_tracked() {
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   }
+  # Deferred: stage the final document off-live so observers never see the
+  # managed-stripped intermediate state (see _merge_vscode_config_tracked).
   if ! dev_profile_state_begin vscode-settings jsonc \
-    "$destination" "$managed_dir/settings.json" "$publisher"; then
+    "$destination" "$managed_dir/settings.json" "$publisher" deferred; then
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
   fi
-  if ! _merge_vscode_window_title "$destination" ||
+  baseline=$REPLY
+  work=$managed_dir/working-settings.json
+  if ! cp "$baseline" "$work" ||
+    ! _merge_vscode_window_title "$work" ||
     { _vscode_mcp_auth_applicable "$destination" &&
-      ! _merge_vscode_mcp_auth "$destination"; } ||
+      ! _merge_vscode_mcp_auth "$work"; } ||
+    ! dev_profile_state_publish_final "$work" ||
     ! dev_profile_state_commit; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true

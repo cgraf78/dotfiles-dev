@@ -3530,13 +3530,10 @@ JSON
       _vscode_variants() {
         printf "%s\t%s\n" "$HOME/.vscode/extensions" "$HOME/.config/Code/User"
       }
-      settings_merge_definition=$(declare -f _merge_vscode_settings)
-      eval "${settings_merge_definition/_merge_vscode_settings/_merge_vscode_settings_original}"
-      _merge_vscode_settings() {
-        if [[ $2 == "$HOME/.config/Code/User/settings.json" ]]; then
-          return 1
-        fi
-        _merge_vscode_settings_original "$@"
+      settings_apply_definition=$(declare -f _vscode_apply_settings_projection)
+      eval "${settings_apply_definition/_vscode_apply_settings_projection/_vscode_apply_settings_projection_original}"
+      _vscode_apply_settings_projection() {
+        return 1
       }
       merge
     ' >/dev/null 2>&1 || vscode_projection_failure_rc=$?
@@ -4686,6 +4683,103 @@ EOF
     ')
     _assert_eq "vscode expand path: ~/ placeholder still expands to HOME" \
       "$expand_path_home/.vscode/extensions" "$expand_path_tilde_result"
+
+    # Regression: tracked config transactions used to publish the
+    # managed-stripped baseline to the live files on every run, so file
+    # watchers (VS Code's restart prompt) saw managed settings vanish and
+    # reappear each cycle. Converged runs must leave both files untouched.
+    vscode_tracked_home=$(_tmpdir)
+    vscode_tracked_cfg=$vscode_tracked_home/.config/Code/User
+    mkdir -p \
+      "$vscode_tracked_cfg" \
+      "$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/settings.d" \
+      "$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/all.d" \
+      "$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/linux.d" \
+      "$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/macos.d" \
+      "$vscode_tracked_home/.local/state"
+    cat >"$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/settings.d/10-tracked.json" <<'JSON'
+{
+  "fixture.managed": true
+}
+JSON
+    cat >"$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/all.d/10-tracked.jsonc" <<'JSON'
+[
+  {
+    "key": "ctrl+alt+9",
+    "command": "fixture.trackedBinding"
+  }
+]
+JSON
+    printf '[]\n' >"$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/linux.d/10-tracked.jsonc"
+    printf '[]\n' >"$vscode_tracked_home/.config/dot/merge-hooks.d/vscode/keybindings/macos.d/10-tracked.jsonc"
+    printf '%s\n' '{"fixture.local":1}' >"$vscode_tracked_cfg/settings.json"
+    printf '[]\n' >"$vscode_tracked_cfg/keybindings.json"
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    HOME="$vscode_tracked_home" REAL_HOME="$REAL_HOME" DOT_TEST=1 \
+      XDG_STATE_HOME="$vscode_tracked_home/.local/state" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        _merge_vscode_config_tracked "$HOME/.config/Code/User" ""
+      '
+    _assert_eq "vscode tracked config: managed settings converge" \
+      "true" "$(jq -r '."fixture.managed"' "$vscode_tracked_cfg/settings.json")"
+    _assert_eq "vscode tracked config: local settings survive" \
+      "1" "$(jq -r '."fixture.local"' "$vscode_tracked_cfg/settings.json")"
+    vscode_tracked_settings_identity=$(stat -c '%i:%Y' "$vscode_tracked_cfg/settings.json" 2>/dev/null ||
+      stat -f '%i:%m' "$vscode_tracked_cfg/settings.json")
+    vscode_tracked_keybindings_identity=$(stat -c '%i:%Y' "$vscode_tracked_cfg/keybindings.json" 2>/dev/null ||
+      stat -f '%i:%m' "$vscode_tracked_cfg/keybindings.json")
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    HOME="$vscode_tracked_home" REAL_HOME="$REAL_HOME" DOT_TEST=1 \
+      XDG_STATE_HOME="$vscode_tracked_home/.local/state" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        _merge_vscode_config_tracked "$HOME/.config/Code/User" ""
+      '
+    _assert_eq "vscode tracked config: converged rerun leaves settings.json untouched" \
+      "$vscode_tracked_settings_identity" "$(stat -c '%i:%Y' "$vscode_tracked_cfg/settings.json" 2>/dev/null ||
+        stat -f '%i:%m' "$vscode_tracked_cfg/settings.json")"
+    _assert_eq "vscode tracked config: converged rerun leaves keybindings.json untouched" \
+      "$vscode_tracked_keybindings_identity" "$(stat -c '%i:%Y' "$vscode_tracked_cfg/keybindings.json" 2>/dev/null ||
+        stat -f '%i:%m' "$vscode_tracked_cfg/keybindings.json")"
+
+    # Same no-churn guarantee for the remote Machine settings transaction,
+    # which stages title and token settings through the same deferred flow.
+    vscode_tracked_remote_home=$(_tmpdir)
+    vscode_tracked_remote_cfg=$vscode_tracked_remote_home/.vscode-remote/data/Machine
+    mkdir -p "$vscode_tracked_remote_cfg" "$vscode_tracked_remote_home/.local/state"
+    printf '%s\n' '{"fixture.local":1}' >"$vscode_tracked_remote_cfg/settings.json"
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    HOME="$vscode_tracked_remote_home" REAL_HOME="$REAL_HOME" DOT_TEST=1 \
+      XDG_STATE_HOME="$vscode_tracked_remote_home/.local/state" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        _merge_vscode_remote_settings_tracked "$HOME/.vscode-remote/data/Machine"
+      '
+    _assert_eq "vscode tracked remote config: window title converges" \
+      "true" "$(jq -r 'has("window.title")' "$vscode_tracked_remote_cfg/settings.json")"
+    _assert_eq "vscode tracked remote config: local settings survive" \
+      "1" "$(jq -r '."fixture.local"' "$vscode_tracked_remote_cfg/settings.json")"
+    vscode_tracked_remote_identity=$(stat -c '%i:%Y' "$vscode_tracked_remote_cfg/settings.json" 2>/dev/null ||
+      stat -f '%i:%m' "$vscode_tracked_remote_cfg/settings.json")
+    # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+    HOME="$vscode_tracked_remote_home" REAL_HOME="$REAL_HOME" DOT_TEST=1 \
+      XDG_STATE_HOME="$vscode_tracked_remote_home/.local/state" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        _merge_vscode_remote_settings_tracked "$HOME/.vscode-remote/data/Machine"
+      '
+    _assert_eq "vscode tracked remote config: converged rerun leaves settings.json untouched" \
+      "$vscode_tracked_remote_identity" "$(stat -c '%i:%Y' "$vscode_tracked_remote_cfg/settings.json" 2>/dev/null ||
+        stat -f '%i:%m' "$vscode_tracked_remote_cfg/settings.json")"
   else
     echo "  SKIP: VS Code Sley merge hook assertions (jq unavailable)"
   fi

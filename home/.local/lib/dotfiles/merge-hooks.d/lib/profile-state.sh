@@ -472,15 +472,26 @@ dev_profile_state_tracked() {
 }
 
 dev_profile_state_begin() {
-  local policy=$1 format=$2 destination=$3 managed=$4 publisher=${5:-atomic}
+  # The optional sixth argument selects deferred mode: begin stages the
+  # baseline in a temp file without touching the live destination, and the
+  # caller publishes its staged final document with
+  # dev_profile_state_publish_final before commit. Deferred mode keeps
+  # file watchers (VS Code's restart prompt) from ever seeing the
+  # managed-stripped intermediate state.
+  local policy=$1 format=$2 destination=$3 managed=$4 publisher=${5:-atomic} mode=${6:-immediate}
   local root key receipt pending original_state engine current before applied
   local baseline original managed_json receipt_links transaction_dir transaction temporary
   local original_mode='' current_valid=1
-  [[ $# -ge 4 && $# -le 5 ]] || return 2
+  [[ $# -ge 4 && $# -le 6 ]] || return 2
   _dev_profile_state_single_writer || return 1
   [[ ${_DEV_PROFILE_STATE_ACTIVE:-0} != 1 ]] || return 1
   _dev_profile_state_policy_format_valid "$policy" "$format" || return 2
   _dev_profile_state_publisher_valid "$policy" "$publisher" || return 2
+  case $mode in
+    immediate) ;;
+    deferred) ;;
+    *) return 2 ;;
+  esac
   _dev_profile_state_path_allowed "$policy" "$destination" || return 1
   command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
     command -v python3 >/dev/null 2>&1 || return 1
@@ -630,22 +641,29 @@ dev_profile_state_begin() {
     return 1
   fi
 
-  if [[ $_DEV_PROFILE_STATE_BEFORE_EXISTS == true ]]; then
-    if ! _dev_profile_state_publish \
-      "$format" "$baseline" "$destination" "$publisher"; then
-      _dev_profile_state_pending_recover \
-        "$root" "$key" "$policy" "$format" "$destination" "$publisher" || true
-      _dev_profile_state_tempdir_remove "$transaction_dir" || true
-      return 1
-    fi
-  else
-    if ! rm -f -- "$destination"; then
-      _dev_profile_state_pending_recover \
-        "$root" "$key" "$policy" "$format" "$destination" "$publisher" || true
-      _dev_profile_state_tempdir_remove "$transaction_dir" || true
-      return 1
+  # Deferred mode leaves the live destination alone: the caller builds the
+  # final document off-live from the staged baseline and publishes it once
+  # with dev_profile_state_publish_final, so observers never see the
+  # managed-stripped baseline or a deleted file.
+  if [[ $mode == immediate ]]; then
+    if [[ $_DEV_PROFILE_STATE_BEFORE_EXISTS == true ]]; then
+      if ! _dev_profile_state_publish \
+        "$format" "$baseline" "$destination" "$publisher"; then
+        _dev_profile_state_pending_recover \
+          "$root" "$key" "$policy" "$format" "$destination" "$publisher" || true
+        _dev_profile_state_tempdir_remove "$transaction_dir" || true
+        return 1
+      fi
+    else
+      if ! rm -f -- "$destination"; then
+        _dev_profile_state_pending_recover \
+          "$root" "$key" "$policy" "$format" "$destination" "$publisher" || true
+        _dev_profile_state_tempdir_remove "$transaction_dir" || true
+        return 1
+      fi
     fi
   fi
+  REPLY=$baseline
   _DEV_PROFILE_STATE_POLICY=$policy
   _DEV_PROFILE_STATE_FORMAT=$format
   _DEV_PROFILE_STATE_DESTINATION=$destination
@@ -718,6 +736,44 @@ dev_profile_state_commit() {
   rm -f -- "$_DEV_PROFILE_STATE_PENDING" "$_DEV_PROFILE_STATE_ORIGINAL_STATE"
   _dev_profile_state_tempdir_remove "$_DEV_PROFILE_STATE_TRANSACTION_DIR" || true
   _DEV_PROFILE_STATE_ACTIVE=0
+}
+
+# Publish a caller-staged final document to the live destination of the
+# active transaction, writing only when the bytes differ. Deferred-mode
+# callers stage their merged result off-live (seeded from the begin REPLY
+# baseline) and call this before commit, so observers see at most one
+# atomic update instead of the managed-stripped intermediate state. The
+# staged source must be JSON; atomic installs consume it.
+dev_profile_state_publish_final() {
+  [[ $# -eq 1 ]] || return 2
+  [[ ${_DEV_PROFILE_STATE_ACTIVE:-0} == 1 ]] || return 1
+  # The staged source installs verbatim, so only JSON policies can adopt
+  # deferred mode today; yaml/toml staging would need native rendering.
+  case $_DEV_PROFILE_STATE_FORMAT in
+    json | jsonc) ;;
+    *) return 2 ;;
+  esac
+  local source=$1 engine equal_rc
+  [[ -f $source && ! -L $source ]] || return 1
+  [[ $source -ef $_DEV_PROFILE_STATE_DESTINATION ]] && return 1
+  engine=$(_dev_profile_state_engine) || return 1
+  _dev_profile_state_document_valid "$_DEV_PROFILE_STATE_POLICY" "$source" || return 1
+  chmod 0600 "$source" || return 1
+  if [[ -e $_DEV_PROFILE_STATE_DESTINATION || -L $_DEV_PROFILE_STATE_DESTINATION ]]; then
+    # Re-check the destination shape: it may have changed since begin, and
+    # installing over a symlink or directory would follow or nest instead
+    # of replacing the live file.
+    [[ -f $_DEV_PROFILE_STATE_DESTINATION && ! -L $_DEV_PROFILE_STATE_DESTINATION ]] || return 1
+    # Refuse to publish blindly when the comparison itself errors: a failed
+    # comparison fails the transaction (rollback on next begin) rather than
+    # clobbering the live file.
+    equal_rc=0
+    python3 "$engine" equal --left "$source" --right "$_DEV_PROFILE_STATE_DESTINATION" || equal_rc=$?
+    ((equal_rc == 0)) && return 0
+    ((equal_rc == 1)) || return 1
+  fi
+  mkdir -p "${_DEV_PROFILE_STATE_DESTINATION%/*}" || return 1
+  _dev_profile_state_install "$_DEV_PROFILE_STATE_PUBLISHER" "$source" "$_DEV_PROFILE_STATE_DESTINATION"
 }
 
 _dev_profile_state_recover_all_pending() {
