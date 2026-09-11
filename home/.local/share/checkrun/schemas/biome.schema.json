@@ -8852,6 +8852,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoSvelteAtHtmlTagsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSvelteAtHtmlTagsOptions"
+        }
+      ]
+    },
+    "NoSvelteAtHtmlTagsOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoSvelteLegacyConstConfiguration": {
       "oneOf": [
         {
@@ -9533,6 +9547,20 @@
       ]
     },
     "NoUnsafeFinallyOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoUnsafeIframeSandboxConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoUnsafeIframeSandboxOptions"
+        }
+      ]
+    },
+    "NoUnsafeIframeSandboxOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -10469,6 +10497,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoXorAsExponentiationConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoXorAsExponentiationOptions"
+        }
+      ]
+    },
+    "NoXorAsExponentiationOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoYodaExpressionConfiguration": {
       "oneOf": [
         {
@@ -10979,6 +11021,17 @@
             }
           ]
         },
+        "noSvelteAtHtmlTags": {
+          "description": "Disallow the use of Svelte's {@html} tag.\nSee https://biomejs.dev/linter/rules/no-svelte-at-html-tags",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSvelteAtHtmlTagsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noSvelteLegacyConst": {
           "description": "Disallow legacy Svelte {@const} tags.\nSee https://biomejs.dev/linter/rules/no-svelte-legacy-const",
           "anyOf": [
@@ -11072,6 +11125,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoUnnecessaryTemplateExpressionConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noUnsafeIframeSandbox": {
+          "description": "Disallow an unsafe combination of the sandbox attribute.\nSee https://biomejs.dev/linter/rules/no-unsafe-iframe-sandbox",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoUnsafeIframeSandboxConfiguration"
             },
             {
               "type": "null"
@@ -11177,6 +11241,17 @@
             }
           ]
         },
+        "noXorAsExponentiation": {
+          "description": "Disallow the bitwise XOR operator where exponentiation was likely intended.\nSee https://biomejs.dev/linter/rules/no-xor-as-exponentiation",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoXorAsExponentiationConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "preset": {
           "description": "Enables a particular rule preset",
           "anyOf": [
@@ -11233,6 +11308,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/UseBaselineConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "useBetterDomTraversing": {
+          "description": "Prefer modern DOM traversal APIs over positional indexes and chained walks.\nSee https://biomejs.dev/linter/rules/use-better-dom-traversing",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseBetterDomTraversingConfiguration"
             },
             {
               "type": "null"
@@ -11376,6 +11462,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/UseIncludesConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "useLayeredStyles": {
+          "description": "Enforce style rules to be defined within a cascade layer.\nSee https://biomejs.dev/linter/rules/use-layered-styles",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseLayeredStylesConfiguration"
             },
             {
               "type": "null"
@@ -11651,6 +11748,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/UseVarsOnTopConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "useVueBaseImport": {
+          "description": "Enforce importing Vue's public entry point instead of internal Vue packages.\nSee https://biomejs.dev/linter/rules/use-vue-base-import",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseVueBaseImportConfiguration"
             },
             {
               "type": "null"
@@ -17199,6 +17307,21 @@
         "level"
       ]
     },
+    "RuleWithNoSvelteAtHtmlTagsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSvelteAtHtmlTagsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoSvelteLegacyConstOptions": {
       "type": "object",
       "properties": {
@@ -17797,6 +17920,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoUnsafeFinallyOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoUnsafeIframeSandboxOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoUnsafeIframeSandboxOptions"
         }
       },
       "additionalProperties": false,
@@ -18964,6 +19102,31 @@
         "level"
       ]
     },
+    "RuleWithNoXorAsExponentiationOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoXorAsExponentiationOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoYodaExpressionOptions": {
       "type": "object",
       "properties": {
@@ -19297,6 +19460,31 @@
         },
         "options": {
           "$ref": "#/$defs/UseBaselineOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUseBetterDomTraversingOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseBetterDomTraversingOptions"
         }
       },
       "additionalProperties": false,
@@ -20797,6 +20985,21 @@
         },
         "options": {
           "$ref": "#/$defs/UseKeyWithMouseEventsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUseLayeredStylesOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseLayeredStylesOptions"
         }
       },
       "additionalProperties": false,
@@ -22382,6 +22585,31 @@
         },
         "options": {
           "$ref": "#/$defs/UseVarsOnTopOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUseVueBaseImportOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseVueBaseImportOptions"
         }
       },
       "additionalProperties": false,
@@ -26118,6 +26346,20 @@
       },
       "additionalProperties": false
     },
+    "UseBetterDomTraversingConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseBetterDomTraversingOptions"
+        }
+      ]
+    },
+    "UseBetterDomTraversingOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "UseBiomeIgnoreFolderConfiguration": {
       "oneOf": [
         {
@@ -27607,6 +27849,29 @@
     },
     "UseKeyWithMouseEventsOptions": {
       "type": "object",
+      "additionalProperties": false
+    },
+    "UseLayeredStylesConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseLayeredStylesOptions"
+        }
+      ]
+    },
+    "UseLayeredStylesOptions": {
+      "type": "object",
+      "properties": {
+        "requireImportLayers": {
+          "description": "Require `@import` rules to have a cascade layer. Defaults to `true`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
       "additionalProperties": false
     },
     "UseLiteralEnumMembersConfiguration": {
@@ -29149,6 +29414,20 @@
       ]
     },
     "UseVarsOnTopOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UseVueBaseImportConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseVueBaseImportOptions"
+        }
+      ]
+    },
+    "UseVueBaseImportOptions": {
       "type": "object",
       "additionalProperties": false
     },
