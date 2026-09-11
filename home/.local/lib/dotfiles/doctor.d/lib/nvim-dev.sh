@@ -8,6 +8,23 @@ _dr_dev_csv() {
   printf '%s' "$*"
 }
 
+# Read the first keyed field without an early-exiting pipeline: verbose Nvim
+# output can otherwise make the producer hit SIGPIPE under the doctor's
+# inherited pipefail policy.
+_dr_dev_value() {
+  local key=$1 content=$2 line value
+  while IFS= read -r line; do
+    case $line in
+      "$key="*)
+        value=${line#*=}
+        printf '%s' "${value%%=*}"
+        return 0
+        ;;
+    esac
+  done <<<"$content"
+  return 0
+}
+
 _dr_lsp_policy_diff() {
   local enabled="$1" covered="$2" server
   local -a missing=() stale=()
@@ -54,11 +71,11 @@ LUA
       'run nvim headless with Mason disabled to debug'
     return 0
   fi
-  enabled=$(printf '%s\n' "$output" | awk -F= '/^enabled=/ {print $2; exit}')
-  covered=$(printf '%s\n' "$output" | awk -F= '/^covered=/ {print $2; exit}')
+  enabled=$(_dr_dev_value enabled "$output")
+  covered=$(_dr_dev_value covered "$output")
   drift=$(_dr_lsp_policy_diff "$enabled" "$covered")
-  missing=$(printf '%s\n' "$drift" | awk -F= '/^missing=/ {print $2; exit}')
-  stale=$(printf '%s\n' "$drift" | awk -F= '/^stale=/ {print $2; exit}')
+  missing=$(_dr_dev_value missing "$drift")
+  stale=$(_dr_dev_value stale "$drift")
   if [[ -z $missing && -z $stale ]]; then
     _dr_ok 'nvim LSP fallback policy in sync'
   else
