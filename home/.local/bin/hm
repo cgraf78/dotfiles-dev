@@ -7,16 +7,6 @@
 
 set -euo pipefail
 
-# `dot update` installs the tracked adapter and its declared dependencies as one
-# converged unit. A missing helper or provider is therefore a broken install to
-# repair, not an alternate runtime mode for this launcher to emulate.
-# shellcheck source=../lib/dotfiles/shdeps-assets.sh disable=SC1091
-. "${BASH_SOURCE[0]%/*}/../lib/dotfiles/shdeps-assets.sh"
-if ! dot_shdeps_dep_source cgraf78/agentguard lib/agentguard/agentguard.sh; then
-  printf 'hm launcher: AgentGuard unavailable; run dot update\n' >&2
-  exit 127
-fi
-
 # Shdeps deliberately installs the real binary behind the tracked public
 # launcher. The fixed path is the installation contract; PATH searches and old
 # layout fallbacks would only hide a failed convergence.
@@ -27,9 +17,31 @@ if [[ ! -x "$_hm_core" || -d "$_hm_core" ]]; then
 fi
 
 _hm_explicit_agent="${HIVE_MEMORY_AGENT_ID:-}"
-_hm_agent=$(agentguard_agent_name)
-[[ "$_hm_agent" != unknown ]] || _hm_agent=""
-_hm_agent="${_hm_explicit_agent:-$_hm_agent}"
+_hm_agent="$_hm_explicit_agent"
+
+# Agent hooks always pass explicit identity, so resolving it again here would
+# only re-discover the given value — including a full process-table scan when
+# no ambient environment identifies the runtime. Source AgentGuard lazily and
+# detect only what the caller left unknown; with fully explicit identity this
+# launcher is a pure exec with no helper sourcing and no subprocesses.
+if [[ -z "$_hm_agent" || -z "${HIVE_MEMORY_SESSION_ID:-}" ]]; then
+  # `dot update` installs the tracked adapter and its declared dependencies as
+  # one converged unit. A missing helper or provider is therefore a broken
+  # install to repair, not an alternate runtime mode for this launcher to
+  # emulate. Fully explicit callers never reach this branch, so they also
+  # survive a broken provider install instead of failing at the front door.
+  # shellcheck source=../lib/dotfiles/shdeps-assets.sh disable=SC1091
+  . "${BASH_SOURCE[0]%/*}/../lib/dotfiles/shdeps-assets.sh"
+  if ! dot_shdeps_dep_source cgraf78/agentguard lib/agentguard/agentguard.sh; then
+    printf 'hm launcher: AgentGuard unavailable; run dot update\n' >&2
+    exit 127
+  fi
+fi
+
+if [[ -z "$_hm_agent" ]]; then
+  _hm_agent=$(agentguard_agent_name)
+  [[ "$_hm_agent" != unknown ]] || _hm_agent=""
+fi
 
 # Human shells retain plain hm behavior. Inside a detected or explicitly named
 # agent, preserve caller-supplied Hive values and let AgentGuard remain the sole

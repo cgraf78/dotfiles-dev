@@ -243,6 +243,35 @@ MOCK
   _assert_contains "hm launcher: missing AgentGuard suggests repair" \
     "run dot update" "$_hm_provider_missing_output"
 
+  # Fully explicit callers (every agent hook) must never consult AgentGuard:
+  # detection would only re-discover the given identity, including a full
+  # process-table scan when no ambient env identifies the runtime. A missing
+  # provider therefore proves the skip deterministically — no timing probe.
+  _hm_explicit_missing_rc=0
+  _hm_explicit_missing_output=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" PATH="$HM_MISSING_PROVIDER_BIN:$PATH" \
+    HIVE_MEMORY_AGENT_ID="hook-agent" HIVE_MEMORY_SESSION_ID="hook-session" \
+    HIVE_MEMORY_PROJECT_INFER=0 "$HM_LAUNCHER_BIN/hm" env-probe 2>&1) ||
+    _hm_explicit_missing_rc=$?
+  _assert_eq "hm launcher: explicit identity skips AgentGuard detection" \
+    "0" "$_hm_explicit_missing_rc"
+  _assert_contains "hm launcher: explicit identity passes agent through" \
+    "agent=hook-agent" "$_hm_explicit_missing_output"
+  _assert_contains "hm launcher: explicit identity passes session through" \
+    "session=hook-session" "$_hm_explicit_missing_output"
+
+  # An explicit agent with no session still needs AgentGuard for the session
+  # half, so a missing provider must keep failing there.
+  _hm_half_missing_rc=0
+  _hm_half_missing_output=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$HM_LAUNCHER_HOME" PATH="$HM_MISSING_PROVIDER_BIN:$PATH" \
+    HIVE_MEMORY_AGENT_ID="hook-agent" "$HM_LAUNCHER_BIN/hm" env-probe 2>&1) ||
+    _hm_half_missing_rc=$?
+  _assert_eq "hm launcher: missing session still requires AgentGuard" \
+    "127" "$_hm_half_missing_rc"
+  _assert_contains "hm launcher: half-explicit failure suggests repair" \
+    "run dot update" "$_hm_half_missing_output"
+
   # ---------------------------------------------------------------------------
   # Tests: Sley consumer policy
   # ---------------------------------------------------------------------------
