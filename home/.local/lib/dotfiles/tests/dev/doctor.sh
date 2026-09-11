@@ -7,6 +7,7 @@ dot_dev_doctor_test() {
   local agent_home installed_config installed_config_before installed_doctor_output
   local installed_section fixture_health=false owner_root source_doctor host_doctor
   local grok_compat_path
+  local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
   local -a modules=(
     20-dev-tools.sh
     30-dev-shell-integrations.sh
@@ -379,6 +380,95 @@ SH
     'agent pre-bash raw git smoke returned unexpected result' "$result"
   _assert_contains 'Agent Hooks doctor reports stop-hook failures' \
     'agent stop hook failed' "$result"
+
+  permissive_home=$(_tmpdir)
+  mkdir -p "$permissive_home/.local/bin" "$permissive_home/.config/shell"
+  : >"$permissive_home/.config/shell/env-noninteractive.sh"
+  cat >"$permissive_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '{}\n'
+SH
+  cat >"$permissive_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '{}\n'
+SH
+  chmod +x "$permissive_home/.local/bin/agent-hook-pre-bash" \
+    "$permissive_home/.local/bin/agent-hook-stop"
+  result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor rejects raw Git outside a checkout' \
+    'agent pre-bash allows raw dotfiles git status' "$result"
+  # test/run stubs _dr_is_dotfiles_checkout to always fail (the capability
+  # fixture must not contain a git repo), so a real `git init` fixture can
+  # never observe the inside-checkout branch in CI. Drive the predicate
+  # directly instead: the lib's inside/outside branching is what's under
+  # test here, not real git discovery (base-owned, tested elsewhere).
+  _checkout_def=$(declare -f _dr_is_dotfiles_checkout)
+  # shellcheck disable=SC2329  # _dr_check_agent_hooks invokes this predicate.
+  _dr_is_dotfiles_checkout() { return 0; }
+  result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor allows raw Git inside a checkout' \
+    'agent pre-bash allows raw git status in checkout' "$result"
+  eval "$_checkout_def"
+
+  no_pre_home=$(_tmpdir)
+  mkdir -p "$no_pre_home/.local/bin" "$no_pre_home/.config/shell"
+  : >"$no_pre_home/.config/shell/env-noninteractive.sh"
+  cat >"$no_pre_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+: >"$HOME/.stop-ran"
+printf '{}\n'
+SH
+  chmod +x "$no_pre_home/.local/bin/agent-hook-stop"
+  result=$(HOME="$no_pre_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor warns when pre-bash is absent' \
+    'agent pre-bash hook unavailable' "$result"
+  _assert_not_contains 'Agent Hooks doctor skips every probe without pre-bash' \
+    'agent stop hook' "$result"
+  _assert_eq 'Agent Hooks doctor never executes stop without pre-bash' \
+    'absent' "$([[ -f $no_pre_home/.stop-ran ]] && printf present || printf absent)"
+
+  no_stop_home=$(_tmpdir)
+  mkdir -p "$no_stop_home/.local/bin" "$no_stop_home/.config/shell"
+  : >"$no_stop_home/.config/shell/env-noninteractive.sh"
+  cat >"$no_stop_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+input=$(cat)
+case $input in
+  *'"dot status"'*) printf '{}\n' ;;
+  *'"git status -uall"'*) printf 'use dot status instead\n' >&2; exit 2 ;;
+  *) exit 3 ;;
+esac
+SH
+  chmod +x "$no_stop_home/.local/bin/agent-hook-pre-bash"
+  result=$(HOME="$no_stop_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor warns when the stop hook is absent' \
+    'agent stop hook unavailable' "$result"
+
+  multiline_home=$(_tmpdir)
+  mkdir -p "$multiline_home/.local/bin" "$multiline_home/.config/shell"
+  : >"$multiline_home/.config/shell/env-noninteractive.sh"
+  cat >"$multiline_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+input=$(cat)
+case $input in
+  *'"dot status"'*) printf 'first\nsecond\nthird\n' >&2; exit 5 ;;
+  *) printf 'e1\ne2\n' >&2; exit 3 ;;
+esac
+SH
+  chmod +x "$multiline_home/.local/bin/agent-hook-pre-bash"
+  result=$(HOME="$multiline_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_hooks || true)
+  _assert_contains 'Agent Hooks doctor keeps only the first stderr line' \
+    $'fail\tagent pre-bash failed dot status smoke\tfirst' "$result"
+  _assert_not_contains 'Agent Hooks doctor drops later stderr lines' \
+    'second' "$result"
 
   if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
     installed_config=$HOME/.config/dot/config
