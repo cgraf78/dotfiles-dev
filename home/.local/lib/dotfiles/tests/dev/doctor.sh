@@ -2,7 +2,7 @@
 
 dot_dev_doctor_test() {
   local result_file current_module sections failures extension_home path
-  local doctor_home doctor_bin result drift expected health_log direct_tool
+  local doctor_home doctor_bin result drift expected health_log direct_tool status
   local relative_link relative_target symlink_root symlink_alias
   local agent_home installed_config installed_config_before installed_doctor_output
   local installed_section fixture_health=false owner_root source_doctor host_doctor
@@ -185,6 +185,31 @@ TOML
   drift=$(_dr_lsp_policy_diff 'bashls neocmake pyright vtsls' 'bashls jsonls neocmake')
   expected=$(printf 'missing=pyright,vtsls\nstale=jsonls')
   _assert_eq 'Doctor sorts missing and stale LSP policy entries' "$expected" "$drift"
+  _assert_eq 'Doctor parser preserves the first matching second field' alpha \
+    "$(_dr_dev_value enabled $'noise\nenabled=alpha=diagnostic\nenabled=second')"
+  _assert_eq 'Doctor parser returns empty for an absent key' '' \
+    "$(_dr_dev_value covered $'noise\nenabled=bashls')"
+
+  cat >"$doctor_bin/nvim" <<'NVIM'
+#!/usr/bin/env bash
+printf 'enabled=bashls pyright\ncovered=bashls\n'
+python3 - <<'PY'
+print('diagnostic=' + ('x' * 262144))
+PY
+NVIM
+  chmod +x "$doctor_bin/nvim"
+  : >"$result_file"
+  set +e
+  (
+    set -euo pipefail
+    HOME="$doctor_home" PATH="$doctor_bin:$PATH" _dr_check_nvim_lsp_policy
+  ) 2>"$doctor_home/nvim-policy-stderr"
+  status=$?
+  set -e
+  _assert_eq 'Doctor parses verbose Nvim output without a pipefail race' 0 "$status"
+  result=$(<"$result_file")
+  _assert_contains 'Doctor preserves parsed drift after verbose Nvim output' \
+    'missing fallback policy for enabled server(s): pyright' "$result"
 
   health_log=$(_tmpdir)/health.txt
   cat >"$health_log" <<'HEALTH'
