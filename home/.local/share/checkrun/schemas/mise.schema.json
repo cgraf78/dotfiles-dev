@@ -2338,6 +2338,11 @@
           "description": "Sets log level to trace",
           "type": "boolean"
         },
+        "truncate": {
+          "default": true,
+          "description": "Truncate long terminal output to fit the available width.",
+          "type": "boolean"
+        },
         "trusted_config_paths": {
           "default": [],
           "description": "This is a list of config paths that mise will automatically mark as trusted. Any config files under these paths will be trusted without prompting. Set to `[\"/\"]` to trust all config files, effectively disabling the trust mechanism. Paths are separated by the OS path separator when using the environment variable, `mise settings set`, or `mise settings add` (`:` on Unix, `;` on Windows).",
@@ -4411,6 +4416,13 @@
                   "type": "string"
                 }
               },
+              "manifest": {
+                "type": "string",
+                "description": "source manifest used to select managed files from a directory",
+                "enum": [
+                  "git"
+                ]
+              },
               "block": {
                 "type": "string",
                 "description": "block content, maintained between marker comments"
@@ -4488,43 +4500,77 @@
                 }
               }
             },
-            "oneOf": [
+            "allOf": [
               {
-                "required": [
-                  "content"
-                ],
-                "properties": {
-                  "source": false,
-                  "manifest": false,
-                  "mode": false,
-                  "exclude": false,
-                  "block": false,
-                  "line": false,
-                  "position": false,
-                  "template": false,
-                  "comment": false
-                }
+                "oneOf": [
+                  {
+                    "required": [
+                      "manifest"
+                    ],
+                    "properties": {
+                      "source": {},
+                      "content": false,
+                      "mode": {
+                        "enum": [
+                          "copy",
+                          "symlink-each"
+                        ]
+                      },
+                      "exclude": {},
+                      "manifest": {},
+                      "block": false,
+                      "line": false,
+                      "template": false,
+                      "comment": false
+                    }
+                  },
+                  {
+                    "properties": {
+                      "manifest": false
+                    }
+                  }
+                ]
               },
               {
-                "required": [
-                  "line"
-                ],
-                "properties": {
-                  "content": false,
-                  "mode": false,
-                  "exclude": false,
-                  "source": false,
-                  "block": false,
-                  "template": false,
-                  "comment": false
-                }
-              },
-              {
-                "properties": {
-                  "content": false,
-                  "line": false,
-                  "position": false
-                }
+                "oneOf": [
+                  {
+                    "required": [
+                      "content"
+                    ],
+                    "properties": {
+                      "source": false,
+                      "manifest": false,
+                      "mode": false,
+                      "exclude": false,
+                      "block": false,
+                      "line": false,
+                      "position": false,
+                      "template": false,
+                      "comment": false
+                    }
+                  },
+                  {
+                    "required": [
+                      "line"
+                    ],
+                    "properties": {
+                      "content": false,
+                      "mode": false,
+                      "exclude": false,
+                      "source": false,
+                      "block": false,
+                      "template": false,
+                      "comment": false
+                    }
+                  },
+                  {
+                    "properties": {
+                      "content": false,
+                      "line": false,
+                      "position": false
+                    }
+                  }
+                ]
               }
             ],
             "anyOf": [
