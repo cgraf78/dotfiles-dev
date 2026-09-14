@@ -43,7 +43,7 @@
 "aqua:rhysd/actionlint" = "latest"
 "aqua:rust-lang/rust-analyzer" = "latest"
 "aqua:tamasfe/taplo" = "latest"
-"aqua:zizmorcore/zizmor" = "latest"
+"aqua:zizmorcore/zizmor" = "1.29.0"
 
 # NeoCMakeLSP publishes portable Linux archives but has no Aqua registry entry.
 # Let mise lock those releases directly instead of falling back from a missing

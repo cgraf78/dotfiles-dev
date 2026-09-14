@@ -151,9 +151,9 @@ version = "0.16.7"
 backend = "aqua:astral-sh/ruff"
 
 [tools."aqua:astral-sh/ruff"."platforms.linux-arm64"]
-checksum = "sha256:dd669efe4ac74ffd5842b26147c36cdd6c93b9cf0d10d5e53c12ec5b44f540bd"
-url = "https://github.com/astral-sh/ruff/releases/download/0.16.7/ruff-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/555530691"
+checksum = "sha256:1e06b11127c28387c8066da4ce6a617a84a359591be09dbf581fbb0c3e006239"
+url = "https://github.com/astral-sh/ruff/releases/download/0.16.7/ruff-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/555530686"
 provenance = "github-attestations"
 
 [tools."aqua:astral-sh/ruff"."platforms.linux-arm64-musl"]
@@ -163,9 +163,9 @@ url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/555530691
 provenance = "github-attestations"
 
 [tools."aqua:astral-sh/ruff"."platforms.linux-x64"]
-checksum = "sha256:8d28939cf5cabe54a2f8f7cbfab52c643436d1bc70474198181db9e48f504411"
-url = "https://github.com/astral-sh/ruff/releases/download/0.16.7/ruff-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/555530803"
+checksum = "sha256:73894c7b7c9a53fd66ed715eb3a1ec65077f316328e377057a98bdb7fcba0326"
+url = "https://github.com/astral-sh/ruff/releases/download/0.16.7/ruff-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/555530800"
 provenance = "github-attestations"
 
 [tools."aqua:astral-sh/ruff"."platforms.linux-x64-musl"]
@@ -198,38 +198,38 @@ backend = "aqua:bazelbuild/buildtools/buildifier"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.linux-arm64"]
 checksum = "sha256:947bf6700d708026b2057b09bea09abbc3cafc15d9ecea35bb3885c4b09ccd04"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-arm64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132205"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-linux-arm64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132205"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.linux-arm64-musl"]
 checksum = "sha256:947bf6700d708026b2057b09bea09abbc3cafc15d9ecea35bb3885c4b09ccd04"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-arm64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132205"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-linux-arm64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132205"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.linux-x64"]
 checksum = "sha256:887377fc64d23a850f4d18a077b5db05b19913f4b99b270d193f3c7334b5a9a7"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-amd64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132197"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-linux-amd64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132197"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.linux-x64-musl"]
 checksum = "sha256:887377fc64d23a850f4d18a077b5db05b19913f4b99b270d193f3c7334b5a9a7"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-linux-amd64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132197"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-linux-amd64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132197"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.macos-arm64"]
 checksum = "sha256:62836a9667fa0db309b0d91e840f0a3f2813a9c8ea3e44b9cd58187c90bc88ba"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-darwin-arm64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132225"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-darwin-arm64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132225"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.macos-x64"]
 checksum = "sha256:31de189e1a3fe53aa9e8c8f74a0309c325274ad19793393919e1ca65163ca1a4"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-darwin-amd64"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132219"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-darwin-amd64"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132219"
 
 [tools."aqua:bazelbuild/buildtools/buildifier"."platforms.windows-x64"]
 checksum = "sha256:f4ecb9c73de2bc38b845d4ee27668f6248c4813a6647db4b4931a7556052e4e1"
-url = "https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-windows-amd64.exe"
-url_api = "https://api.github.com/repos/bazelbuild/buildtools/releases/assets/348132233"
+url = "https://github.com/bazel-contrib/buildtools/releases/download/v8.5.1/buildifier-windows-amd64.exe"
+url_api = "https://api.github.com/repos/bazel-contrib/buildtools/releases/assets/348132233"
 
 [[tools."aqua:biomejs/biome"]]
 version = "2.5.13"
@@ -409,36 +409,43 @@ backend = "aqua:hadolint/hadolint"
 checksum = "sha256:f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35b344b5d"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-arm64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546507"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.linux-arm64-musl"]
 checksum = "sha256:f6198ef8090f404dbb771abfee086eb8c48ac177f30da7fd3510aca35b344b5d"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-arm64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546507"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.linux-x64"]
 checksum = "sha256:c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546506"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.linux-x64-musl"]
 checksum = "sha256:c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546506"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.macos-arm64"]
 checksum = "sha256:5c09f3213f8e40406abe048233d985eebef336d4a6a20021be47fadb6cf480a2"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-macos-arm64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546505"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.macos-x64"]
 checksum = "sha256:ffe9bb18b23d5ed1eae50237aecdbb523d016e96da0bd4e7aa432040acfc3fde"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-macos-x86_64"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546509"
+provenance = "github-attestations"
 
 [tools."aqua:hadolint/hadolint"."platforms.windows-x64"]
 checksum = "sha256:01d927294962b5387f9ead4f18679158452be4f17c765ad0bdffe5264b9c7b0a"
 url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-windows-x86_64.exe"
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546508"
+provenance = "github-attestations"
 
 [[tools."aqua:koalaman/shellcheck"]]
 version = "0.11.0"
@@ -709,43 +716,43 @@ url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-windows-x
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257323062"
 
 [[tools."aqua:zizmorcore/zizmor"]]
-version = "1.30.1"
+version = "1.29.0"
 backend = "aqua:zizmorcore/zizmor"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-arm64"]
-checksum = "sha256:7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067643"
+checksum = "sha256:415eaa7c0a06479a701b8e44a3e812c1047decc848ec4bede7bd6bbf49f22d20"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263143"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-arm64-musl"]
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-x64"]
-checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
+checksum = "sha256:dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263145"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.linux-x64-musl"]
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.macos-arm64"]
-checksum = "sha256:e28d22b087f9ebb8d99da6e740d348c930f559961c7c3f12badda54f882195a2"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067640"
+checksum = "sha256:720322fade9e83a9c7953944c438f2ba942636b86b96a8f0e6b15ce94c8a6b6f"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263141"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.macos-x64"]
-checksum = "sha256:10e6b18b11ea07e515a16f0f0518c7b07527bc9977c1fd5698181ce7f3554202"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067641"
+checksum = "sha256:648b72ab9941a7f2a8d65d7b68a8e76cef789538c8df3a3950384d38423375b0"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263144"
 provenance = "github-attestations"
 
 [tools."aqua:zizmorcore/zizmor"."platforms.windows-x64"]
-checksum = "sha256:b183b1e996eddfab9659f1e9b46e059f1ef1cf984a1f14e5da09f7876a4b3a1c"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067645"
+checksum = "sha256:68a6bc6888f10bf0d53658c75885e7c1b7a0588d4c1fbc3f0ca280ad7324bf06"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/498263142"
 provenance = "github-attestations"
 
 [[tools."github:kristoff-it/superhtml"]]
