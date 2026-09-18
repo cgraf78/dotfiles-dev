@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.95.0 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.97.5 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.95.0",
+  "x-renovate-version": "44.97.5",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -6476,6 +6476,12 @@
       ],
       "default": "timestamp-required"
     },
+    "minimumReleaseAgeBuffer": {
+      "description": "Extra time added to `minimumReleaseAge` before an update is considered stable.\nSee also: https://docs.renovatebot.com/configuration-options/#minimumreleaseagebuffer",
+      "markdownDescription": "Extra time added to `minimumReleaseAge` before an update is considered stable.\n\nSee also: [minimumReleaseAgeBuffer](https://docs.renovatebot.com/configuration-options/#minimumreleaseagebuffer)",
+      "type": "string",
+      "default": "30 minutes"
+    },
     "minor": {
       "description": "Configuration to apply when an update type is `minor`.\nSee also: https://docs.renovatebot.com/configuration-options/#minor",
       "markdownDescription": "Configuration to apply when an update type is `minor`.\n\nSee also: [minor](https://docs.renovatebot.com/configuration-options/#minor)",
@@ -11119,6 +11125,9 @@
     },
     "minimumReleaseAgeBehaviour": {
       "$ref": "#/definitions/minimumReleaseAgeBehaviour"
+    },
+    "minimumReleaseAgeBuffer": {
+      "$ref": "#/definitions/minimumReleaseAgeBuffer"
     },
     "minor": {
       "$ref": "#/definitions/minor"
