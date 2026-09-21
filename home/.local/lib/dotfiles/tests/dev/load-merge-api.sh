@@ -10,7 +10,7 @@ if [[ -z $_dot_test_api_root ]]; then
   for _dot_test_api_candidate in \
     "$_dot_test_api_host_home/git/dot" \
     "$_dot_test_api_host_home/.local/share/cgraf78/dot"; do
-    [[ -r $_dot_test_api_candidate/lib/dot/extension-worker.sh ]] || continue
+    [[ -r $_dot_test_api_candidate/lib/dot/public/api-version.sh ]] || continue
     _dot_test_api_root=$(cd -P -- "$_dot_test_api_candidate" && pwd -P) || return
     break
   done
@@ -37,36 +37,40 @@ if [[ -f $_dot_test_api_source_home/.local/lib/dotfiles/merge-hooks.d/lib/compat
   ! -L $_dot_test_api_host_home/.config/dot/config ]]; then
   _dot_test_api_composed=1
 fi
+# Post-cutover the engine-internal shell libraries live only in the
+# versioned public hook runtime; extension tests load that runtime.
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/log.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/log.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/temp.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/temp.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/merge-block.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/merge-block.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/families.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/families.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/merge-hooks.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/merge-hooks.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/repos/config.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/repos/config.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/repos/overlays.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/repos/overlays.sh"
 if [[ $_dot_test_api_composed -eq 1 ]]; then
-  # shellcheck source=/dev/null
-  . "$_dot_test_api_root/lib/dot/config.sh"
-  # shellcheck source=/dev/null
-  . "$_dot_test_api_root/lib/dot/platform.sh"
-  # shellcheck source=/dev/null
-  . "$_dot_test_api_root/lib/dot/profiles.sh"
-  # shellcheck source=/dev/null
-  . "$_dot_test_api_root/lib/dot/overlays.sh"
-  dot_config_load || return
-  _dot_resolve_overlays inspect || return
+  # Post-cutover the engine owns overlay resolution (Rust). Consume its
+  # published artifacts instead of resolving in shell: the persisted link
+  # manifest plus the lifecycle ledger's active overlay records.
+  _dot_test_api_state_home=${XDG_STATE_HOME:-$_dot_test_api_host_home/.local/state}
+  DOT_OVERLAY_MANIFEST=$_dot_test_api_state_home/dot/overlay-links
+  [[ -f $DOT_OVERLAY_MANIFEST ]] || return
+  export DOT_OVERLAY_MANIFEST
+  OVERLAYS=()
+  while IFS= read -r _dot_test_api_record || [[ -n $_dot_test_api_record ]]; do
+    case $_dot_test_api_record in '' | version=*) continue ;; esac
+    OVERLAYS+=("$_dot_test_api_record")
+  done <"$_dot_test_api_state_home/dot/profile-overlay-lifecycle-v1" || return
 fi
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/extension-trust.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/extension-trust.sh"
 # shellcheck source=/dev/null
-. "$_dot_test_api_root/lib/dot/hook-api.sh"
+. "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/hook-api.sh"
 if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
   # A standalone capability checkout has no base overlay. Reuse the frozen
   # public base contract in test scope so dev hook behavior is still exercised.
