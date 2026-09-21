@@ -59,13 +59,18 @@ if [[ $_dot_test_api_composed -eq 1 ]]; then
   # manifest plus the lifecycle ledger's active overlay records.
   _dot_test_api_state_home=${XDG_STATE_HOME:-$_dot_test_api_host_home/.local/state}
   DOT_OVERLAY_MANIFEST=$_dot_test_api_state_home/dot/overlay-links
-  [[ -f $DOT_OVERLAY_MANIFEST ]] || return
   export DOT_OVERLAY_MANIFEST
   OVERLAYS=()
-  while IFS= read -r _dot_test_api_record || [[ -n $_dot_test_api_record ]]; do
-    case $_dot_test_api_record in '' | version=*) continue ;; esac
-    OVERLAYS+=("$_dot_test_api_record")
-  done <"$_dot_test_api_state_home/dot/profile-overlay-lifecycle-v1" || return
+  # The manifest and ledger may be absent in fresh fixtures (the test
+  # runner isolates XDG_STATE_HOME per suite). Consumers already guard
+  # absence, so an empty overlay set is the honest answer then — never
+  # a loader failure.
+  if [[ -f $_dot_test_api_state_home/dot/profile-overlay-lifecycle-v1 ]]; then
+    while IFS= read -r _dot_test_api_record || [[ -n $_dot_test_api_record ]]; do
+      case $_dot_test_api_record in '' | version=*) continue ;; esac
+      OVERLAYS+=("$_dot_test_api_record")
+    done <"$_dot_test_api_state_home/dot/profile-overlay-lifecycle-v1"
+  fi
 fi
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/extension-trust.sh"
