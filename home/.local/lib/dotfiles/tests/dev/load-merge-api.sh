@@ -62,9 +62,10 @@ if [[ $_dot_test_api_composed -eq 1 ]]; then
   export DOT_OVERLAY_MANIFEST
   OVERLAYS=()
   # The manifest and ledger may be absent in fresh fixtures (the test
-  # runner isolates XDG_STATE_HOME per suite). Consumers already guard
-  # absence, so an empty overlay set is the honest answer then — never
-  # a loader failure.
+  # runner isolates XDG_STATE_HOME per suite). An empty overlay set is
+  # the honest answer then, and the readiness flag below degrades to
+  # the frozen adapter, since strict production validation without
+  # that state can only fail closed — never a loader failure.
   if [[ -f $_dot_test_api_state_home/dot/profile-overlay-lifecycle-v1 ]]; then
     while IFS= read -r _dot_test_api_record || [[ -n $_dot_test_api_record ]]; do
       case $_dot_test_api_record in '' | version=*) continue ;; esac
@@ -76,7 +77,16 @@ fi
 . "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/extension-trust.sh"
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/public/hook-runtime-v1/hook-api.sh"
-if ! dot_hook_source merge-hooks.d/lib/compat.sh; then
+# Overlay-symlink trust needs both engine-published artifacts. Degrade
+# to the frozen adapter when either is missing: a composed `dot test`
+# suite isolates XDG_STATE_HOME, so strict validation there could only
+# reject every overlay-owned support file.
+_dot_test_api_manifest_dir=${DOT_OVERLAY_MANIFEST:-}
+_dot_test_api_overlay_state=0
+if [[ -f $_dot_test_api_manifest_dir && -f ${_dot_test_api_manifest_dir%/*}/profile-overlay-lifecycle-v1 ]]; then
+  _dot_test_api_overlay_state=1
+fi
+if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_state -eq 0 ]]; then
   # A standalone capability checkout has no base overlay. Reuse the frozen
   # public base contract in test scope so dev hook behavior is still exercised.
   # shellcheck shell=bash
@@ -613,3 +623,4 @@ fi
 
 unset _dot_test_api_candidate _dot_test_api_host_home
 unset _dot_test_api_composed _dot_test_api_root _dot_test_api_source_home
+unset _dot_test_api_manifest_dir _dot_test_api_overlay_state
