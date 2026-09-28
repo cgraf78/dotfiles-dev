@@ -44,6 +44,89 @@ else
   _pass 'profile state compares file bytes without external cmp'
 fi
 
+# The library compares through cmp when it exists and falls back to the Python
+# engine otherwise. Both paths must keep the 0 equal / 1 different / 2 error
+# contract that publish_final relies on to refuse a blind publish. Each case
+# runs with a PATH holding only the tools its path may use, so taking the wrong
+# path fails with 127 instead of passing silently. BASH_ENV is dropped so a
+# host startup file cannot widen that PATH.
+files_equal() {
+  local search_path=$1
+  shift
+  # shellcheck disable=SC2016 # The inner shell expands its own arguments.
+  env -u BASH_ENV PATH="$search_path" _DEV_PROFILE_STATE_ENGINE="$engine" \
+    "$BASH" --noprofile --norc -c \
+    '. "$1"; shift; _dev_profile_state_files_equal "$@"' _ "$library" "$@"
+}
+equal_python_bin=$fixture/equal-python-bin
+equal_cmp_bin=$fixture/equal-cmp-bin
+equal_real_cmp_bin=$fixture/equal-real-cmp-bin
+mkdir -p "$equal_python_bin" "$equal_cmp_bin" "$equal_real_cmp_bin"
+# Link the interpreter itself: a shim such as pyenv's re-enters PATH lookup.
+ln -s "$(python3 -c 'import sys; print(sys.executable)')" "$equal_python_bin/python3"
+cat >"$equal_cmp_bin/cmp" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >>"$DOT_TEST_CMP_LOG"
+exit "$DOT_TEST_CMP_RC"
+SH
+chmod +x "$equal_cmp_bin/cmp"
+printf 'same\n' >"$fixture/equal-left"
+printf 'same\n' >"$fixture/equal-right"
+printf 'other\n' >"$fixture/equal-other"
+
+equal_rc=0
+files_equal "$equal_python_bin" "$fixture/equal-left" "$fixture/equal-right" ||
+  equal_rc=$?
+_assert_exit 'profile state files_equal fallback reports equal files' 0 "$equal_rc"
+equal_rc=0
+files_equal "$equal_python_bin" "$fixture/equal-left" "$fixture/equal-other" ||
+  equal_rc=$?
+_assert_exit 'profile state files_equal fallback reports different files' 1 "$equal_rc"
+equal_rc=0
+files_equal "$equal_python_bin" "$fixture/equal-left" "$fixture/equal-missing" \
+  2>/dev/null || equal_rc=$?
+_assert_exit 'profile state files_equal fallback reports a comparison error' 2 "$equal_rc"
+
+for cmp_rc in 0 1 2; do
+  : >"$fixture/equal-cmp.log"
+  equal_rc=0
+  DOT_TEST_CMP_LOG=$fixture/equal-cmp.log DOT_TEST_CMP_RC=$cmp_rc \
+    files_equal "$equal_cmp_bin" "$fixture/equal-left" "$fixture/equal-right" ||
+    equal_rc=$?
+  _assert_exit "profile state files_equal propagates cmp status $cmp_rc" \
+    "$cmp_rc" "$equal_rc"
+  _assert_file_content "profile state files_equal delegates status $cmp_rc to cmp -s" \
+    "-s -- $fixture/equal-left $fixture/equal-right" "$fixture/equal-cmp.log"
+done
+
+# The speedup depends on preferring cmp when both tools are available.
+: >"$fixture/equal-cmp.log"
+equal_rc=0
+DOT_TEST_CMP_LOG=$fixture/equal-cmp.log DOT_TEST_CMP_RC=0 \
+  files_equal "$equal_cmp_bin:$equal_python_bin" \
+  "$fixture/equal-left" "$fixture/equal-right" || equal_rc=$?
+_assert_exit 'profile state files_equal succeeds with cmp and python3 present' \
+  0 "$equal_rc"
+_assert_file_content 'profile state files_equal prefers cmp over the Python engine' \
+  "-s -- $fixture/equal-left $fixture/equal-right" "$fixture/equal-cmp.log"
+
+# The stub proves delegation; the host cmp must also honor the error status
+# that keeps publish_final from treating an unreadable file as different.
+if host_cmp=$(command -v cmp); then
+  ln -s "$host_cmp" "$equal_real_cmp_bin/cmp"
+  for equal_case in 'equal-right:0:equal files' 'equal-other:1:different files' \
+    'equal-missing:2:a comparison error'; do
+    IFS=: read -r equal_target equal_expected equal_label <<<"$equal_case"
+    equal_rc=0
+    files_equal "$equal_real_cmp_bin" "$fixture/equal-left" \
+      "$fixture/$equal_target" 2>/dev/null || equal_rc=$?
+    _assert_exit "profile state files_equal host cmp reports $equal_label" \
+      "$equal_expected" "$equal_rc"
+  done
+else
+  echo '  SKIP: profile state files_equal host cmp contract (cmp unavailable)'
+fi
+
 reverse() {
   local policy=$1 before=$2 applied=$3 current=$4 output=$5
   python3 "$engine" reverse \

@@ -32,10 +32,21 @@ JSON
     >"$DOT_TEST_SLEY_ROOT/share/sley/vscode/sley-tools-0.0.1/extension.js"
   export DOT_TEST_SLEY_ROOT
   merge_support_bin=$(_mock_bin)
+  # Hooks compare files with `cmp -s`, which the capability fixture PATH does
+  # not provide. Delegate to a system cmp when one exists so hooks see real
+  # semantics; otherwise emulate its contract (0 same, 1 different, 2 error),
+  # following symlinks and ignoring file modes the way cmp does.
   cat >"$merge_support_bin/cmp" <<'CMP'
 #!/usr/bin/env bash
+for system_cmp in /usr/bin/cmp /bin/cmp; do
+  [[ -x $system_cmp ]] && exec "$system_cmp" "$@"
+done
 [[ ${1:-} != -s ]] || shift
-git diff --no-index --quiet -- "$1" "$2"
+[[ ${1:-} != -- ]] || shift
+[[ -f $1 && -r $1 && -f $2 && -r $2 ]] || exit 2
+left=$(git hash-object --stdin <"$1") || exit 2
+right=$(git hash-object --stdin <"$2") || exit 2
+[[ $left == "$right" ]]
 CMP
   chmod +x "$merge_support_bin/cmp"
   PATH="$merge_support_bin:$PATH"
