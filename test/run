@@ -572,6 +572,7 @@ if [[ $mode == --provider-compatibility ]]; then
   suites=(
     dev-merges
     dev-shdeps-hooks
+    dev-vscode-merges
     git-shell-workflows
     nvim-dev
     validate-commit-msg
