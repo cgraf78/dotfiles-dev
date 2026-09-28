@@ -52,8 +52,19 @@ _dev_profile_state_toml_renderer() {
   printf '%s/codex/toml-render.py\n' "$here"
 }
 
+# Byte-compare two files: 0 equal, 1 different, >1 comparison error. Callers
+# treat any other status as a failed comparison, which matches `cmp -s`
+# (GNU, BSD, and BusyBox return 2 on error). cmp costs one small process
+# instead of a Python interpreter start, which adds up because every tracked
+# merge compares several files. Hosts without cmp (minimal containers, the
+# capability CI fixture bin) keep the portable Python engine. `--` keeps a
+# path beginning with `-` from being read as an option or as stdin.
 _dev_profile_state_files_equal() {
   local engine
+  if command -v cmp >/dev/null 2>&1; then
+    cmp -s -- "$1" "$2"
+    return
+  fi
   engine=$(_dev_profile_state_engine) || return 2
   python3 "$engine" equal --left "$1" --right "$2"
 }
@@ -753,10 +764,9 @@ dev_profile_state_publish_final() {
     json | jsonc) ;;
     *) return 2 ;;
   esac
-  local source=$1 engine equal_rc
+  local source=$1 equal_rc
   [[ -f $source && ! -L $source ]] || return 1
   [[ $source -ef $_DEV_PROFILE_STATE_DESTINATION ]] && return 1
-  engine=$(_dev_profile_state_engine) || return 1
   _dev_profile_state_document_valid "$_DEV_PROFILE_STATE_POLICY" "$source" || return 1
   chmod 0600 "$source" || return 1
   if [[ -e $_DEV_PROFILE_STATE_DESTINATION || -L $_DEV_PROFILE_STATE_DESTINATION ]]; then
@@ -768,7 +778,7 @@ dev_profile_state_publish_final() {
     # comparison fails the transaction (rollback on next begin) rather than
     # clobbering the live file.
     equal_rc=0
-    python3 "$engine" equal --left "$source" --right "$_DEV_PROFILE_STATE_DESTINATION" || equal_rc=$?
+    _dev_profile_state_files_equal "$source" "$_DEV_PROFILE_STATE_DESTINATION" || equal_rc=$?
     ((equal_rc == 0)) && return 0
     ((equal_rc == 1)) || return 1
   fi
