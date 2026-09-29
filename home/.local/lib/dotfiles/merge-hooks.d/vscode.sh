@@ -7,6 +7,9 @@ dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 # Runs during standalone Dot client convergence.
 # Requires jq.
 
+# The no-op signature covers this hook's own code; resolve it while sourcing.
+_dot_vscode_hook_source="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/${BASH_SOURCE[0]##*/}" || return
+
 if ! declare -F dot_hook_family >/dev/null 2>&1; then
   _dot_vscode_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return
   # shellcheck source=../merge-hooks.sh disable=SC1091
@@ -348,6 +351,25 @@ _vscode_checkrun_schema_config() {
   fi
 }
 
+# Resolve one Checkrun projection (`capabilities` or `schemas`) into REPLY.
+# Each projection launches Python and is fixed for the life of one merge, so
+# merge() provides `_vscode_checkrun_memo` (a private directory) and the
+# signature plus every config variant share one result. Outside merge() there
+# is no memo and callers project directly.
+_vscode_checkrun_projection() {
+  local kind=$1 out
+  [[ -n ${_vscode_checkrun_memo:-} && -d $_vscode_checkrun_memo ]] || return 1
+  out=$_vscode_checkrun_memo/$kind.json
+  if [[ ! -f $out ]]; then
+    case $kind in
+      capabilities) _vscode_checkrun_capabilities "$out" ;;
+      schemas) _vscode_checkrun_schema_config "$out" ;;
+      *) return 2 ;;
+    esac
+  fi
+  REPLY=$out
+}
+
 _vscode_write_checkrun_settings() {
   local cap="$1" schema_config="$2" include_sley="$3" out="$4"
 
@@ -455,12 +477,20 @@ _vscode_checkrun_settings() {
   schemas=$(mktemp)
   tmp=$(mktemp)
 
-  _vscode_checkrun_capabilities "$cap"
+  if _vscode_checkrun_projection capabilities; then
+    cp "$REPLY" "$cap" || printf '{}\n' >"$cap"
+  else
+    _vscode_checkrun_capabilities "$cap"
+  fi
   if ! jq -e '.filetypes | type == "object"' "$cap" >/dev/null 2>&1; then
     rm -f "$cap" "$schemas" "$tmp"
     return 0
   fi
-  _vscode_checkrun_schema_config "$schemas"
+  if _vscode_checkrun_projection schemas; then
+    cp "$REPLY" "$schemas" || printf '{}\n' >"$schemas"
+  else
+    _vscode_checkrun_schema_config "$schemas"
+  fi
 
   if _vscode_write_checkrun_settings "$cap" "$schemas" "$include_sley" "$tmp"; then
     _vscode_commit_tmp "$tmp" "$out"
@@ -896,6 +926,21 @@ _vscode_profile_state_publisher() {
   fi
 }
 
+# Commit the active profile-state transaction for DESTINATION (optionally with
+# a links file) and remember the blob id of the bytes it committed. merge()
+# declares `_vscode_committed_sums`; the no-op signature records these
+# instead of re-reading destinations after the merge, so a write by another
+# program after a commit forces the next update through the full merge.
+_vscode_commit_tracked() {
+  local destination=$1
+  shift
+  dev_profile_state_commit "$@" || return
+  if [[ -n ${DEV_PROFILE_STATE_COMMITTED_SUM:-} ]] &&
+    declare -p _vscode_committed_sums >/dev/null 2>&1; then
+    _vscode_committed_sums[$destination]=$DEV_PROFILE_STATE_COMMITTED_SUM
+  fi
+}
+
 _merge_vscode_config_tracked() {
   local cfg_dir=$1 opts=${2:-} managed_dir publisher keybinding_source
   local baseline work
@@ -936,7 +981,7 @@ _merge_vscode_config_tracked() {
     ! _vscode_apply_settings_projection \
       "$managed_dir/settings.json" "$work" "$opts" ||
     ! dev_profile_state_publish_final "$work" ||
-    ! dev_profile_state_commit; then
+    ! _vscode_commit_tracked "$cfg_dir/settings.json"; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
@@ -953,7 +998,7 @@ _merge_vscode_config_tracked() {
     ! _merge_vscode_keybindings \
       "$keybinding_source" "$work" ||
     ! dev_profile_state_publish_final "$work" ||
-    ! dev_profile_state_commit; then
+    ! _vscode_commit_tracked "$cfg_dir/keybindings.json"; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
@@ -1377,7 +1422,7 @@ _merge_vscode_remote_settings_tracked() {
     { _vscode_mcp_auth_applicable "$destination" &&
       ! _merge_vscode_mcp_auth "$work"; } ||
     ! dev_profile_state_publish_final "$work" ||
-    ! dev_profile_state_commit; then
+    ! _vscode_commit_tracked "$destination"; then
     dev_profile_state_abort || true
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
@@ -1719,7 +1764,7 @@ _vscode_merge_extensions_tracked() {
     fi
   done
 
-  if ((status == 0)) && dev_profile_state_commit "$links"; then
+  if ((status == 0)) && _vscode_commit_tracked "$ext_dir/extensions.json" "$links"; then
     _dev_profile_state_tempdir_remove "$work"
     return 0
   fi
@@ -1746,9 +1791,282 @@ _vscode_merge_extensions_tracked() {
   return 1
 }
 
+# Unchanged-update fast path.
+#
+# A converged merge still forks hundreds of short-lived jq, mktemp, cp, and
+# Python processes to prove that nothing changed: about 2.3s on an idle Linux
+# host and around 4s inside a loaded parallel update, which made this hook the
+# tail of the Configs stage. After a fully successful merge the hook records a
+# signature of everything that can change its result, and a later update with
+# the same signature reports success without repeating the proof.
+#
+# Key: this hook, profile-state, compat, and Dot hook-runtime code; the
+# platform, HOME, and host label; the resolved variant, remote, and local
+# extension records; every settings, keybinding, variant, local-extension,
+# and extension-manifest fragment; the Checkrun capability and schema
+# projections; and the post-merge state of every destination (settings and
+# keybindings files, extension directory entries, link targets, and
+# registries, remote machine settings, the MCP token, local extension
+# manifests, and the ownership receipts).
+#
+# Invalidation: any change to one of those inputs, a failed or partial merge
+# (only full success records a signature), outstanding profile-state recovery,
+# or `dot update -f` (DOT_FORCE=1) forces the full merge. Extension installs
+# stay outside the skip because they reconcile the editor's own state.
+#
+# The signature file is a cache with no other authority: a missing,
+# unreadable, or stale one is just a mismatch, and deleting it costs one full
+# merge. The update lock is the only writer; publication is an atomic rename
+# of a private sibling file.
+_vscode_signature_file() {
+  dot_xdg_path cache dot/merge-vscode-signature-v1
+}
+
+# Print a type-and-content line per path, following symlinks the way the merge
+# reads them; a symlink also gets its own line so replacing a file with a link
+# to identical bytes still changes the signature. Regular files are hashed as
+# Git blobs by one process: per-file forks are what made the unchanged merge
+# slow in the first place, and Git is already a profile-state prerequisite.
+_vscode_signature_files() {
+  local path id index=0
+  local -a files=()
+  for path in "$@"; do
+    if [[ -L $path ]]; then
+      printf 'link\t%s\n' "$path"
+      [[ ! -f $path ]] || files+=("$path")
+    elif [[ -f $path ]]; then
+      files+=("$path")
+    elif [[ -d $path ]]; then
+      printf 'dir\t%s\n' "$path"
+    elif [[ -e $path ]]; then
+      printf 'other\t%s\n' "$path"
+    else
+      printf 'absent\t%s\n' "$path"
+    fi
+  done
+  ((${#files[@]} > 0)) || return 0
+  while IFS= read -r id; do
+    ((index < ${#files[@]})) || return 1
+    printf '%s\t%s\n' "$id" "${files[index]}"
+    index=$((index + 1))
+  done < <(git hash-object --no-filters -- "${files[@]}")
+  ((index == ${#files[@]}))
+}
+
+# Print every entry of an extension directory with its type and any link
+# target. Version pruning and link repair act on these entries, so a removed
+# version directory or a dangling link must invalidate the signature; entry
+# contents stay unhashed because large marketplace installs are not merge
+# inputs.
+_vscode_signature_entries() {
+  local dir=$1 entry target
+  if [[ ! -d $dir ]]; then
+    printf 'absent\t%s\n' "$dir"
+    return 0
+  fi
+  printf 'entries\t%s\n' "$dir"
+  for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do
+    if [[ -L $entry ]]; then
+      target=$(readlink -- "$entry") || return 1
+      if [[ -e $entry ]]; then
+        printf 'link\t%s\t%s\n' "${entry##*/}" "$target"
+      else
+        printf 'dangling\t%s\t%s\n' "${entry##*/}" "$target"
+      fi
+    elif [[ -d $entry ]]; then
+      printf 'dir\t%s\n' "${entry##*/}"
+    elif [[ -e $entry ]]; then
+      printf 'file\t%s\n' "${entry##*/}"
+    fi
+  done
+}
+
+# Print the inputs that stay fixed while a merge runs. Callers pass the lists
+# merge() already resolved, as `variants`, `config_variants`, and
+# `local_extensions` arrays in the caller's scope.
+_vscode_signature_inputs() {
+  local file family_root record
+  local -a code=() sources=()
+
+  printf 'version\t%s\n' vscode-merge-signature-v1
+  printf 'home\t%s\n' "$HOME"
+  printf 'platform\t%s\n' "$(_vscode_platform)"
+  printf 'host\t%s\n' "$(_vscode_host_label)"
+
+  code+=("$_dot_vscode_hook_source")
+  dot_hook_file merge-hooks.d/lib/profile-state.sh && code+=("$REPLY")
+  dot_hook_file merge-hooks.d/lib/compat.sh && code+=("$REPLY")
+  file=$(_dev_profile_state_engine) && code+=("$file")
+  if [[ -n ${DOT_SOURCE_ROOT:-} ]]; then
+    code+=("$DOT_SOURCE_ROOT"/lib/dot/public/*.sh)
+    code+=("$DOT_SOURCE_ROOT"/lib/dot/public/hook-runtime-v1/*.sh)
+  fi
+  _vscode_signature_files "${code[@]}" || return 1
+
+  for record in ${variants[@]+"${variants[@]}"}; do
+    printf 'variant\t%s\n' "$record"
+  done
+  while IFS= read -r record; do
+    printf 'remote\t%s\n' "$record"
+  done < <(_vscode_remote_settings_dirs)
+  for record in ${local_extensions[@]+"${local_extensions[@]}"}; do
+    printf 'local-extension\t%s\n' "$record"
+  done
+
+  # Hash every file in the VS Code family tree (settings, keybindings,
+  # variants, local extensions, and extension manifests) instead of replaying
+  # each family's ordered resolution. The tree is a superset of what the merge
+  # selects, so this can only over-invalidate, and it keeps source resolution
+  # to once per merge. Interpreter caches are not policy.
+  family_root=$(dot_hook_family vscode) || return 1
+  if [[ -d $family_root ]]; then
+    while IFS= read -r file; do
+      sources+=("$file")
+    done < <(find -L "$family_root" -name __pycache__ -prune -o -type f -print |
+      LC_ALL=C sort)
+  fi
+  printf 'sources\t%s\n' "$family_root"
+  _vscode_signature_files ${sources[@]+"${sources[@]}"} || return 1
+
+  # Only config-bearing variants consume the Checkrun projections. Hash the
+  # public CLI outputs rather than Checkrun internals so the signature follows
+  # the same boundary the merge consumes; the memo lets the merge reuse them.
+  if ((${#config_variants[@]} > 0)) && command -v checkrun >/dev/null 2>&1; then
+    _vscode_checkrun_projection capabilities || return 1
+    file=$REPLY
+    _vscode_checkrun_projection schemas || return 1
+    # Content only: the memo lives in a per-merge temporary directory.
+    record=$(git hash-object --no-filters -- "$file" "$REPLY") || return 1
+    printf 'checkrun\t%s\n' "${record//$'\n'/ }"
+  fi
+}
+
+# Print the destination and ownership state that a merge reads and writes.
+# Evaluated before the merge to test the fast path and after a successful
+# merge to record the converged state. Uses the caller's `config_variants`,
+# `extension_variants`, `local_extensions`, and `_vscode_committed_sums`.
+#
+# A destination the merge committed is recorded by the blob id of the bytes
+# its transaction committed, not by re-reading it afterwards: a concurrent
+# writer (Settings Sync, the editor itself) can replace a file between its
+# commit and this scan, and that newer content must not be certified as
+# converged. A symlinked destination, which transactions refuse, never matches.
+_vscode_signature_state() {
+  local line rest ext_dir cfg_dir local_extension ext_id ext_src disabled_opts
+  local destination path
+  local -a destinations=() files=() receipts=()
+
+  while IFS= read -r cfg_dir; do
+    destinations+=("$cfg_dir/settings.json")
+    receipts+=("vscode-settings"$'\t'"$cfg_dir/settings.json")
+  done < <(_vscode_remote_settings_dirs)
+  for line in ${extension_variants[@]+"${extension_variants[@]}"}; do
+    ext_dir=${line%%	*}
+    destinations+=("$ext_dir/extensions.json")
+    receipts+=("vscode-extensions"$'\t'"$ext_dir/extensions.json")
+    _vscode_signature_entries "$ext_dir" || return 1
+  done
+  for line in ${config_variants[@]+"${config_variants[@]}"}; do
+    rest=${line#*	}
+    cfg_dir=${rest%%	*}
+    [[ -n $cfg_dir ]] || continue
+    destinations+=("$cfg_dir/settings.json" "$cfg_dir/keybindings.json")
+    receipts+=("vscode-settings"$'\t'"$cfg_dir/settings.json")
+    receipts+=("vscode-keybindings"$'\t'"$cfg_dir/keybindings.json")
+  done
+  for destination in ${destinations[@]+"${destinations[@]}"}; do
+    [[ ! -L $destination ]] || return 1
+  done
+
+  while IFS= read -r line; do
+    if [[ $line =~ ^[0-9a-f]{40,64}$'\t'(.*)$ ]]; then
+      path=${BASH_REMATCH[1]}
+      if [[ -n ${_vscode_committed_sums[$path]+x} ]]; then
+        printf '%s\t%s\n' "${_vscode_committed_sums[$path]}" "$path"
+        continue
+      fi
+    fi
+    printf '%s\n' "$line"
+  done < <(_vscode_signature_files ${destinations[@]+"${destinations[@]}"} ||
+    printf 'unreadable\n')
+
+  # Local extension sources gate activation by directory presence and supply
+  # the registered version through their manifest.
+  for local_extension in ${local_extensions[@]+"${local_extensions[@]}"}; do
+    IFS=$'\t' read -r ext_id ext_src disabled_opts <<<"$local_extension"
+    files+=("$ext_src" "$ext_src/package.json")
+  done
+  _vscode_mcp_auth_token_path && files+=("$REPLY")
+  _vscode_signature_files ${files[@]+"${files[@]}"} || return 1
+  dev_profile_state_fingerprint ${receipts[@]+"${receipts[@]}"} || return 1
+}
+
+# Succeed unless some destination receives the MCP auth setting while the token
+# is unusable. Token generation failure is deliberately a warning, not a merge
+# failure, so recording that degraded result would stop later updates from
+# retrying generation.
+_vscode_signature_mcp_ready() {
+  local line rest cfg_dir
+  local -a destinations=()
+  while IFS= read -r cfg_dir; do
+    destinations+=("$cfg_dir/settings.json")
+  done < <(_vscode_remote_settings_dirs)
+  for line in ${config_variants[@]+"${config_variants[@]}"}; do
+    rest=${line#*	}
+    cfg_dir=${rest%%	*}
+    [[ -z $cfg_dir ]] || destinations+=("$cfg_dir/settings.json")
+  done
+  for line in ${destinations[@]+"${destinations[@]}"}; do
+    _vscode_mcp_auth_applicable "$line" || continue
+    _vscode_mcp_auth_token_path || return 1
+    _vscode_mcp_auth_token_is_valid "$REPLY"
+    return
+  done
+}
+
+# Record the converged signature after a fully successful merge. Reads
+# merge()'s `signature_file` and `signature_inputs`; an input or state probe
+# that cannot be evaluated removes any previous signature so the next update
+# repeats the full merge. Failing to record is harmless and stays silent.
+_vscode_write_signature() {
+  local state tmp
+  [[ -n $signature_file ]] || return 0
+  if [[ -z $signature_inputs ]] || ! _vscode_signature_mcp_ready ||
+    ! state=$(_vscode_signature_state) ||
+    [[ $'\n'$state$'\n' == *$'\n'unreadable$'\n'* ]]; then
+    rm -f -- "$signature_file" 2>/dev/null || true
+    return 0
+  fi
+  mkdir -p "${signature_file%/*}" 2>/dev/null || return 0
+  dot_sibling_tmp_for "$signature_file" || return 0
+  tmp=$REPLY
+  if (umask 077 && printf '%s\n%s\n' "$signature_inputs" "$state" >"$tmp") &&
+    mv -f -- "$tmp" "$signature_file"; then
+    return 0
+  fi
+  rm -f -- "$tmp" 2>/dev/null || true
+}
+
 # Main: deploy extensions, settings, and keybindings to all VS Code variants.
 merge() {
   _dot_tool_present vscode || return 0
+
+  # Scope the Checkrun projection memo to this one merge; dynamic scoping
+  # exposes it to every helper below, and it disappears on return.
+  local _vscode_checkrun_memo="" rc=0
+  local -A _vscode_committed_sums=()
+  # Ask profile-state commits to report the bytes they committed.
+  # shellcheck disable=SC2034 # Read by dev_profile_state_commit via scope.
+  local DEV_PROFILE_STATE_RECORD_COMMITTED_SUM=1
+  _dev_profile_state_tempdir && _vscode_checkrun_memo=$REPLY
+  _vscode_merge || rc=$?
+  if [[ -n $_vscode_checkrun_memo ]]; then
+    _dev_profile_state_tempdir_remove "$_vscode_checkrun_memo" || true
+  fi
+  return "$rc"
+}
+
+_vscode_merge() {
   _vscode_install_declared_extensions || return $?
 
   command -v jq &>/dev/null || return 0
@@ -1762,24 +2080,42 @@ merge() {
     variants+=("$line")
   done < <(_vscode_variants)
 
-  _merge_vscode_remote_configs_tracked || return 1
-
-  ((${#variants[@]} > 0)) || return 0
-
   # Configuration and extension reconciliation have different identities.
   # Build each list once so shared targets are processed only when their
-  # effective policy differs.
-  while IFS= read -r line; do
-    config_variants+=("$line")
-  done < <(_vscode_config_variants "${variants[@]}")
+  # effective policy differs. The signature needs the same lists, so resolve
+  # them before the remote merge rather than twice.
+  if ((${#variants[@]} > 0)); then
+    while IFS= read -r line; do
+      config_variants+=("$line")
+    done < <(_vscode_config_variants "${variants[@]}")
 
-  while IFS= read -r line; do
-    extension_variants+=("$line")
-  done < <(_vscode_extension_variants "${variants[@]}")
+    while IFS= read -r line; do
+      extension_variants+=("$line")
+    done < <(_vscode_extension_variants "${variants[@]}")
 
-  while IFS= read -r line; do
-    local_extensions+=("$line")
-  done < <(_vscode_local_extensions)
+    while IFS= read -r line; do
+      local_extensions+=("$line")
+    done < <(_vscode_local_extensions)
+  fi
+
+  local signature_file="" signature_inputs="" signature_state=""
+  if _vscode_signature_file; then
+    signature_file=$REPLY
+    signature_inputs=$(_vscode_signature_inputs) || signature_inputs=""
+  fi
+  if [[ -n $signature_inputs && ${DOT_FORCE:-0} != 1 && -f $signature_file ]] &&
+    signature_state=$(_vscode_signature_state) &&
+    [[ "$(cat -- "$signature_file" 2>/dev/null)" == "$signature_inputs"$'\n'"$signature_state" ]]; then
+    ((${#variants[@]} > 0)) && dot_hook_log "  VS Code"
+    return 0
+  fi
+
+  _merge_vscode_remote_configs_tracked || return 1
+
+  if ((${#variants[@]} == 0)); then
+    _vscode_write_signature
+    return 0
+  fi
 
   local ext_dir cfg_dir opts rest merge_rc=0
   for line in ${extension_variants[@]+"${extension_variants[@]}"}; do
@@ -1803,5 +2139,6 @@ merge() {
       _merge_vscode_config_tracked "$cfg_dir" "$opts" || merge_rc=1
     fi
   done
+  ((merge_rc != 0)) || _vscode_write_signature
   return "$merge_rc"
 }

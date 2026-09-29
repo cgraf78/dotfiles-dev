@@ -456,6 +456,76 @@ _dev_profile_state_receipt_load() {
   REPLY=$(jq -r .before_exists "$receipt")
 }
 
+# Print a content fingerprint of the ownership state behind each
+# `<policy><TAB><destination>` argument: its receipt blob id and path. Hooks fold this into no-op signatures so a
+# receipt rewritten, adopted, or removed outside the hook forces a full
+# transaction.
+#
+# Fails whenever recovery is outstanding (a pending transaction anywhere in
+# the root, an interrupted retirement, or a leftover saved original) or the
+# root or a receipt fails the safety checks transactions enforce: only a full
+# transaction repairs or reports those, so a caller must never skip one. This is a read-only probe and takes
+# no single-writer lease.
+dev_profile_state_fingerprint() {
+  local root pending pair key_dir key artifact index=0 status=0
+  local -a key_files=() keys=() artifacts=()
+  root=$(_dev_profile_state_root) || return 1
+  # Apply the same safety predicates a transaction would, so state it would
+  # reject can never match a recorded signature.
+  if [[ -e $root || -L $root ]]; then
+    _dev_profile_state_private_directory "$root" || return 1
+  fi
+  [[ ! -e $root/.retiring && ! -L $root/.retiring ]] || return 1
+  for pending in "$root"/*.pending.json; do
+    [[ ! -e $pending && ! -L $pending ]] || return 1
+  done
+  (($# > 0)) || return 0
+
+  # Derive every key with one Git process. Hashing a file holding the same
+  # bytes that _dev_profile_state_key pipes to `hash-object --stdin` yields
+  # the identical blob id; per-pair launches would cost the fast path most of
+  # what it saves on hosts with a heavyweight Git wrapper.
+  _dev_profile_state_tempdir || return 1
+  key_dir=$REPLY
+  for pair in "$@"; do
+    [[ $pair == *$'\t'* ]] || status=1
+    printf '%s\n%s\n' "${pair%%$'\t'*}" "${pair#*$'\t'}" \
+      >"$key_dir/$index" || status=1
+    key_files+=("$key_dir/$index")
+    index=$((index + 1))
+  done
+  if ((status == 0)); then
+    while IFS= read -r key; do
+      keys+=("$key")
+    done < <(git hash-object --no-filters -- "${key_files[@]}")
+  fi
+  _dev_profile_state_tempdir_remove "$key_dir" || status=1
+  ((status == 0 && ${#keys[@]} == $#)) || return 1
+
+  for key in "${keys[@]}"; do
+    [[ $key =~ ^[0-9a-f]{40,64}$ ]] || return 1
+    # A saved original outlives only an interrupted transaction, which begin
+    # refuses; it is never part of converged state.
+    artifact=$root/$key.original
+    [[ ! -e $artifact && ! -L $artifact ]] || return 1
+    artifact=$root/$key.json
+    if [[ -e $artifact || -L $artifact ]]; then
+      _dev_profile_state_receipt_safe "$artifact" || return 1
+      artifacts+=("$artifact")
+    else
+      printf 'absent\t%s\n' "$artifact"
+    fi
+  done
+  ((${#artifacts[@]} > 0)) || return 0
+  index=0
+  while IFS= read -r key; do
+    ((index < ${#artifacts[@]})) || return 1
+    printf '%s\t%s\n' "$key" "${artifacts[index]}"
+    index=$((index + 1))
+  done < <(git hash-object --no-filters -- "${artifacts[@]}")
+  ((index == ${#artifacts[@]}))
+}
+
 dev_profile_state_tracked() {
   local policy=$1 format=$2 destination=$3 publisher=${4:-atomic}
   local root key receipt pending
@@ -701,10 +771,18 @@ dev_profile_state_abort() {
   _DEV_PROFILE_STATE_ACTIVE=0
 }
 
+# When the caller sets DEV_PROFILE_STATE_RECORD_COMMITTED_SUM=1, a successful
+# commit leaves DEV_PROFILE_STATE_COMMITTED_SUM holding the Git blob id of the
+# exact destination bytes the receipt's `applied` view was derived from.
+# Callers that cache convergence record this instead of re-reading the
+# destination later, so an external write that lands after the commit can
+# never be certified as converged state. Other callers pay nothing extra.
 dev_profile_state_commit() {
+  DEV_PROFILE_STATE_COMMITTED_SUM=
   [[ ${_DEV_PROFILE_STATE_ACTIVE:-0} == 1 ]] || return 1
   local links=${1:-} applied=$_DEV_PROFILE_STATE_TRANSACTION_DIR/applied.json
   local empty_links=$_DEV_PROFILE_STATE_TRANSACTION_DIR/links.json receipt_tmp
+  local committed=$_DEV_PROFILE_STATE_DESTINATION committed_sum=
   [[ $# -le 1 ]] || return 2
   if [[ -z $links ]]; then
     printf '[]\n' >"$empty_links"
@@ -713,8 +791,15 @@ dev_profile_state_commit() {
   _dev_profile_state_links_valid \
     "$_DEV_PROFILE_STATE_POLICY" "$_DEV_PROFILE_STATE_DESTINATION" "$links" ||
     return 1
+  if [[ ${DEV_PROFILE_STATE_RECORD_COMMITTED_SUM:-0} == 1 ]]; then
+    # Snapshot once so the receipt and the reported id describe the same
+    # bytes even if another writer replaces the destination meanwhile.
+    committed=$_DEV_PROFILE_STATE_TRANSACTION_DIR/committed
+    cp -- "$_DEV_PROFILE_STATE_DESTINATION" "$committed" || return 1
+    committed_sum=$(git hash-object --no-filters -- "$committed") || return 1
+  fi
   _dev_profile_state_json "$_DEV_PROFILE_STATE_FORMAT" \
-    "$_DEV_PROFILE_STATE_DESTINATION" "$applied" || return 1
+    "$committed" "$applied" || return 1
   _dev_profile_state_document_valid "$_DEV_PROFILE_STATE_POLICY" "$applied" ||
     return 1
   receipt_tmp=$(mktemp "${_DEV_PROFILE_STATE_PENDING}.tmp.XXXXXX") || return 1
@@ -747,6 +832,8 @@ dev_profile_state_commit() {
   rm -f -- "$_DEV_PROFILE_STATE_PENDING" "$_DEV_PROFILE_STATE_ORIGINAL_STATE"
   _dev_profile_state_tempdir_remove "$_DEV_PROFILE_STATE_TRANSACTION_DIR" || true
   _DEV_PROFILE_STATE_ACTIVE=0
+  # shellcheck disable=SC2034 # Public result read by callers after commit.
+  DEV_PROFILE_STATE_COMMITTED_SUM=$committed_sum
 }
 
 # Publish a caller-staged final document to the live destination of the

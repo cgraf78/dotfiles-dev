@@ -40,3 +40,10 @@ source families and private helpers live in this directory.
 
 The executable hook implementation lives at
 `~/.local/lib/dotfiles/merge-hooks.d/vscode.sh`.
+
+After a fully successful merge the hook records a signature of its inputs and
+converged destinations in `$XDG_CACHE_HOME/dot/merge-vscode-signature-v1`.
+An update whose signature still matches skips the settings, keybinding, and
+local-extension merge; extension installs always run. Any source, destination,
+receipt, or hook change invalidates it, and `dot update -f` forces the full
+merge. Deleting the file is always safe.
