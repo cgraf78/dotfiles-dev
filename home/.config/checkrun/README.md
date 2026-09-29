@@ -130,8 +130,9 @@ individual personal, work, or future layer files.
 ## Merge Config Layers
 
 Schema associations in `.config/dot/merge-hooks.d` target source layer files
-for generated configs, not the `*.sh` hooks or hook-private helper scripts.
-SchemaStore usually matches the final target path, but these source files use
+for generated configs. The executable hooks and their private helpers live in
+`.local/lib/dotfiles/merge-hooks.d` and are not schema-associated. SchemaStore
+usually matches the final target path, but these source files use
 dotfiles-specific names so merge hooks can compose personal, work, and
 host-specific layers. If each layer is valid by itself, associate the layer
 directly with the target's public schema.
@@ -147,8 +148,10 @@ unassociated and rely on parser/linter/native validation instead.
 ## Boundaries
 
 - `.config/checkrun` owns this checkout's Checkrun policy and documentation.
-- `.config/dot/merge-hooks.d` owns merge hooks, their private helpers, and
-  merge source layers.
+- `.config/dot/merge-hooks.d` owns merge-hook instance declarations and merge
+  source layers.
+- `.local/lib/dotfiles/merge-hooks.d` owns executable merge hooks and their
+  private helpers.
 - `.config/dot/overlays.d` owns overlay repository configuration.
 - `.local/share/checkrun/schemas` owns pinned public schema payloads.
 - Dependency repos own schema payloads that are part of their public API.

@@ -9,7 +9,7 @@
 
 # git-tools checks for these hooks before installing standalone defaults. They
 # must therefore be defined in the shared .sh layer, before the provider is
-# loaded from the shell-specific 70-integrations files.
+# loaded from the shell-specific 80-dev-integrations files.
 git_tools_fzf_preview() {
   fzf "${_fzf_preview[@]}" "$@"
 }

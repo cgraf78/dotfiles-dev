@@ -46,9 +46,10 @@ Use this decision order:
 8. When changing or deleting an existing managed object, copy the complete old
    object into `all.d/00-retirements.jsonc` and add `dotfiles.retire: true`.
    Never place active policy in that file.
-9. Extend `core-merges` for Linux, macOS, and Windows with and without Termnav,
-   seed any stale generation that must be removed, and add a Neovim keymap test
-   when terminal encoding aliases or CSI-u identity matter.
+9. Extend `.local/lib/dotfiles/tests/dev/vscode-merges.sh`, run by
+   `dev-vscode-merges-test`, for Linux, macOS, and Windows with and without
+   Termnav, seed any stale generation that must be removed, and add a Neovim
+   keymap test when terminal encoding aliases or CSI-u identity matter.
 
 Existing local-only bindings keep their normal precedence over managed
 bindings. The terminal-native `Ctrl-Tab` and `Ctrl-Shift-Tab` send-sequence
