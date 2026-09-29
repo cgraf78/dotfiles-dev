@@ -17,7 +17,8 @@ _usage() {
 Usage: gh-ci-status [options]
 
 Summarize CI for every repository owned by a GitHub user or organization:
-the default branch's latest check rollup and each open pull request's.
+the default branch's latest check rollup, the latest scheduled run of each
+active workflow on that branch, and each open pull request's rollup.
 
 Options:
   -o, --owner <login>   Owner to inspect (default: the authenticated gh user).
@@ -25,21 +26,24 @@ Options:
       --include-forks   Include forked repositories.
       --include-archived
                         Include archived repositories.
+      --no-scheduled    Skip scheduled workflow runs (one fewer API call per
+                        repository).
       --porcelain       Print stable key=value summary fields followed by
-                        tab-separated repo, pr, and truncated records.
+                        tab-separated repo, sched, pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
                         Checks that have not registered yet read as none.
   -i, --interval <sec>  Poll interval for --watch (default: 30).
   -t, --timeout <sec>   Give up watching after this long (default: 1800).
   -h, --help            Show this help.
 
-Repositories without CI report "none" and never fail the run.
+Repositories without CI report "none" and never fail the run. Scheduled runs
+older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
 
 Exit status:
-  0  Everything with checks passed.
+  0  Nothing failed. Checks still running do not count as failures.
   1  Something failed, or GitHub could not be queried.
   2  Usage or local environment error.
-  8  Nothing failed, but checks are still pending.
+  8  --watch timed out with checks still pending.
 EOF
 }
 
@@ -62,6 +66,7 @@ _forks=0
 _archived=0
 _porcelain=0
 _watch=0
+_scheduled=1
 _interval=30
 _timeout=1800
 
@@ -102,6 +107,10 @@ while (($#)); do
       ;;
     --porcelain)
       _porcelain=1
+      shift
+      ;;
+    --no-scheduled)
+      _scheduled=0
       shift
       ;;
     -w | --watch)
@@ -231,6 +240,151 @@ _fetch() {
   _records=$output
 }
 
+# Scheduled runs come from the REST Actions API, which GraphQL does not expose
+# by trigger. Each active workflow is asked for its own newest scheduled run:
+# a shared listing of recent scheduled runs would let an hourly workflow crowd
+# a nightly one out of the window. Epoch seconds let the shell apply the age
+# cutoff without GNU/BSD `date` parsing differences.
+# shellcheck disable=SC2016 # jq variables, not shell expansions.
+_sched_run_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+.workflow_runs[0] // empty
+| [.workflow_id, .name, (.conclusion // .status), .created_at,
+   (.created_at | fromdateiso8601), .html_url] | rec'
+_sched_workflows_jq='.workflows[] | select(.state == "active") | .id'
+
+# A scheduled result older than this is not the latest run of a live
+# schedule: the schedule was removed or paused, and reporting it would pin a
+# stale failure forever. 45 days keeps monthly schedules visible.
+_sched_max_age=$((45 * 86400))
+
+# Map a scheduled run's conclusion, or its status while it has none, onto the
+# summary vocabulary via REPLY. Cancelled and skipped runs are usually
+# superseded rather than actionable, so they read as none. A run waiting on
+# an environment approval (`waiting`) or on approval to run needs a person, so
+# it reads as failing rather than leaving --watch polling until its timeout.
+_sched_state() {
+  case "$1" in
+    success) REPLY=pass ;;
+    failure | timed_out | startup_failure | action_required | waiting) REPLY=fail ;;
+    queued | in_progress | requested | pending) REPLY=pending ;;
+    *) REPLY=none ;;
+  esac
+}
+
+# Write repository $1's newest scheduled run for each active workflow on
+# branch $2 to file $3 as sched records, or one schederror record when any
+# part cannot be read. The per-workflow queries run concurrently: each is
+# dominated by API latency rather than payload.
+_fetch_scheduled_one() {
+  local repo=$1 branch=$2 out=$3 ids id line name raw created epoch url now cutoff
+  local failed=0
+  # -X GET is required: gh switches to POST whenever fields are passed.
+  if ! ids=$(gh api -X GET --paginate "repos/$_owner/$repo/actions/workflows" \
+    -F per_page=100 --jq "$_sched_workflows_jq" 2>/dev/null); then
+    printf 'schederror%s%s\n' "$_sep" "$repo" >"$out"
+    return 0
+  fi
+  for id in $ids; do
+    [[ $id =~ ^[0-9]+$ ]] || continue
+    {
+      gh api -X GET "repos/$_owner/$repo/actions/workflows/$id/runs" \
+        -f event=schedule -f branch="$branch" -F per_page=1 \
+        -F exclude_pull_requests=true --jq "$_sched_run_jq" >"$out.$id" 2>/dev/null ||
+        : >"$out.$id.failed"
+    } &
+  done
+  wait
+  now=$(date +%s)
+  if [[ ! $now =~ ^[0-9]+$ ]]; then
+    printf 'schederror%s%s\n' "$_sep" "$repo" >"$out"
+    return 0
+  fi
+  cutoff=$((now - _sched_max_age))
+  : >"$out"
+  for id in $ids; do
+    [[ $id =~ ^[0-9]+$ ]] || continue
+    if [[ -e $out.$id.failed ]]; then
+      failed=1
+      continue
+    fi
+    [[ -s $out.$id ]] || continue
+    IFS= read -r line <"$out.$id"
+    IFS=$_sep read -r id name raw created epoch url <<<"$line"
+    if [[ ! $epoch =~ ^[0-9]+$ ]] || ((epoch < cutoff)); then
+      continue
+    fi
+    printf '%s\n' "sched$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url" >>"$out"
+  done
+  ((failed == 0)) || printf 'schederror%s%s\n' "$_sep" "$repo" >"$out"
+}
+
+# Remove the scheduled-run scratch directory, if any. Runs from the EXIT and
+# signal traps so Ctrl-C during a --watch poll leaves nothing behind.
+_sched_cleanup() {
+  [[ -z ${_sched_tmp:-} ]] || rm -rf -- "$_sched_tmp"
+  _sched_tmp=
+}
+
+# Fetch scheduled runs into _sched_records. With no arguments, every listed
+# repository that has a default branch is read; with repository names, only
+# those are re-read and merged over their previous records, except that a
+# repository whose re-read fails keeps its previous records so a transient
+# error during --watch cannot turn a running nightly into a green result.
+# Queries up to eight repositories at once; with their per-workflow calls that
+# stays well under GitHub's limit on concurrent requests.
+_fetch_scheduled() {
+  local line kind repo branch i j running=0 merged='' name
+  local -a repos=() branches=()
+  ((_scheduled == 1)) || return 0
+  while IFS= read -r line; do
+    IFS=$_sep read -r kind repo branch _ <<<"$line"
+    [[ $kind == repo && -n $branch ]] || continue
+    if (($# > 0)); then
+      case " $* " in *" $repo "*) ;; *) continue ;; esac
+    fi
+    repos+=("$repo")
+    branches+=("$branch")
+  done <<<"$_records"
+  (($# > 0)) || _sched_records=
+  ((${#repos[@]} > 0)) || return 0
+  _sched_tmp=$(mktemp -d "${TMPDIR:-/tmp}/gh-ci-status.XXXXXX") || return 1
+  for ((i = 0; i < ${#repos[@]}; i++)); do
+    _fetch_scheduled_one "${repos[$i]}" "${branches[$i]}" "$_sched_tmp/$i" &
+    running=$((running + 1))
+    if ((running >= 8)); then
+      wait
+      running=0
+    fi
+  done
+  wait
+  if (($# == 0)); then
+    for ((j = 0; j < ${#repos[@]}; j++)); do
+      [[ ! -s $_sched_tmp/$j ]] || _sched_records+="$(<"$_sched_tmp/$j")"$'\n'
+    done
+  else
+    # Keep every record of a repository that was not re-read or whose re-read
+    # failed; replace the rest with their fresh records.
+    while IFS= read -r line; do
+      [[ -n $line ]] || continue
+      IFS=$_sep read -r kind repo _ <<<"$line"
+      for ((j = 0; j < ${#repos[@]}; j++)); do
+        [[ ${repos[$j]} == "$repo" ]] || continue
+        IFS=$_sep read -r name _ <"$_sched_tmp/$j" 2>/dev/null || name=
+        [[ $name == schederror ]] || continue 2
+      done
+      merged+="$line"$'\n'
+    done <<<"$_sched_records"
+    for ((j = 0; j < ${#repos[@]}; j++)); do
+      IFS=$_sep read -r name _ <"$_sched_tmp/$j" 2>/dev/null || name=
+      [[ $name != schederror && -s $_sched_tmp/$j ]] || continue
+      merged+="$(<"$_sched_tmp/$j")"$'\n'
+    done
+    _sched_records=$merged
+  fi
+  _sched_cleanup
+}
+
 # Add one item in summary state $1 to the pass/fail/pending/none counters.
 _count() {
   case "$1" in
@@ -255,6 +409,10 @@ _summarize() {
   _pending=0
   _none=0
   _truncated=0
+  _sched_count=0
+  _sched_pending=0
+  _sched_pending_repos=''
+  _sched_errors=0
   _width=4
   while IFS= read -r line; do
     [[ -n $line ]] || continue
@@ -267,6 +425,7 @@ _summarize() {
         _count "$REPLY"
         ((${#repo} <= _width)) || _width=${#repo}
         _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid")
+        _summarize_scheduled "$repo"
         ;;
       pr)
         IFS=$_sep read -r kind repo number rollup draft auto url title <<<"$line"
@@ -282,6 +441,37 @@ _summarize() {
         ;;
     esac
   done <<<"$_records"
+}
+
+# Append repository $1's scheduled-run rows (sched, or schederror when they
+# could not be read) and count them, so they print right under its branch.
+_summarize_scheduled() {
+  local want=$1 line kind repo name raw created url
+  [[ -n ${_sched_records:-} ]] || return 0
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    IFS=$_sep read -r kind repo name raw created url <<<"$line"
+    [[ $repo == "$want" ]] || continue
+    if [[ $kind == schederror ]]; then
+      _sched_errors=$((_sched_errors + 1))
+      _rows+=("schederror${_sep}none$_sep$repo")
+      continue
+    fi
+    _sched_state "$raw"
+    # Cancelled or skipped runs were superseded; they are neither a result to
+    # count nor a repository without checks.
+    [[ $REPLY != none ]] || continue
+    _sched_count=$((_sched_count + 1))
+    if [[ $REPLY == pending ]]; then
+      _sched_pending=$((_sched_pending + 1))
+      case " $_sched_pending_repos " in
+        *" $repo "*) ;;
+        *) _sched_pending_repos+=" $repo" ;;
+      esac
+    fi
+    _count "$REPLY"
+    _rows+=("sched$_sep$REPLY$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url")
+  done <<<"$_sched_records"
 }
 
 # Report the run's overall state via REPLY: fail beats pending beats pass.
@@ -310,7 +500,7 @@ _repo_has_problem() {
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
     [[ $repo == "$want" ]] || continue
-    [[ $kind != truncated ]] || return 0
+    case $kind in truncated | schederror) return 0 ;; esac
     ! _is_problem "$state" || return 0
   done
   return 1
@@ -324,7 +514,7 @@ _visible() {
   ((_failing == 1)) || return 0
   case $kind in
     repo) _repo_has_problem "$repo" ;;
-    truncated) return 0 ;;
+    truncated | schederror) return 0 ;;
     *) _is_problem "$state" ;;
   esac
 }
@@ -337,8 +527,8 @@ _print_porcelain() {
   _overall
   printf 'state=%s\nowner=%s\nrepositories=%s\npull_requests=%s\n' \
     "$REPLY" "$_owner" "$_repos" "$_prs"
-  printf 'pass=%s\nfail=%s\npending=%s\nnone=%s\ntruncated=%s\n' \
-    "$_pass" "$_fail" "$_pending" "$_none" "$_truncated"
+  printf 'pass=%s\nfail=%s\npending=%s\nnone=%s\ntruncated=%s\nscheduled=%s\nsched_errors=%s\n' \
+    "$_pass" "$_fail" "$_pending" "$_none" "$_truncated" "$_sched_count" "$_sched_errors"
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
     _visible "$kind" "$state" "$repo" || continue
@@ -351,6 +541,7 @@ _print_porcelain() {
 # warnings, and a closing count line.
 _print_human() {
   local row kind state repo branch oid number draft auto url title total label
+  local name raw created
   printf 'owner: %s (%s repositories, %s open pull requests)\n' "$_owner" "$_repos" "$_prs"
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
@@ -373,6 +564,18 @@ _print_human() {
         printf '  %-8s %s\n' "$state" "$label"
         ! _is_problem "$state" || printf '           %s\n' "$url"
         ;;
+      sched)
+        # Passing scheduled runs are counted but not listed, keeping the
+        # default view to one line per healthy repository.
+        _is_problem "$state" || continue
+        IFS=$_sep read -r kind state repo name raw created url <<<"$row"
+        created=${created/T/ }
+        printf '  %-8s scheduled %s: %s (%s)\n' "$state" "$name" "$raw" "${created%:*}Z"
+        printf '           %s\n' "$url"
+        ;;
+      schederror)
+        printf '  %-8s scheduled runs could not be read\n' 'warning'
+        ;;
       truncated)
         IFS=$_sep read -r kind state repo total <<<"$row"
         printf '  %-8s %s open pull requests; only the oldest 30 are checked\n' \
@@ -380,11 +583,18 @@ _print_human() {
         ;;
     esac
   done
-  printf 'summary: %s pass, %s fail, %s pending, %s without checks\n' \
+  printf 'summary: %s pass, %s fail, %s pending, %s without checks' \
     "$_pass" "$_fail" "$_pending" "$_none"
+  ((_scheduled == 0)) || printf ' (%s scheduled runs checked)' "$_sched_count"
+  printf '\n'
+
 }
 
+trap _sched_cleanup EXIT
+trap '_sched_cleanup; exit 130' INT
+trap '_sched_cleanup; exit 143' TERM
 _fetch || _die "could not query GitHub for $_owner"
+_fetch_scheduled || _die "could not create a temporary directory"
 _summarize
 if ((_watch == 1)); then
   _deadline=$((SECONDS + 10#$_timeout))
@@ -396,6 +606,14 @@ if ((_watch == 1)); then
       "$_prog" "$_pending" "$_fail" "$((10#$_interval))" >&2
     sleep "$((10#$_interval))"
     if _fetch; then
+      # Re-read scheduled runs only for repositories that still have one
+      # running: re-reading every repository on each poll would exhaust the
+      # hourly REST limit during a long watch.
+      if [[ -n $_sched_pending_repos ]]; then
+        # shellcheck disable=SC2086 # Repository names contain no spaces.
+        _fetch_scheduled $_sched_pending_repos ||
+          _die "could not create a temporary directory"
+      fi
       _summarize
     else
       printf '%s: query failed; retrying\n' "$_prog" >&2
@@ -412,9 +630,12 @@ else
   _print_human
 fi
 
+# A dashboard run succeeds unless something failed: pending checks are normal
+# while CI runs and are already shown. Only a --watch that gave up with checks
+# still pending exits 8, so scripts can tell "never settled" from "passed".
 _overall
 case $REPLY in
-  pass) exit 0 ;;
-  pending) exit 8 ;;
-  *) exit 1 ;;
+  fail) exit 1 ;;
+  pending) ((_watch == 1)) && exit 8 || exit 0 ;;
+  *) exit 0 ;;
 esac

@@ -2,9 +2,9 @@
 # gh-ci-status-test - owner-wide GitHub CI summary.
 #
 # A stub gh serves pre-rendered record fixtures, so the suite runs without
-# network or jq. The stub also captures the jq program the command hands to
-# gh; where jq exists, that program is replayed over an equivalent GraphQL
-# JSON fixture to prove it renders exactly the records the fixtures assume.
+# network or jq. The stub also captures the jq programs the command hands to
+# gh; where jq exists, they are replayed over equivalent GitHub JSON fixtures
+# to prove they render exactly the records the fixtures assume.
 
 set -o pipefail
 export NO_COLOR=1
@@ -17,13 +17,63 @@ fixtures=$(_tmpdir)
 stub_bin=$(_mock_bin)
 gh_log="$fixtures/gh.log"
 jq_capture="$fixtures/records.jq"
+sched_jq_capture="$fixtures/sched.jq"
+workflows_jq_capture="$fixtures/workflows.jq"
+sched_dir="$fixtures/sched"
+mkdir -p "$sched_dir"
 
 # One call counter drives --watch: call N serves records.N when present and
 # falls back to records, so a sequence of fixtures models checks settling.
 # A records.N.fail marker makes call N fail like a transient API error.
+# Scheduled runs come from $GH_STUB_SCHED_DIR: <repo>.workflows holds the
+# active workflow ids (a missing file means none) and <repo>.workflows.fail
+# fails that call. <repo>.<id> is workflow <id>'s newest run record; per-call
+# files <repo>.<id>.<N> and <repo>.<id>.<N>.fail override the Nth read of it,
+# so --watch can see a run settle or a re-read fail.
 cat >"$stub_bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STUB_LOG"
+# Print the value of the --jq argument among "$@", if any.
+jq_program() {
+  while (($#)); do
+    if [[ $1 == --jq ]]; then
+      printf '%s' "$2"
+      return
+    fi
+    shift
+  done
+}
+if [[ $1 == api && $2 == -X && $3 == GET ]]; then
+  path=$4
+  [[ $path != --paginate ]] || path=$5
+  repo=${path#repos/*/}
+  repo=${repo%%/*}
+  dir=$GH_STUB_SCHED_DIR
+  case $path in
+    */actions/workflows)
+      jq_program "$@" >"$GH_STUB_WORKFLOWS_JQ_CAPTURE"
+      [[ ! -f $dir/$repo.workflows.fail ]] || exit 1
+      cat "$dir/$repo.workflows" 2>/dev/null
+      exit 0
+      ;;
+    */actions/workflows/*/runs)
+      jq_program "$@" >"$GH_STUB_SCHED_JQ_CAPTURE"
+      id=${path%/runs}
+      id=${id##*/}
+      counter=$dir/$repo.$id.count
+      count=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
+      printf '%s\n' "$count" >"$counter"
+      [[ ! -f $dir/$repo.$id.$count.fail ]] || exit 1
+      if [[ -f $dir/$repo.$id.$count ]]; then
+        cat "$dir/$repo.$id.$count"
+      else
+        cat "$dir/$repo.$id" 2>/dev/null
+      fi
+      exit 0
+      ;;
+  esac
+  exit 2
+fi
 if [[ $1 == api && $2 == user ]]; then
   [[ -z ${GH_STUB_USER_FAIL:-} ]] || exit 1
   printf '%s\n' "${GH_STUB_USER:-stub-user}"
@@ -81,11 +131,43 @@ records="$fixtures/records"
 # Run gh-ci-status with arguments "$@" against the stub gh, serving $RECORDS
 # (default: the main fixture) and restarting the stub's call counter.
 run() {
-  rm -f "$fixtures/counter"
+  rm -f "$fixtures/counter" "${SCHED_DIR:-$sched_dir}"/*.count
   GH_STUB_LOG=$gh_log GH_STUB_JQ_CAPTURE=$jq_capture \
+    GH_STUB_SCHED_JQ_CAPTURE=$sched_jq_capture \
+    GH_STUB_WORKFLOWS_JQ_CAPTURE=$workflows_jq_capture \
+    GH_STUB_SCHED_DIR="${SCHED_DIR:-$sched_dir}" \
     GH_STUB_COUNTER="$fixtures/counter" GH_STUB_RECORDS="${RECORDS:-$records}" \
     PATH="$stub_bin:$PATH" "$command_path" "$@"
 }
+
+# Scheduled runs: epochs are relative to now so the 45-day cutoff holds no
+# matter when the suite runs. Only active workflows are listed; the command's
+# jq program does that filtering, which the replay at the end covers.
+now=$(date +%s)
+recent=$((now - 3600))
+stale=$((now - 50 * 86400))
+# Write fixture dir $1's newest-run record for repository $2's workflow $3,
+# named $4, with conclusion or status $5 and creation epoch $6.
+_sched() {
+  local dir=$1 repo=$2 id=$3 name=$4 raw=$5 epoch=$6
+  _rec "$id" "$name" "$raw" 2026-01-02T03:04:05Z "$epoch" \
+    "https://github.test/o/$repo/actions/runs/$id" >"$dir/$repo.$id"
+}
+printf '11\n13\n14\n15\n' >"$sched_dir/alpha.workflows"
+_sched "$sched_dir" alpha 11 Nightly failure "$recent"
+_sched "$sched_dir" alpha 13 Weekly failure "$stale"
+_sched "$sched_dir" alpha 14 Superseded cancelled "$recent"
+printf '21\n' >"$sched_dir/beta.workflows"
+_sched "$sched_dir" beta 21 Nightly in_progress "$recent"
+: >"$sched_dir/delta.workflows.fail"
+printf '31\n' >"$sched_dir/epsilon.workflows"
+_sched "$sched_dir" epsilon 31 Nightly success "$recent"
+printf '61\n' >"$sched_dir/gamma.workflows"
+_sched "$sched_dir" gamma 61 Approval waiting "$recent"
+printf '71\n72\n' >"$sched_dir/zeta.workflows"
+_sched "$sched_dir" zeta 71 Timeout timed_out "$recent"
+_sched "$sched_dir" zeta 72 Skipper skipped "$recent"
+empty_sched=$(_tmpdir)
 
 echo "=== default summary ==="
 
@@ -124,8 +206,46 @@ _assert_contains "summary: repository without CI reports none" \
   "none     gamma    main (no checks)" "$out"
 _assert_contains "summary: sanitized titles print verbatim" \
   "#5 Tab title \\ slash" "$out"
-_assert_contains "summary: counts cover branches and pull requests" \
+_assert_contains "summary: counts cover branches, scheduled runs, and pull requests" \
+  "summary: 5 pass, 5 fail, 3 pending, 4 without checks (5 scheduled runs checked)" "$out"
+_assert_contains "scheduled: a failing nightly is listed under its repository" \
+  "  fail     scheduled Nightly: failure (2026-01-02 03:04Z)" "$out"
+_assert_contains "scheduled: a failing nightly links to its run" \
+  "https://github.test/o/alpha/actions/runs/11" "$out"
+_assert_contains "scheduled: a running nightly is pending" \
+  "  pending  scheduled Nightly: in_progress" "$out"
+_assert_not_contains "scheduled: a run older than 45 days is ignored" "Weekly" "$out"
+_assert_contains "scheduled: a run awaiting approval needs attention" \
+  "  fail     scheduled Approval: waiting" "$out"
+_assert_contains "scheduled: a timed-out run fails" "  fail     scheduled Timeout: timed_out" "$out"
+_assert_not_contains "scheduled: a skipped run is ignored" "Skipper" "$out"
+_assert_not_contains "scheduled: a cancelled run is ignored" "Superseded" "$out"
+_assert_not_contains "scheduled: a passing nightly is counted but not listed" \
+  "epsilon/actions/runs/31" "$out"
+_assert_contains "scheduled: an unreadable repository warns" \
+  "warning  scheduled runs could not be read" "$out"
+_assert_not_contains "scheduled: a repository without a default branch is not queried" \
+  "repos/stub-user/empty/" "$(cat "$gh_log")"
+_assert_contains "scheduled: runs are read from the default branch" \
+  "-f branch=main" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
+_assert_contains "scheduled: each workflow is asked for its newest run" \
+  "-F per_page=1" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
+
+one_failed=$(_tmpdir)
+printf '11\n13\n' >"$one_failed/alpha.workflows"
+_sched "$one_failed" alpha 11 Nightly failure "$recent"
+: >"$one_failed/alpha.13.1.fail"
+out=$(SCHED_DIR=$one_failed run --porcelain 2>&1)
+_assert_contains "scheduled: one unreadable workflow marks its repository unreadable" \
+  "schederror${tab}none${tab}alpha" "$out"
+_assert_not_contains "scheduled: a partly read repository reports no partial results" \
+  "sched${tab}fail${tab}alpha" "$out"
+
+: >"$gh_log"
+out=$(run --no-scheduled 2>&1)
+_assert_contains "no-scheduled: counts exclude scheduled runs" \
   "summary: 4 pass, 2 fail, 2 pending, 4 without checks" "$out"
+_assert_not_contains "no-scheduled: makes no Actions API calls" "actions/" "$(cat "$gh_log")"
 
 echo ""
 echo "=== filters and porcelain ==="
@@ -136,7 +256,9 @@ _assert_contains "failing: keeps pending and failing branches" "beta" "$out"
 _assert_contains "failing: keeps truncation warnings" "31 open pull requests" "$out"
 _assert_contains "failing: keeps a repository whose PR list is truncated" "delta" "$out"
 _assert_not_contains "failing: hides non-problem pull requests" "No checks yet" "$out"
-_assert_not_contains "failing: hides repositories without checks" "gamma" "$out"
+_assert_not_contains "failing: hides repositories without problems" "empty" "$out"
+_assert_contains "failing: keeps a repository whose only problem is a scheduled run" \
+  "scheduled Approval: waiting" "$out"
 _assert_not_contains "failing: hides a passing repository named fail" \
   "pass     fail" "$out"
 
@@ -150,7 +272,14 @@ out=$(run --porcelain --owner=acme 2>&1)
 _assert_contains "porcelain: overall state" "state=fail" "$out"
 _assert_contains "porcelain: explicit owner" "owner=acme" "$out"
 _assert_contains "porcelain: counts" \
-  $'pass=4\nfail=2\npending=2\nnone=4\ntruncated=1' "$out"
+  $'pass=5\nfail=5\npending=3\nnone=4\ntruncated=1\nscheduled=5\nsched_errors=1' "$out"
+_assert_contains "porcelain: scheduled record" \
+  "sched${tab}fail${tab}alpha${tab}Nightly${tab}failure${tab}2026-01-02T03:04:05Z${tab}https://github.test/o/alpha/actions/runs/11" \
+  "$out"
+_assert_contains "porcelain: passing scheduled runs are listed" \
+  "sched${tab}pass${tab}epsilon${tab}Nightly" "$out"
+_assert_contains "porcelain: scheduled read failures are listed" \
+  "schederror${tab}none${tab}delta" "$out"
 _assert_contains "porcelain: repo record" \
   "repo${tab}pass${tab}alpha${tab}main${tab}aaaaaaa1111111111111111111111111111111" "$out"
 _assert_contains "porcelain: a no-checks pull request keeps every column" \
@@ -171,14 +300,16 @@ echo "=== exit status ==="
 
 pending_records="$fixtures/pending"
 grep -v -e FAILURE -e ERROR "$records" >"$pending_records"
-RECORDS=$pending_records run >/dev/null 2>&1
-_assert_exit "status: pending without failures exits 8" 8 "$?"
+RECORDS=$pending_records SCHED_DIR=$empty_sched run >/dev/null 2>&1
+_assert_exit "status: pending checks without failures exit 0" 0 "$?"
 
 green_records="$fixtures/green"
 grep -v -e FAILURE -e ERROR -e PENDING -e EXPECTED "$records" >"$green_records"
-out=$(RECORDS=$green_records run 2>&1)
+out=$(RECORDS=$green_records SCHED_DIR=$empty_sched run 2>&1)
 _assert_exit "status: passing checks exit 0 even with repositories lacking CI" 0 "$?"
 _assert_contains "status: repositories lacking CI are still listed" "gamma" "$out"
+RECORDS=$green_records run >/dev/null 2>&1
+_assert_exit "status: a failing scheduled run fails the run" 1 "$?"
 
 echo ""
 echo "=== watch ==="
@@ -186,16 +317,68 @@ echo "=== watch ==="
 cp "$pending_records" "$fixtures/watch.1"
 : >"$fixtures/watch.2.fail"
 cp "$green_records" "$fixtures/watch"
-out=$(RECORDS="$fixtures/watch" run --watch --interval=1 2>&1)
+out=$(RECORDS="$fixtures/watch" SCHED_DIR=$empty_sched run --watch --interval=1 2>&1)
 _assert_exit "watch: polls until pending checks settle" 0 "$?"
+settled_sched=$(_tmpdir)
+printf '11\n' >"$settled_sched/alpha.workflows"
+_sched "$settled_sched" alpha 11 Nightly failure "$recent"
+: >"$gh_log"
+RECORDS="$fixtures/watch" SCHED_DIR=$settled_sched run --watch --interval=1 >/dev/null 2>&1
+_assert_eq "watch: settled scheduled runs are not re-read" "1" \
+  "$(grep -c 'alpha/actions/workflows/11/runs' "$gh_log")"
 _assert_contains "watch: explains each wait" "2 pending, 0 failing; checking again in 1s" "$out"
 _assert_contains "watch: retries a failed poll" "query failed; retrying" "$out"
 _assert_file_content "watch: re-queries after a failed poll" "3" "$fixtures/counter"
 
-out=$(RECORDS=$pending_records run --watch --interval 1 --timeout 2 2>&1)
+pending_sched=$(_tmpdir)
+cp "$sched_dir/beta.workflows" "$sched_dir/beta.21" "$pending_sched/"
+# alpha's nightly passed: it must be read once and never re-read.
+cp "$sched_dir/alpha.workflows" "$pending_sched/"
+_sched "$pending_sched" alpha 11 Nightly success "$recent"
+: >"$gh_log"
+# Only beta's running nightly is pending: its branch passes and nothing fails.
+sched_only_records="$fixtures/sched-only"
+grep -v -e FAILURE -e ERROR -e EXPECTED "$records" | sed 's/PENDING$/SUCCESS/' >"$sched_only_records"
+out=$(RECORDS=$sched_only_records SCHED_DIR=$pending_sched run --watch --interval 1 --timeout 2 2>&1)
 _assert_exit "watch: a timeout reports checks still pending" 8 "$?"
+if (($(grep -c 'beta/actions/workflows/21/runs' "$gh_log") > 1)); then
+  _pass "watch: a pending scheduled run is re-read on each poll"
+else
+  _fail "watch: a pending scheduled run is re-read on each poll"
+fi
+_assert_eq "watch: repositories without a pending scheduled run are not re-read" "1" \
+  "$(grep -c 'alpha/actions/workflows/11/runs' "$gh_log")"
+
+# A failed re-read must keep the running nightly pending rather than letting
+# the warning end the watch as if it had passed.
+: >"$pending_sched/beta.21.2.fail"
+out=$(RECORDS=$sched_only_records SCHED_DIR=$pending_sched run --watch --interval 1 --timeout 2 2>&1)
+_assert_exit "watch: a failed re-read keeps the scheduled run pending" 8 "$?"
+_assert_not_contains "watch: a failed re-read does not warn over the kept result" \
+  "scheduled runs could not be read" "$out"
+rm -f "$pending_sched/beta.21.2.fail"
 _assert_contains "watch: a timeout is explained" \
   "stopped watching after 2s with checks still pending" "$out"
+
+echo ""
+echo "=== batching ==="
+
+# More repositories than one batch of concurrent queries: records must still
+# follow the repository order.
+batch_records="$fixtures/batch"
+batch_sched=$(_tmpdir)
+expected_order=
+: >"$batch_records"
+for n in 01 02 03 04 05 06 07 08 09 10 11; do
+  _rec repo "r$n" main "${n}00000000000000000000000000000000000000" SUCCESS >>"$batch_records"
+  printf '9%s\n' "$n" >"$batch_sched/r$n.workflows"
+  _sched "$batch_sched" "r$n" "9$n" Nightly success "$recent"
+  expected_order+="r$n "
+done
+out=$(RECORDS=$batch_records SCHED_DIR=$batch_sched run --porcelain 2>&1)
+_assert_contains "batching: every repository's scheduled run is read" "scheduled=11" "$out"
+_assert_eq "batching: scheduled records keep repository order" "$expected_order" \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$1 == "sched" {printf "%s ", $3}')"
 
 echo ""
 echo "=== errors ==="
@@ -270,6 +453,32 @@ if command -v jq >/dev/null 2>&1 && [[ -s $jq_capture ]]; then
     "$(cat "$records")" "$(jq -r "$(cat "$jq_capture")" "$fixtures/page.json")"
   _assert_eq "jq program: renders a missing owner as one record" \
     "missing-owner" "$(jq -r "$(cat "$jq_capture")" "$fixtures/missing.json")"
+  # The newest run is first in the API's listing; the epoch comes from
+  # created_at so the shell can apply the age cutoff.
+  cat >"$fixtures/runs.json" <<'JSON'
+{"total_count":2,"workflow_runs":[
+ {"workflow_id":21,"name":"Deploy\tcheck","conclusion":null,"status":"in_progress","created_at":"2026-01-02T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/21"},
+ {"workflow_id":21,"name":"Deploy\tcheck","conclusion":"success","status":"completed","created_at":"2026-01-01T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/20"}
+]}
+JSON
+  expected_run=$(_rec 21 'Deploy check' in_progress 2026-01-02T00:00:00Z 1767312000 \
+    https://github.test/o/alpha/actions/runs/21)
+  printf '{"total_count":0,"workflow_runs":[]}\n' >"$fixtures/no-runs.json"
+  cat >"$fixtures/workflows.json" <<'JSON'
+{"total_count":3,"workflows":[
+ {"id":11,"state":"active"},{"id":12,"state":"disabled_manually"},{"id":13,"state":"active"}
+]}
+JSON
+  if [[ -s $sched_jq_capture && -s $workflows_jq_capture ]]; then
+    _assert_eq "jq program: renders a workflow's newest scheduled run" \
+      "$expected_run" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/runs.json")"
+    _assert_eq "jq program: a workflow without scheduled runs renders nothing" \
+      "" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/no-runs.json")"
+    _assert_eq "jq program: only active workflows are queried" $'11\n13' \
+      "$(jq -r "$(cat "$workflows_jq_capture")" "$fixtures/workflows.json")"
+  else
+    _fail "jq program: the scheduled-run programs were captured"
+  fi
 else
   echo "  SKIP: jq program replay (jq unavailable)"
 fi
