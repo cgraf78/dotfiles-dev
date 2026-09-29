@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The Codex merge-hook block is one of the longest development suites. Start
+# it in the `dot test` runner's first worker wave so it overlaps the shorter
+# suites.
+# dot-suite-priority: early
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/codex-merges.sh"
+dot_dev_codex_merges_test

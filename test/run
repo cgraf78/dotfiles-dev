@@ -570,6 +570,7 @@ mapfile -t suites <"$tmp/suites"
 
 if [[ $mode == --provider-compatibility ]]; then
   suites=(
+    dev-codex-merges
     dev-merges
     dev-shdeps-hooks
     dev-vscode-merges
