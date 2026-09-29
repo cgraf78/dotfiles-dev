@@ -750,22 +750,28 @@ fi
 exit 2
 EOF
   real_mv=$(command -v mv)
+  # Merges move dozens of files, so this logging shim is POSIX sh: it starts
+  # several times faster than Bash on hosts where sh is dash or BusyBox ash.
   cat >"$vscode_bin/mv" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1:-}" != "-f" ]]; then
+#!/bin/sh
+set -eu
+if [ "\${1:-}" != "-f" ]; then
   printf 'mv would prompt without -f: %s\n' "\$*" >&2
   exit 64
 fi
 shift
-if [[ "\${1:-}" == "--" ]]; then
+if [ "\${1:-}" = "--" ]; then
   shift
 fi
 printf '%s\n' "\$*" >>"\${DOT_TEST_MV_LOG:?}"
-if [[ -n "\${DOT_TEST_MV_FAIL_SUFFIX:-}" && "\${!#}" == *"\$DOT_TEST_MV_FAIL_SUFFIX" ]]; then
-  exit 75
+last=
+for last do :; done
+if [ -n "\${DOT_TEST_MV_FAIL_SUFFIX:-}" ]; then
+  case \$last in
+    *"\$DOT_TEST_MV_FAIL_SUFFIX") exit 75 ;;
+  esac
 fi
-if [[ -n "\${DOT_TEST_MV_FAIL_ONCE_MARKER:-}" && ! -e "\$DOT_TEST_MV_FAIL_ONCE_MARKER" ]]; then
+if [ -n "\${DOT_TEST_MV_FAIL_ONCE_MARKER:-}" ] && [ ! -e "\$DOT_TEST_MV_FAIL_ONCE_MARKER" ]; then
   : >"\$DOT_TEST_MV_FAIL_ONCE_MARKER"
   exit 75
 fi

@@ -29,13 +29,35 @@ fi
 # Strip // line comments from JSONC so jq can parse it. Normalize transport
 # bytes first because Settings Sync can move CRLF/BOM files across platforms;
 # leaving a BOM attached to the first comment would make a valid source or
-# synchronized destination fail parsing for a formatting-only reason.
+# synchronized destination fail parsing for a formatting-only reason. Callers
+# parse the output with jq themselves, so it is not validated here.
 _strip_jsonc() {
   LC_ALL=C awk '
     NR == 1 { sub(/^\357\273\277/, "", $0) }
     { sub(/\r$/, "", $0) }
     !/^[[:space:]]*\/\//
-  ' "$1" | jq --indent 4 '.'
+  ' "$1"
+}
+
+# Set REPLY to dirname(1) of $1 without starting a process; merges compute
+# parents for every destination and extension link. Matches GNU dirname: trailing
+# slashes are ignored, a bare name yields ".", and a root child yields "/".
+_vscode_dirname() {
+  local path=$1
+  while [[ $path == */ && $path != / ]]; do
+    path=${path%/}
+  done
+  case $path in
+    /) REPLY=/ ;;
+    */*)
+      path=${path%/*}
+      while [[ $path == */ && $path != / ]]; do
+        path=${path%/}
+      done
+      REPLY=${path:-/}
+      ;;
+    *) REPLY=. ;;
+  esac
 }
 
 # Retirement history stays in source because there is no universally inert
@@ -150,7 +172,8 @@ PY
 _merge_vscode_keybindings() {
   local src="$1" dst="$2"
   local out src_clean dst_clean
-  mkdir -p "$(dirname "$dst")"
+  _vscode_dirname "$dst"
+  [[ -d $REPLY ]] || mkdir -p "$REPLY"
 
   # Normalize exactly one top-level array from each JSONC input. Accepting a
   # second JSON document would let a plausible-looking prefix hide corruption,
@@ -159,6 +182,8 @@ _merge_vscode_keybindings() {
   dst_clean=$(mktemp)
   trap 'rm -f "${src_clean:-}" "${dst_clean:-}"' RETURN
 
+  # jq parses the stripped text directly: a second normalizing jq in front of
+  # each slurp would add a process without changing the parsed documents.
   if ! _strip_jsonc "$src" |
     jq -s -e \
       --arg retire "$_DOT_VSCODE_KEYBINDING_RETIRE" \
@@ -263,7 +288,8 @@ _merge_vscode_keybindings() {
 # Local-only settings are preserved. Writes to .tmp first for safety.
 _merge_vscode_settings() {
   local src="$1" dst="$2" out
-  mkdir -p "$(dirname "$dst")"
+  _vscode_dirname "$dst"
+  [[ -d $REPLY ]] || mkdir -p "$REPLY"
 
   # No existing file — just copy (stripping comments)
   if [[ ! -f "$dst" ]]; then
@@ -278,25 +304,20 @@ _merge_vscode_settings() {
     return
   fi
 
-  # Create clean JSON temp files (strip JSONC comments for jq)
-  local src_clean dst_clean
-  src_clean=$(mktemp)
-  dst_clean=$(mktemp)
-  trap 'rm -f "${src_clean:-}" "${dst_clean:-}"' RETURN
-
-  if ! _strip_jsonc "$src" >"$src_clean" || ! _strip_jsonc "$dst" >"$dst_clean"; then
-    dot_hook_warn "    warning: settings merge failed for $(basename "$(dirname "$(dirname "$dst")")") — skipping"
-    return
-  fi
-
   # Merge: local settings * dotfiles settings (recursive merge, dotfiles win).
   # Using * instead of + keeps local-only nested keys in objects like
   # "[python]". commandsToSkipShell is VS Code's additive command policy, so
   # preserve unrelated local/Settings Sync entries while letting each managed
   # entry replace its positive or negative counterpart by command id.
+  #
+  # Both inputs stream straight from the comment stripper: this runs once per
+  # settings layer, and normalizing each side into a temporary file first cost
+  # two jq starts and three temp-file operations per layer. Unparseable or
+  # empty input fails this jq, taking the same warn-and-skip path as before.
   dot_sibling_tmp_for "$dst" || return 1
   out="$REPLY"
-  if ! jq -n --indent 4 --sort-keys --slurpfile s "$src_clean" --slurpfile d "$dst_clean" \
+  if ! jq -n --indent 4 --sort-keys --slurpfile s <(_strip_jsonc "$src") \
+    --slurpfile d <(_strip_jsonc "$dst") \
     '
     def valid_command_list:
       type == "array" and all(.[]; type == "string");
@@ -859,28 +880,39 @@ _vscode_apply_settings_projection() {
 # the final active bindings would be incorrect for Settings Sync migrations.
 _vscode_build_keybinding_source() {
   local output=$1
-  local kb_family kb_source kb_layer kb_next kb_platform
+  local kb_family kb_source kb_platform kb_dir kb_layer kb_list=
+  local -a kb_args=()
   kb_platform=$(_vscode_keybinding_platform) || return 1
-  printf '[]\n' >"$output"
+  # Strip each layer with one awk process, then validate and prepend every
+  # layer in a single jq. Merges rebuild this source often, and per-layer temp
+  # files plus two jq starts per layer dominated its cost. Each layer is a
+  # separate --slurpfile, so jq parses every file on its own: a layer holding
+  # zero or several documents, or a truncated one, still fails as before.
+  kb_dir=$(mktemp -d) || return 1
   while IFS= read -r kb_family; do
     while IFS= read -r kb_source; do
-      kb_layer=$(mktemp)
-      kb_next=$(mktemp)
-      if ! _strip_jsonc "$kb_source" |
-        jq -s -e 'if length == 1 and (.[0] | type == "array") then .[0] else error("expected one array") end' \
-          >"$kb_layer" ||
-        ! jq -n --slurpfile layer "$kb_layer" --slurpfile current "$output" \
-          '$layer[0] + $current[0]' >"$kb_next"; then
-        rm -f "$kb_layer" "$kb_next" "$output"
+      kb_layer=L$((${#kb_args[@]} / 3))
+      _strip_jsonc "$kb_source" >"$kb_dir/$kb_layer" || {
+        rm -rf -- "$kb_dir" "$output"
         return 1
-      fi
-      if ! mv -f -- "$kb_next" "$output"; then
-        rm -f "$kb_layer" "$kb_next" "$output"
-        return 1
-      fi
-      rm -f "$kb_layer"
+      }
+      kb_args+=(--slurpfile "$kb_layer" "$kb_dir/$kb_layer")
+      kb_list+="${kb_list:+, }\$$kb_layer"
     done < <(dot_hook_family_files_matching "$kb_family" '*.jsonc' '*.replace/*.jsonc')
   done < <(_vscode_keybinding_families "$kb_platform")
+  # kb_list is the generated "$L0, $L1, ..." sequence, in source order.
+  # shellcheck disable=SC2016 # $layer is a jq variable.
+  if ! jq -n ${kb_args[@]+"${kb_args[@]}"} '
+    reduce ['"$kb_list"'][] as $layer ([];
+      if ($layer | length) == 1 and ($layer[0] | type == "array")
+      then $layer[0] + .
+      else error("expected one array")
+      end)
+  ' >"$output"; then
+    rm -rf -- "$kb_dir" "$output"
+    return 1
+  fi
+  rm -rf -- "$kb_dir"
 }
 
 # Merge keybindings into a VS Code config dir.
@@ -1016,8 +1048,9 @@ _ensure_vscode_extension() {
   local ext_id="$1" ext_dir="$2" ext_json="$3" location_path="${4:-}"
 
   local ext_base ext_version
-  ext_base="$(dirname "$ext_json")"
-  mkdir -p "$ext_base"
+  _vscode_dirname "$ext_json"
+  ext_base=$REPLY
+  [[ -d $ext_base ]] || mkdir -p "$ext_base"
   [[ -d "$ext_base/$ext_dir" ]] || return 0
   [[ -n "$location_path" ]] || location_path="$ext_base/$ext_dir"
   ext_version=$(jq -r '.version // empty | select(type == "string")' \
@@ -1057,7 +1090,8 @@ _remove_vscode_extension() {
   local ext_id="$1" ext_dir="$2" ext_json="$3"
 
   local ext_base
-  ext_base="$(dirname "$ext_json")"
+  _vscode_dirname "$ext_json"
+  ext_base=$REPLY
   if [[ -L "$ext_base/$ext_dir" ]]; then
     rm -f "$ext_base/$ext_dir" || return 1
   fi
@@ -1083,8 +1117,10 @@ _prune_vscode_extension_versions() {
   local ext_id="$1" managed_source="$2" keep_dir="$3" ext_json="$4"
   local ext_base managed_parent extension_name
   local candidate candidate_dir target target_dir target_name version_suffix
-  ext_base="$(dirname "$ext_json")"
-  managed_parent="$(dirname "$managed_source")"
+  _vscode_dirname "$ext_json"
+  ext_base=$REPLY
+  _vscode_dirname "$managed_source"
+  managed_parent=$REPLY
   extension_name="${ext_id#*.}"
 
   for candidate in "$ext_base"/*; do
@@ -1093,7 +1129,8 @@ _prune_vscode_extension_versions() {
     [[ -z "$keep_dir" || "$candidate_dir" != "$keep_dir" ]] || continue
     target=$(readlink "$candidate") || continue
     [[ "$target" == /* ]] || target="$ext_base/$target"
-    target_dir="$(dirname "$target")"
+    _vscode_dirname "$target"
+    target_dir=$REPLY
     target_name="${target##*/}"
     [[ "$target_dir" == "$managed_parent" ]] || continue
     [[ "$candidate_dir" == "$target_name" ]] || continue
@@ -1118,7 +1155,8 @@ _prune_vscode_local_extensions() {
   local ext_json="$1" ext_base ext_id ext_dir
   [[ -f "$ext_json" ]] || return 0
 
-  ext_base="$(dirname "$ext_json")"
+  _vscode_dirname "$ext_json"
+  ext_base=$REPLY
   while IFS=$'\t' read -r ext_id ext_dir; do
     [[ -n "$ext_id" && -n "$ext_dir" ]] || continue
     [[ "$ext_dir" == "${ext_dir##*/}" && "$ext_dir" != "." && "$ext_dir" != ".." ]] || continue
@@ -1896,7 +1934,7 @@ _vscode_signature_inputs() {
   code+=("$_dot_vscode_hook_source")
   dot_hook_file merge-hooks.d/lib/profile-state.sh && code+=("$REPLY")
   dot_hook_file merge-hooks.d/lib/compat.sh && code+=("$REPLY")
-  file=$(_dev_profile_state_engine) && code+=("$file")
+  _dev_profile_state_engine_path && code+=("$REPLY")
   if [[ -n ${DOT_SOURCE_ROOT:-} ]]; then
     code+=("$DOT_SOURCE_ROOT"/lib/dot/public/*.sh)
     code+=("$DOT_SOURCE_ROOT"/lib/dot/public/hook-runtime-v1/*.sh)

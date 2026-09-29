@@ -1252,6 +1252,19 @@ JSON
 
     _dev_vscode_merges_fixture
 
+    # The hook computes parents in-process; it must agree with the platform's
+    # dirname on edge cases, including trailing and repeated slashes.
+    # shellcheck disable=SC2016 # The inner shell expands its own variables.
+    vscode_dirname_mismatches=$(env REAL_HOME="$REAL_HOME" bash -c '
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      for path in "" / // /a /a/ /a//b/ a a/ a/b "a b/c d" -x/y ///a /a//; do
+        _vscode_dirname "$path"
+        [[ $REPLY == "$(dirname -- "$path")" ]] || printf "[%s] " "$path"
+      done
+    ')
+    _assert_eq "vscode dirname helper matches dirname" "" "$vscode_dirname_mismatches"
+
     vscode_variants_home=$(_tmpdir)
     mkdir -p \
       "$vscode_variants_home/.vscode/extensions" \

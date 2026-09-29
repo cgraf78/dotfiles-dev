@@ -33,14 +33,20 @@ JSON
   export DOT_TEST_SLEY_ROOT
   merge_support_bin=$(_mock_bin)
   # Hooks compare files with `cmp -s`, which the capability fixture PATH does
-  # not provide. Delegate to a system cmp when one exists so hooks see real
-  # semantics; otherwise emulate its contract (0 same, 1 different, 2 error),
-  # following symlinks and ignoring file modes the way cmp does.
-  cat >"$merge_support_bin/cmp" <<'CMP'
+  # not provide. Link a system cmp when one exists so hooks see real semantics
+  # without a wrapper shell start per comparison (merges compare often);
+  # otherwise emulate its contract (0 same, 1 different, 2 error), following
+  # symlinks and ignoring file modes the way cmp does.
+  local system_cmp
+  for system_cmp in /usr/bin/cmp /bin/cmp; do
+    [[ -x $system_cmp ]] && break
+    system_cmp=
+  done
+  if [[ -n $system_cmp ]]; then
+    ln -s "$system_cmp" "$merge_support_bin/cmp"
+  else
+    cat >"$merge_support_bin/cmp" <<'CMP'
 #!/usr/bin/env bash
-for system_cmp in /usr/bin/cmp /bin/cmp; do
-  [[ -x $system_cmp ]] && exec "$system_cmp" "$@"
-done
 [[ ${1:-} != -s ]] || shift
 [[ ${1:-} != -- ]] || shift
 [[ -f $1 && -r $1 && -f $2 && -r $2 ]] || exit 2
@@ -48,7 +54,8 @@ left=$(git hash-object --stdin <"$1") || exit 2
 right=$(git hash-object --stdin <"$2") || exit 2
 [[ $left == "$right" ]]
 CMP
-  chmod +x "$merge_support_bin/cmp"
+    chmod +x "$merge_support_bin/cmp"
+  fi
   PATH="$merge_support_bin:$PATH"
   export PATH
   # shellcheck source=load-merge-api.sh
