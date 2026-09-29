@@ -19,6 +19,15 @@ file when an override is durable across their machines.
 - Keep agent-runtime detection in the tracked dotfiles launcher
   [`.local/bin/hm`](../../.local/bin/hm).
 
-Dotfiles installs the PATH-visible `hm` command through a shdeps hook. That
-hook points `hm` at the dotfiles launcher, while the upstream binary remains
-available behind an internal `hm-core` path.
+The `cgraf78/hive-memory` entry in
+[`30-dev.conf`](../shdeps/30-dev.conf) installs the upstream binary at
+`~/.local/share/cgraf78/hive-memory/hm`. The tracked launcher is the
+PATH-visible `hm` command and delegates to that fixed path.
+
+The old `~/.local/share/hive-memory/bin/hm-core` copy is a legacy layout. The
+`hive-memory` merge hook deletes it only when
+`DOT_SHDEPS_RELEASE_LAUNCHER_PRESERVATION=1` is exported, `~/.local/bin/hm` is
+a regular file (not a symlink) carrying the launcher's ownership marker, and
+that launcher runs `--version` against the stable payload. Neither Dot nor the
+base dotfiles export that variable, and overlay links install the launcher as
+a symlink, so ordinary `dot update` runs leave any legacy copy in place.
