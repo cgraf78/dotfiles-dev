@@ -574,6 +574,7 @@ if [[ $mode == --provider-compatibility ]]; then
     dev-merges
     dev-shdeps-hooks
     dev-vscode-merges
+    dev-vscode-signature-merges
     git-shell-workflows
     nvim-dev
     validate-commit-msg

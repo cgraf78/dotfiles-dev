@@ -68,6 +68,7 @@ program	home/.local/lib/dotfiles/tests/dev-static-test
 program	home/.local/lib/dotfiles/tests/dev-tool-init-test
 program	home/.local/lib/dotfiles/tests/dev-update-test
 program	home/.local/lib/dotfiles/tests/dev-vscode-merges-test
+program	home/.local/lib/dotfiles/tests/dev-vscode-signature-merges-test
 program	home/.local/lib/dotfiles/tests/dev/codex-merges.sh
 program	home/.local/lib/dotfiles/tests/dev/doctor.sh
 program	home/.local/lib/dotfiles/tests/dev/helpers.sh
@@ -77,6 +78,8 @@ program	home/.local/lib/dotfiles/tests/dev/merges-setup.sh
 program	home/.local/lib/dotfiles/tests/dev/merges.sh
 program	home/.local/lib/dotfiles/tests/dev/static.sh
 program	home/.local/lib/dotfiles/tests/dev/vscode-merges.sh
+program	home/.local/lib/dotfiles/tests/dev/vscode-merges-setup.sh
+program	home/.local/lib/dotfiles/tests/dev/vscode-signature-merges.sh
 program	home/.local/lib/dotfiles/tests/gh-ci-status-test
 program	home/.local/lib/dotfiles/tests/git-shell-workflows-test
 program	home/.local/lib/dotfiles/tests/githook-test
