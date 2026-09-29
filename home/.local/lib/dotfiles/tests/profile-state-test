@@ -317,12 +317,81 @@ printf '%s\n' '{"second":"before"}' >"$second_destination"
 dev_profile_state_begin test-object json "$first_destination" "$first_managed"
 printf '%s\n' '{"first":"dev"}' >"$first_destination"
 dev_profile_state_commit
+_assert_eq 'profile state commit reports no committed id unless requested' \
+  "" "$DEV_PROFILE_STATE_COMMITTED_SUM"
 dev_profile_state_begin test-object json "$second_destination" "$second_managed"
 printf '%s\n' '{"second":"dev"}' >"$second_destination"
-dev_profile_state_commit
+DEV_PROFILE_STATE_RECORD_COMMITTED_SUM=1 dev_profile_state_commit
+_assert_eq 'profile state commit reports the blob id of the committed bytes' \
+  "$(git hash-object --no-filters -- "$second_destination")" \
+  "$DEV_PROFILE_STATE_COMMITTED_SUM"
 
 first_key=$(_dev_profile_state_key test-object "$first_destination")
 second_key=$(_dev_profile_state_key test-object "$second_destination")
+
+# Fingerprints feed hook no-op signatures, so they must name the same receipts
+# the transactions use and refuse whenever recovery is outstanding.
+fingerprint_root=$(_dev_profile_state_root)
+fingerprint=$(dev_profile_state_fingerprint \
+  "test-object"$'\t'"$first_destination" "test-object"$'\t'"$second_destination")
+_assert_contains 'profile state fingerprint checksums the first receipt' \
+  $'\t'"$fingerprint_root/$first_key.json" "$fingerprint"
+_assert_contains 'profile state fingerprint checksums the second receipt' \
+  $'\t'"$fingerprint_root/$second_key.json" "$fingerprint"
+untracked_fingerprint=$(dev_profile_state_fingerprint \
+  "test-object"$'\t'"$HOME/untracked.json")
+untracked_key=$(_dev_profile_state_key test-object "$HOME/untracked.json")
+_assert_eq 'profile state fingerprint marks an untracked destination absent' \
+  "absent"$'\t'"$fingerprint_root/$untracked_key.json" "$untracked_fingerprint"
+_assert_eq 'profile state fingerprint accepts an empty pair list' \
+  "" "$(dev_profile_state_fingerprint)"
+cp "$fingerprint_root/$first_key.json" "$fixture/fingerprint-receipt"
+jq -c '.transaction = "rewritten"' "$fixture/fingerprint-receipt" \
+  >"$fingerprint_root/$first_key.json"
+_assert_not_contains 'profile state fingerprint follows receipt bytes' \
+  "$fingerprint" "$(dev_profile_state_fingerprint \
+    "test-object"$'\t'"$first_destination" "test-object"$'\t'"$second_destination")"
+cp "$fixture/fingerprint-receipt" "$fingerprint_root/$first_key.json"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object $first_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint rejects a pair without a tab' 1 "$fingerprint_rc"
+printf '{}\n' >"$fingerprint_root/$first_key.pending.json"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object"$'\t'"$second_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint refuses while any transaction is pending' \
+  1 "$fingerprint_rc"
+rm -f "$fingerprint_root/$first_key.pending.json"
+mkdir "$fingerprint_root/.retiring"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object"$'\t'"$second_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint refuses while retirement is interrupted' \
+  1 "$fingerprint_rc"
+rmdir "$fingerprint_root/.retiring"
+printf '{}\n' >"$fingerprint_root/$first_key.original"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object"$'\t'"$first_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint refuses a leftover saved original' \
+  1 "$fingerprint_rc"
+rm -f "$fingerprint_root/$first_key.original"
+chmod 644 "$fingerprint_root/$first_key.json"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object"$'\t'"$first_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint refuses an unsafe receipt' 1 "$fingerprint_rc"
+chmod 600 "$fingerprint_root/$first_key.json"
+chmod 755 "$fingerprint_root"
+fingerprint_rc=0
+dev_profile_state_fingerprint "test-object"$'\t'"$first_destination" >/dev/null ||
+  fingerprint_rc=$?
+_assert_exit 'profile state fingerprint refuses a shared receipt root' 1 "$fingerprint_rc"
+chmod 700 "$fingerprint_root"
+_assert_eq 'profile state fingerprint is stable once recovery clears' \
+  "$fingerprint" "$(dev_profile_state_fingerprint \
+    "test-object"$'\t'"$first_destination" "test-object"$'\t'"$second_destination")"
 if [[ $first_key < $second_key ]]; then
   fail_destination=$second_destination
 else
