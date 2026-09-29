@@ -1,0 +1,420 @@
+#!/usr/bin/env bash
+# Summarize GitHub CI across every repository an owner has.
+#
+# Repositories are discovered live from GitHub on every run, so a newly
+# created repository appears without editing this script. One paginated
+# GraphQL query returns each repository's default-branch check rollup plus
+# its open pull requests, and gh's built-in jq turns that into records, so the
+# only runtime dependency is an authenticated `gh`.
+
+set -euo pipefail
+
+_prog=${0##*/}
+
+# Print the command help to stdout.
+_usage() {
+  cat <<'EOF'
+Usage: gh-ci-status [options]
+
+Summarize CI for every repository owned by a GitHub user or organization:
+the default branch's latest check rollup and each open pull request's.
+
+Options:
+  -o, --owner <login>   Owner to inspect (default: the authenticated gh user).
+  -f, --failing         Show only failing or pending items.
+      --include-forks   Include forked repositories.
+      --include-archived
+                        Include archived repositories.
+      --porcelain       Print stable key=value summary fields followed by
+                        tab-separated repo, pr, and truncated records.
+  -w, --watch           Poll until nothing is pending, then summarize.
+                        Checks that have not registered yet read as none.
+  -i, --interval <sec>  Poll interval for --watch (default: 30).
+  -t, --timeout <sec>   Give up watching after this long (default: 1800).
+  -h, --help            Show this help.
+
+Repositories without CI report "none" and never fail the run.
+
+Exit status:
+  0  Everything with checks passed.
+  1  Something failed, or GitHub could not be queried.
+  2  Usage or local environment error.
+  8  Nothing failed, but checks are still pending.
+EOF
+}
+
+# Print a runtime error to stderr and exit 1 (GitHub or data failure).
+_die() {
+  printf '%s: %s\n' "$_prog" "$*" >&2
+  exit 1
+}
+
+# Print a usage or local-environment error to stderr and exit 2.
+_usage_error() {
+  printf '%s: %s\n' "$_prog" "$*" >&2
+  exit 2
+}
+
+_owner=""
+_owner_given=0
+_failing=0
+_forks=0
+_archived=0
+_porcelain=0
+_watch=0
+_interval=30
+_timeout=1800
+
+while (($#)); do
+  case "$1" in
+    -o | --owner | -i | --interval | -t | --timeout)
+      (($# >= 2)) || _usage_error "$1 requires a value"
+      case "$1" in
+        -o | --owner) _owner=$2 _owner_given=1 ;;
+        -i | --interval) _interval=$2 ;;
+        *) _timeout=$2 ;;
+      esac
+      shift 2
+      ;;
+    --owner=*)
+      _owner=${1#--owner=} _owner_given=1
+      shift
+      ;;
+    --interval=*)
+      _interval=${1#--interval=}
+      shift
+      ;;
+    --timeout=*)
+      _timeout=${1#--timeout=}
+      shift
+      ;;
+    -f | --failing)
+      _failing=1
+      shift
+      ;;
+    --include-forks)
+      _forks=1
+      shift
+      ;;
+    --include-archived)
+      _archived=1
+      shift
+      ;;
+    --porcelain)
+      _porcelain=1
+      shift
+      ;;
+    -w | --watch)
+      _watch=1
+      shift
+      ;;
+    -h | --help)
+      _usage
+      exit 0
+      ;;
+    *)
+      _usage_error "unexpected argument: $1"
+      ;;
+  esac
+done
+
+# Validate that option $1 received a positive integer $2, or exit 2.
+# 10# keeps a zero-padded value such as 08 decimal; "00" must not become a
+# zero-second polling loop against the API.
+_positive() {
+  case "$2" in
+    '' | *[!0-9]*) _usage_error "$1 must be a positive integer" ;;
+  esac
+  ((10#$2 > 0)) || _usage_error "$1 must be a positive integer"
+}
+_positive --interval "$_interval"
+_positive --timeout "$_timeout"
+if ((_owner_given == 1)); then
+  case "$_owner" in
+    '' | *[!A-Za-z0-9-]*) _usage_error "invalid owner: '$_owner'" ;;
+  esac
+fi
+
+command -v gh >/dev/null 2>&1 || _usage_error "gh is not installed or not on PATH"
+
+# Records use the ASCII unit separator: tab is IFS whitespace, so `read` would
+# merge the empty fields that no-checks rollups produce and shift every later
+# column. Fields are stripped of control characters before joining, which
+# keeps both this separator and the porcelain tabs unambiguous.
+_sep=$'\x1f'
+
+# ownerAffiliations: OWNER keeps collaborator repositories out; forks and
+# archived repositories are filtered server-side unless requested, which also
+# keeps the query's rate-limit cost low for --watch. Default-branch rollups
+# cover the latest commit only; open pull requests are read in one page, and a
+# longer queue is reported as truncated rather than silently dropped.
+# shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+_query='
+query($owner: String!, $endCursor: String, $isFork: Boolean, $isArchived: Boolean) {
+  repositoryOwner(login: $owner) {
+    repositories(first: 50, after: $endCursor, ownerAffiliations: [OWNER],
+                 isFork: $isFork, isArchived: $isArchived,
+                 orderBy: {field: NAME, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        name
+        defaultBranchRef {
+          name
+          target { ... on Commit { oid statusCheckRollup { state } } }
+        }
+        pullRequests(states: OPEN, first: 30, orderBy: {field: CREATED_AT, direction: ASC}) {
+          totalCount
+          nodes {
+            number
+            title
+            isDraft
+            url
+            autoMergeRequest { enabledAt }
+            commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+          }
+        }
+      }
+    }
+  }
+}'
+
+# A missing owner yields a single `missing-owner` record because GraphQL
+# reports it as null data rather than an error.
+# shellcheck disable=SC2016 # jq variables, not shell expansions.
+_records_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+if .data.repositoryOwner == null then "missing-owner" else
+  .data.repositoryOwner.repositories.nodes[] as $r
+  | (["repo", $r.name, ($r.defaultBranchRef.name // ""),
+      ($r.defaultBranchRef.target.oid // ""),
+      ($r.defaultBranchRef.target.statusCheckRollup.state // "")] | rec),
+    ($r.pullRequests.nodes[]
+      | ["pr", $r.name, .number,
+         (.commits.nodes[0].commit.statusCheckRollup.state // ""),
+         .isDraft, (.autoMergeRequest != null), .url, .title] | rec),
+    (if $r.pullRequests.totalCount > ($r.pullRequests.nodes | length)
+     then ["truncated", $r.name, $r.pullRequests.totalCount] | rec
+     else empty end)
+end'
+
+# Map GitHub rollup state $1 onto the pass/fail/pending/none vocabulary the
+# summary and exit status use, reported via REPLY. EXPECTED means a required
+# check has not reported yet, which is pending rather than passing; a missing
+# rollup (no checks at all) is none.
+_state() {
+  case "$1" in
+    SUCCESS) REPLY=pass ;;
+    FAILURE | ERROR) REPLY=fail ;;
+    PENDING | EXPECTED) REPLY=pending ;;
+    *) REPLY=none ;;
+  esac
+}
+
+# Query GitHub and store the rendered records in _records, resolving the
+# owner from `gh api user` on first use. Returns 1 on a failed query instead
+# of exiting so --watch can retry a transient error on the next poll; an
+# unknown owner or unresolvable user still exits, since retrying cannot help.
+_fetch() {
+  local output
+  local -a filters=()
+  if [[ -z "$_owner" ]]; then
+    _owner=$(gh api user --jq .login 2>/dev/null) || _owner=
+    [[ -n "$_owner" ]] || _die "could not determine the authenticated gh user; pass --owner"
+  fi
+  ((_forks == 1)) || filters+=(-F isFork=false)
+  ((_archived == 1)) || filters+=(-F isArchived=false)
+  # -f keeps the owner a string: -F would turn an all-digit login into an int.
+  output=$(gh api graphql --paginate -f owner="$_owner" \
+    ${filters[@]+"${filters[@]}"} -f query="$_query" --jq "$_records_jq") ||
+    return 1
+  [[ $output != missing-owner* ]] || _die "no such GitHub user or organization: $_owner"
+  _records=$output
+}
+
+# Add one item in summary state $1 to the pass/fail/pending/none counters.
+_count() {
+  case "$1" in
+    pass) _pass=$((_pass + 1)) ;;
+    fail) _fail=$((_fail + 1)) ;;
+    pending) _pending=$((_pending + 1)) ;;
+    *) _none=$((_none + 1)) ;;
+  esac
+}
+
+# Parse _records into display rows (kind, state, repo, ...) joined with the
+# unit separator, and reset and recompute every counter. Repos keep the
+# query's name order, and each repo's pull requests and truncation notice
+# follow it.
+_summarize() {
+  local line kind repo branch oid rollup number draft auto url title total
+  _rows=()
+  _repos=0
+  _prs=0
+  _pass=0
+  _fail=0
+  _pending=0
+  _none=0
+  _truncated=0
+  _width=4
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    IFS=$_sep read -r kind _ <<<"$line"
+    case $kind in
+      repo)
+        IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
+        _state "$rollup"
+        _repos=$((_repos + 1))
+        _count "$REPLY"
+        ((${#repo} <= _width)) || _width=${#repo}
+        _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid")
+        ;;
+      pr)
+        IFS=$_sep read -r kind repo number rollup draft auto url title <<<"$line"
+        _state "$rollup"
+        _prs=$((_prs + 1))
+        _count "$REPLY"
+        _rows+=("pr$_sep$REPLY$_sep$repo$_sep$number$_sep$draft$_sep$auto$_sep$url$_sep$title")
+        ;;
+      truncated)
+        IFS=$_sep read -r kind repo total <<<"$line"
+        _truncated=$((_truncated + 1))
+        _rows+=("truncated${_sep}none$_sep$repo$_sep$total")
+        ;;
+    esac
+  done <<<"$_records"
+}
+
+# Report the run's overall state via REPLY: fail beats pending beats pass.
+_overall() {
+  if ((_fail > 0)); then
+    REPLY=fail
+  elif ((_pending > 0)); then
+    REPLY=pending
+  else
+    REPLY=pass
+  fi
+}
+
+# Succeed when summary state $1 needs attention (failing or pending).
+_is_problem() {
+  case "$1" in fail | pending) return 0 ;; esac
+  return 1
+}
+
+# Succeed when repository $1 has anything --failing must keep visible: a
+# failing or pending branch or pull request, or a truncation notice, because
+# hidden pull requests could be failing. Keeping the repo line gives problem
+# pull requests their context.
+_repo_has_problem() {
+  local want=$1 row kind state repo
+  for row in ${_rows[@]+"${_rows[@]}"}; do
+    IFS=$_sep read -r kind state repo _ <<<"$row"
+    [[ $repo == "$want" ]] || continue
+    [[ $kind != truncated ]] || return 0
+    ! _is_problem "$state" || return 0
+  done
+  return 1
+}
+
+# Succeed when a row of kind $1, state $2, and repository $3 should print.
+# Everything prints by default; --failing keeps problem rows, their repos,
+# and truncation notices.
+_visible() {
+  local kind=$1 state=$2 repo=$3
+  ((_failing == 1)) || return 0
+  case $kind in
+    repo) _repo_has_problem "$repo" ;;
+    truncated) return 0 ;;
+    *) _is_problem "$state" ;;
+  esac
+}
+
+# Print stable key=value summary fields, then one tab-separated record per
+# visible row. Fields were stripped of control characters, so tabs only ever
+# separate columns.
+_print_porcelain() {
+  local row kind state repo
+  _overall
+  printf 'state=%s\nowner=%s\nrepositories=%s\npull_requests=%s\n' \
+    "$REPLY" "$_owner" "$_repos" "$_prs"
+  printf 'pass=%s\nfail=%s\npending=%s\nnone=%s\ntruncated=%s\n' \
+    "$_pass" "$_fail" "$_pending" "$_none" "$_truncated"
+  for row in ${_rows[@]+"${_rows[@]}"}; do
+    IFS=$_sep read -r kind state repo _ <<<"$row"
+    _visible "$kind" "$state" "$repo" || continue
+    printf '%s\n' "${row//$_sep/$'\t'}"
+  done
+}
+
+# Print the aligned human summary: one line per repository's default branch,
+# its pull requests indented beneath it (with links for problems), truncation
+# warnings, and a closing count line.
+_print_human() {
+  local row kind state repo branch oid number draft auto url title total label
+  printf 'owner: %s (%s repositories, %s open pull requests)\n' "$_owner" "$_repos" "$_prs"
+  for row in ${_rows[@]+"${_rows[@]}"}; do
+    IFS=$_sep read -r kind state repo _ <<<"$row"
+    _visible "$kind" "$state" "$repo" || continue
+    case $kind in
+      repo)
+        IFS=$_sep read -r kind state repo branch oid <<<"$row"
+        if [[ $state == none ]]; then
+          label="${branch:-no default branch} (no checks)"
+        else
+          label="$branch@${oid:0:7}"
+        fi
+        printf '%-8s %-*s  %s\n' "$state" "$_width" "$repo" "$label"
+        ;;
+      pr)
+        IFS=$_sep read -r kind state repo number draft auto url title <<<"$row"
+        label="#$number $title"
+        [[ $draft != true ]] || label+=" [draft]"
+        [[ $auto != true ]] || label+=" [auto-merge]"
+        printf '  %-8s %s\n' "$state" "$label"
+        ! _is_problem "$state" || printf '           %s\n' "$url"
+        ;;
+      truncated)
+        IFS=$_sep read -r kind state repo total <<<"$row"
+        printf '  %-8s %s open pull requests; only the oldest 30 are checked\n' \
+          'warning' "$total"
+        ;;
+    esac
+  done
+  printf 'summary: %s pass, %s fail, %s pending, %s without checks\n' \
+    "$_pass" "$_fail" "$_pending" "$_none"
+}
+
+_fetch || _die "could not query GitHub for $_owner"
+_summarize
+if ((_watch == 1)); then
+  _deadline=$((SECONDS + 10#$_timeout))
+  # Failures do not end the watch: a pending re-run may still turn them
+  # green, and the final summary reports whatever remains. A failed poll is
+  # retried until the deadline instead of discarding a long watch.
+  while ((_pending > 0 && SECONDS < _deadline)); do
+    printf '%s: %s pending, %s failing; checking again in %ss\n' \
+      "$_prog" "$_pending" "$_fail" "$((10#$_interval))" >&2
+    sleep "$((10#$_interval))"
+    if _fetch; then
+      _summarize
+    else
+      printf '%s: query failed; retrying\n' "$_prog" >&2
+    fi
+  done
+  ((_pending == 0)) ||
+    printf '%s: stopped watching after %ss with checks still pending\n' \
+      "$_prog" "$((10#$_timeout))" >&2
+fi
+
+if ((_porcelain == 1)); then
+  _print_porcelain
+else
+  _print_human
+fi
+
+_overall
+case $REPLY in
+  pass) exit 0 ;;
+  pending) exit 8 ;;
+  *) exit 1 ;;
+esac
