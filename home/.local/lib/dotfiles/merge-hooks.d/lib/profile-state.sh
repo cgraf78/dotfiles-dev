@@ -7,14 +7,30 @@ _dev_profile_state_root() {
 }
 
 _dev_profile_state_engine() {
+  _dev_profile_state_engine_path || return 1
+  printf '%s\n' "$REPLY"
+}
+
+# Resolve the engine path into REPLY without a subshell, once per shell and
+# extension root. dot_hook_file validates the file and each parent directory
+# with several stat calls, and one merge runs many transactions. The validated
+# directories are writable only by their owner, so a path cannot become
+# untrusted during a run; a different DOT_EXTENSIONS_DIR resolves again.
+_dev_profile_state_engine_path() {
   local source=${BASH_SOURCE[0]} directory target here
   if [[ -n ${_DEV_PROFILE_STATE_ENGINE:-} ]]; then
-    printf '%s\n' "$_DEV_PROFILE_STATE_ENGINE"
+    REPLY=$_DEV_PROFILE_STATE_ENGINE
     return
   fi
   if declare -F dot_hook_file >/dev/null 2>&1; then
+    if [[ -n ${_dev_profile_state_engine_cached:-} &&
+      ${_dev_profile_state_engine_cached_root-} == "${DOT_EXTENSIONS_DIR:-}" ]]; then
+      REPLY=$_dev_profile_state_engine_cached
+      return
+    fi
     dot_hook_file merge-hooks.d/lib/profile-state.py || return 1
-    printf '%s\n' "$REPLY"
+    _dev_profile_state_engine_cached=$REPLY
+    _dev_profile_state_engine_cached_root=${DOT_EXTENSIONS_DIR:-}
     return
   fi
   while [[ -L $source ]]; do
@@ -26,7 +42,7 @@ _dev_profile_state_engine() {
     esac
   done
   here=$(cd -P -- "${source%/*}" && pwd -P) || return 1
-  printf '%s/profile-state.py\n' "$here"
+  REPLY=$here/profile-state.py
 }
 
 _dev_profile_state_toml_renderer() {
@@ -65,7 +81,8 @@ _dev_profile_state_files_equal() {
     cmp -s -- "$1" "$2"
     return
   fi
-  engine=$(_dev_profile_state_engine) || return 2
+  _dev_profile_state_engine_path || return 2
+  engine=$REPLY
   python3 "$engine" equal --left "$1" --right "$2"
 }
 
@@ -126,13 +143,48 @@ _dev_profile_state_publisher_valid() {
   esac
 }
 
-_dev_profile_state_document_valid() {
-  local policy=$1 document=$2 filter
-  case $policy in
-    vscode-keybindings | vscode-extensions) filter='type == "array"' ;;
-    *) filter='type == "object"' ;;
+# Decide the engine's capture without starting Python when the live document
+# still equals the last applied one, the common unedited case. capture() then
+# reduces to its first two rules: `current` when before == applied under
+# Python equality (true == 1, false == 0, 1 == 1.0), otherwise `before`. All
+# three files are `jq -S` output, so byte equality is JSON equality, and one
+# jq emulates that comparison for JSON values within double precision. Sets
+# REPLY to the file capture would return; fails to leave the decision to the
+# engine when cmp is missing, the documents differ, or the check cannot run.
+_dev_profile_state_fast_capture() {
+  local before=$1 applied=$2 current=$3 result
+  command -v cmp >/dev/null 2>&1 && cmp -s -- "$current" "$applied" || return 1
+  result=$(jq -r -n --slurpfile b "$before" --slurpfile a "$applied" '
+    def loose:
+      if type == "boolean" then (if . then 1 else 0 end)
+      elif type == "array" then map(loose)
+      elif type == "object" then map_values(loose)
+      else .
+      end;
+    if ($b | length) != 1 or ($a | length) != 1 then "engine"
+    elif ($b[0] | loose) == ($a[0] | loose) then "current"
+    else "before"
+    end
+  ') || return 1
+  case $result in
+    current) REPLY=$current ;;
+    before) REPLY=$before ;;
+    *) return 1 ;;
   esac
-  jq -e "$filter" "$document" >/dev/null
+}
+
+# Set REPLY to the JSON type a policy's documents must have.
+_dev_profile_state_document_type() {
+  case $1 in
+    vscode-keybindings | vscode-extensions) REPLY=array ;;
+    *) REPLY=object ;;
+  esac
+}
+
+_dev_profile_state_document_valid() {
+  local policy=$1 document=$2
+  _dev_profile_state_document_type "$policy"
+  jq -e --arg type "$REPLY" 'type == $type' "$document" >/dev/null
 }
 
 _dev_profile_state_tempdir() {
@@ -201,21 +253,31 @@ _dev_profile_state_single_writer() {
   [[ ${DOT_TEST:-0} == 1 || -n ${DOT_UPDATE_LOCK_TOKEN:-} ]]
 }
 
+# Normalize a document to sorted JSON. With a policy as $4, also fail unless
+# it has that policy's document type, in the same jq pass as the
+# normalization; a mismatch leaves unusable output, like a parse failure.
 _dev_profile_state_json() {
-  local format=$1 source=$2 output=$3 yq_bin
+  local format=$1 source=$2 output=$3 policy=${4:-} yq_bin
+  local -a normalize=(jq -S .)
+  if [[ -n $policy ]]; then
+    _dev_profile_state_document_type "$policy"
+    # shellcheck disable=SC2016 # $type is a jq variable.
+    normalize=(jq -S -e --arg type "$REPLY"
+      'if type == $type then . else false end')
+  fi
   case $format in
-    json) jq -S . "$source" >"$output" ;;
+    json) "${normalize[@]}" "$source" >"$output" ;;
     jsonc)
       LC_ALL=C awk '
         NR == 1 { sub(/^\357\273\277/, "", $0) }
         { sub(/\r$/, "", $0) }
         !/^[[:space:]]*\/\//
-      ' "$source" | jq -S . >"$output"
+      ' "$source" | "${normalize[@]}" >"$output"
       ;;
     yaml | toml)
       yq_bin=$(_merge_hook_mikefarah_yq) || return 1
       "$yq_bin" eval --input-format "$format" --output-format json '.' \
-        "$source" | jq -S . >"$output"
+        "$source" | "${normalize[@]}" >"$output"
       ;;
     *) return 2 ;;
   esac
@@ -270,7 +332,8 @@ _dev_profile_state_install() {
   case $publisher in
     atomic) mv -f "$source" "$destination" ;;
     verified-in-place)
-      engine=$(_dev_profile_state_engine) || return 1
+      _dev_profile_state_engine_path || return 1
+      engine=$REPLY
       python3 "$engine" publish-in-place \
         --source "$source" --destination "$destination" || return 1
       rm -f -- "$source"
@@ -316,23 +379,28 @@ _dev_profile_state_link_allowed() {
 }
 
 _dev_profile_state_links_valid() {
-  local policy=$1 destination=$2 source=$3 path target parent
-  jq -e '
-    type == "array"
-    and ((map(.path) | unique | length) == length)
-    and all(.[];
-      type == "object"
-      and ((.path | type) == "string")
-      and ((.path | length) > 0)
-      and ((.path | test("[[:cntrl:]]")) | not)
-      and ((.target | type) == "string")
-      and ((.target | length) > 0)
-      and ((.target | test("[[:cntrl:]]")) | not)
-    )
-  ' "$source" >/dev/null || return 1
-  if jq -e 'length > 0' "$source" >/dev/null; then
-    [[ $policy == vscode-extensions ]] || return 1
-  fi
+  local policy=$1 destination=$2 source=$3 path target parent count
+  # Validate and count in one pass; most policies record no links, so the
+  # listing below is skipped entirely for them.
+  count=$(jq -r '
+    if type == "array"
+      and ((map(.path) | unique | length) == length)
+      and all(.[];
+        type == "object"
+        and ((.path | type) == "string")
+        and ((.path | length) > 0)
+        and ((.path | test("[[:cntrl:]]")) | not)
+        and ((.target | type) == "string")
+        and ((.target | length) > 0)
+        and ((.target | test("[[:cntrl:]]")) | not)
+      )
+    then length
+    else "invalid"
+    end
+  ' "$source") || return 1
+  [[ $count =~ ^[0-9]+$ ]] || return 1
+  ((count > 0)) || return 0
+  [[ $policy == vscode-extensions ]] || return 1
   parent=${destination%/*}
   while IFS=$'\t' read -r path target; do
     _dev_profile_state_link_allowed "$path" "$target" || return 1
@@ -439,21 +507,29 @@ _dev_profile_state_receipt_load() {
   _dev_profile_state_policy_format_valid "$policy" "$format" || return 1
   _dev_profile_state_publisher_valid "$policy" "$publisher" || return 1
   _dev_profile_state_receipt_safe "$receipt" || return 1
-  jq -e --arg policy "$policy" --arg format "$format" --arg path "$destination" \
-    --arg publisher "$publisher" '
-    type == "object" and .version == 1 and .policy == $policy
-    and .format == $format and .path == $path
-    and .publisher == $publisher
-    and (.before_exists | type == "boolean")
-    and has("before") and has("applied") and has("links")
-  ' "$receipt" >/dev/null || return 1
+  # One pass validates the envelope and both document types and reports
+  # before_exists; each transaction loads receipts, so separate jq starts for
+  # every check dominated this step.
+  local before_exists
+  _dev_profile_state_document_type "$policy"
+  before_exists=$(jq -r --arg policy "$policy" --arg format "$format" \
+    --arg path "$destination" --arg publisher "$publisher" --arg type "$REPLY" '
+    if type == "object" and .version == 1 and .policy == $policy
+      and .format == $format and .path == $path
+      and .publisher == $publisher
+      and (.before_exists | type == "boolean")
+      and has("before") and has("applied") and has("links")
+      and (.before | type == $type) and (.applied | type == $type)
+    then .before_exists
+    else "invalid"
+    end
+  ' "$receipt") || return 1
+  [[ $before_exists == true || $before_exists == false ]] || return 1
   jq -S .before "$receipt" >"$before" || return 1
   jq -S .applied "$receipt" >"$applied" || return 1
   jq -S .links "$receipt" >"$links" || return 1
-  _dev_profile_state_document_valid "$policy" "$before" || return 1
-  _dev_profile_state_document_valid "$policy" "$applied" || return 1
   _dev_profile_state_links_valid "$policy" "$destination" "$links" || return 1
-  REPLY=$(jq -r .before_exists "$receipt")
+  REPLY=$before_exists
 }
 
 # Print a content fingerprint of the ownership state behind each
@@ -576,7 +652,8 @@ dev_profile_state_begin() {
   _dev_profile_state_path_allowed "$policy" "$destination" || return 1
   command -v jq >/dev/null 2>&1 && command -v git >/dev/null 2>&1 &&
     command -v python3 >/dev/null 2>&1 || return 1
-  engine=$(_dev_profile_state_engine) || return 1
+  _dev_profile_state_engine_path || return 1
+  engine=$REPLY
   [[ -r $engine ]] || return 1
   root=$(_dev_profile_state_root) || return 1
   if [[ ! -d $root ]]; then
@@ -602,8 +679,7 @@ dev_profile_state_begin() {
   receipt_links=$transaction_dir/receipt-links.json
   baseline=$transaction_dir/baseline.json
   original=$transaction_dir/original
-  if ! _dev_profile_state_json "$format" "$managed" "$managed_json" ||
-    ! _dev_profile_state_document_valid "$policy" "$managed_json"; then
+  if ! _dev_profile_state_json "$format" "$managed" "$managed_json" "$policy"; then
     _dev_profile_state_tempdir_remove "$transaction_dir" || true
     return 1
   fi
@@ -628,8 +704,7 @@ dev_profile_state_begin() {
       return 1
     }
     _DEV_PROFILE_STATE_ORIGINAL_EXISTS=1
-    if ! _dev_profile_state_json "$format" "$destination" "$current" ||
-      ! _dev_profile_state_document_valid "$policy" "$current"; then
+    if ! _dev_profile_state_json "$format" "$destination" "$current" "$policy"; then
       current_valid=0
     fi
   else
@@ -656,6 +731,11 @@ dev_profile_state_begin() {
       _DEV_PROFILE_STATE_BEFORE_EXISTS=false
     elif ((current_valid == 0)); then
       cp "$before" "$baseline" || {
+        _dev_profile_state_tempdir_remove "$transaction_dir" || true
+        return 1
+      }
+    elif _dev_profile_state_fast_capture "$before" "$applied" "$current"; then
+      cp "$REPLY" "$baseline" || {
         _dev_profile_state_tempdir_remove "$transaction_dir" || true
         return 1
       }

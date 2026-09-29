@@ -301,6 +301,115 @@ dev_profile_state_retire_all
 _assert_eq 'profile state retirement is idempotent' \
   '{"later":2,"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
 
+# A destination whose live bytes still equal the applied view needs no capture:
+# the baseline is the recorded before, so the engine must not start. A failing
+# python3 first on PATH proves the skip, while an edited destination must still
+# reach the engine and fail with it.
+failing_python=$(_tmpdir)
+printf '#!/bin/sh\nexit 97\n' >"$failing_python/python3"
+chmod +x "$failing_python/python3"
+# The fast path compares with cmp, which minimal capability PATHs may omit.
+cmp_bin=$(_tmpdir)
+for system_cmp in /usr/bin/cmp /bin/cmp; do
+  if [[ -x $system_cmp ]]; then
+    ln -s "$system_cmp" "$cmp_bin/cmp"
+    ln -s "$system_cmp" "$failing_python/cmp"
+    break
+  fi
+done
+printf '%s\n' '{"local":1,"owned":"before"}' >"$destination"
+printf '%s\n' '{"owned":"dev"}' >"$managed"
+dev_profile_state_begin test-object json "$destination" "$managed"
+printf '%s\n' '{"local":1,"owned":"dev"}' >"$destination"
+dev_profile_state_commit
+if [[ ! -e $failing_python/cmp ]]; then
+  echo '  SKIP: profile state capture fast path (no system cmp)'
+  dev_profile_state_begin test-object json "$destination" "$managed"
+elif PATH="$failing_python:$PATH" \
+  dev_profile_state_begin test-object json "$destination" "$managed"; then
+  _pass 'profile state skips the capture engine for an unedited destination'
+  _assert_eq 'profile state fast capture restores the recorded baseline' \
+    '{"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+else
+  _fail 'profile state skips the capture engine for an unedited destination'
+fi
+printf '%s\n' '{"local":1,"owned":"dev"}' >"$destination"
+dev_profile_state_commit
+printf '%s\n' '{"edited":3,"local":1,"owned":"dev"}' >"$destination"
+if PATH="$failing_python:$PATH" \
+  dev_profile_state_begin test-object json "$destination" "$managed"; then
+  _fail 'profile state captures an edited destination through the engine'
+else
+  _pass 'profile state captures an edited destination through the engine'
+fi
+_assert_eq 'profile state failed capture leaves the edited destination intact' \
+  '{"edited":3,"local":1,"owned":"dev"}' "$(jq -cS . "$destination")"
+dev_profile_state_begin test-object json "$destination" "$managed"
+_assert_eq 'profile state engine capture keeps the user edit in the baseline' \
+  '{"edited":3,"local":1,"owned":"before"}' "$(jq -cS . "$destination")"
+printf '%s\n' '{"edited":3,"local":1,"owned":"dev"}' >"$destination"
+dev_profile_state_commit
+dev_profile_state_retire_all
+
+# With the live document unchanged, the fast capture decision must match the
+# engine for every before/applied pair, including values Python treats as
+# equal (true == 1, false == 0, 1 == 1.0) that make it return the live file.
+if [[ -e $cmp_bin/cmp ]]; then
+  fast_capture_mismatches=
+  while IFS='|' read -r fast_before fast_applied; do
+    printf '%s\n' "$fast_before" | jq -S . >"$fixture/fast-before.json"
+    printf '%s\n' "$fast_applied" | jq -S . >"$fixture/fast-applied.json"
+    cp "$fixture/fast-applied.json" "$fixture/fast-current.json"
+    python3 "$engine" capture --policy test-object \
+      --before "$fixture/fast-before.json" --applied "$fixture/fast-applied.json" \
+      --current "$fixture/fast-current.json" --output "$fixture/fast-engine.json"
+    if ! PATH="$cmp_bin:$PATH" _dev_profile_state_fast_capture \
+      "$fixture/fast-before.json" "$fixture/fast-applied.json" \
+      "$fixture/fast-current.json" ||
+      [[ $(jq -cS . "$REPLY") != "$(jq -cS . "$fixture/fast-engine.json")" ]]; then
+      fast_capture_mismatches+="[$fast_before|$fast_applied] "
+    fi
+  done <<'CASES'
+{"x":1}|{"x":true}
+{"x":0}|{"x":false}
+{"x":1}|{"x":1.0}
+{"x":[1,true]}|{"x":[true,1]}
+{"x":{"y":false}}|{"x":{"y":0}}
+{"x":"1"}|{"x":1}
+{"a":1}|{"a":2}
+{}|{"a":1}
+{"a":1,"b":[2]}|{"a":1,"b":[2]}
+CASES
+  _assert_eq 'profile state fast capture matches the engine' '' "$fast_capture_mismatches"
+else
+  echo '  SKIP: profile state fast capture equivalence (no system cmp)'
+fi
+
+# One merge runs many transactions, so the engine path is resolved through
+# dot_hook_file once per extension root; a different root resolves again.
+engine_resolutions=$fixture/engine-resolutions
+# shellcheck disable=SC2016 # The inner shell expands its own arguments.
+bash --noprofile --norc -c '
+  . "$1"
+  resolutions=$2
+  dot_hook_file() {
+    printf "%s\n" "$1" >>"$resolutions"
+    REPLY=$DOT_EXTENSIONS_DIR/$1
+  }
+  DOT_EXTENSIONS_DIR=/first
+  _dev_profile_state_engine_path
+  _dev_profile_state_engine_path
+  printf "%s\n" "$REPLY"
+  DOT_EXTENSIONS_DIR=/second
+  _dev_profile_state_engine_path
+  printf "%s\n" "$REPLY"
+' _ "$library" "$engine_resolutions" >"$fixture/engine-paths"
+_assert_eq 'profile state resolves its engine once per extension root' \
+  '2' "$(wc -l <"$engine_resolutions" | tr -d ' ')"
+_assert_eq 'profile state engine cache follows the extension root' \
+  $'/first/merge-hooks.d/lib/profile-state.py\n/second/merge-hooks.d/lib/profile-state.py' \
+  "$(cat "$fixture/engine-paths")"
+
 transaction_home=$fixture/transaction-user
 transaction_state=$fixture/transaction-state
 export HOME=$transaction_home
