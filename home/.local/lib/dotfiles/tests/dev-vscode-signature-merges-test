@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# The VS Code merge signature lifecycle runs ~16 full merges. Start it in the
+# `dot test` runner's first worker wave so it overlaps the other suites.
+# dot-suite-priority: early
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/vscode-signature-merges.sh"
+dot_dev_vscode_signature_merges_test
