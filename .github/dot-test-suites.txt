@@ -8,6 +8,7 @@ home/.local/lib/dotfiles/tests/dev-static-test
 home/.local/lib/dotfiles/tests/dev-tool-init-test
 home/.local/lib/dotfiles/tests/dev-update-test
 home/.local/lib/dotfiles/tests/dev-vscode-merges-test
+home/.local/lib/dotfiles/tests/gh-ci-status-test
 home/.local/lib/dotfiles/tests/git-shell-workflows-test
 home/.local/lib/dotfiles/tests/githook-test
 home/.local/lib/dotfiles/tests/gstack-register-test

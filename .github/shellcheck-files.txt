@@ -18,6 +18,7 @@ program	home/.config/shell/interactive.d/57-git-tools.sh
 program	home/.config/shell/interactive.d/70-dev-aliases.sh
 program	home/.config/shell/interactive.d/70-dev-tool-init.sh
 program	home/.config/shell/interactive.d/80-dev-integrations.bash
+program	home/.local/bin/gh-ci-status
 program	home/.local/bin/hm
 program	home/.local/lib/dotfiles/doctor.d/20-dev-tools.sh
 program	home/.local/lib/dotfiles/doctor.d/30-dev-shell-integrations.sh
@@ -74,6 +75,7 @@ program	home/.local/lib/dotfiles/tests/dev/merges-setup.sh
 program	home/.local/lib/dotfiles/tests/dev/merges.sh
 program	home/.local/lib/dotfiles/tests/dev/static.sh
 program	home/.local/lib/dotfiles/tests/dev/vscode-merges.sh
+program	home/.local/lib/dotfiles/tests/gh-ci-status-test
 program	home/.local/lib/dotfiles/tests/git-shell-workflows-test
 program	home/.local/lib/dotfiles/tests/githook-test
 program	home/.local/lib/dotfiles/tests/gstack-register-test

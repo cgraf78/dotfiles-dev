@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# gh-ci-status-test - owner-wide GitHub CI summary.
+#
+# A stub gh serves pre-rendered record fixtures, so the suite runs without
+# network or jq. The stub also captures the jq program the command hands to
+# gh; where jq exists, that program is replayed over an equivalent GraphQL
+# JSON fixture to prove it renders exactly the records the fixtures assume.
+
+set -o pipefail
+export NO_COLOR=1
+
+# shellcheck source=dev/helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+command_path="$(_dev_repo_root)/home/.local/bin/gh-ci-status"
+fixtures=$(_tmpdir)
+stub_bin=$(_mock_bin)
+gh_log="$fixtures/gh.log"
+jq_capture="$fixtures/records.jq"
+
+# One call counter drives --watch: call N serves records.N when present and
+# falls back to records, so a sequence of fixtures models checks settling.
+# A records.N.fail marker makes call N fail like a transient API error.
+cat >"$stub_bin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_STUB_LOG"
+if [[ $1 == api && $2 == user ]]; then
+  [[ -z ${GH_STUB_USER_FAIL:-} ]] || exit 1
+  printf '%s\n' "${GH_STUB_USER:-stub-user}"
+  exit 0
+fi
+if [[ $1 == api && $2 == graphql ]]; then
+  [[ -z ${GH_STUB_GRAPHQL_FAIL:-} ]] || exit 1
+  while (($#)); do
+    if [[ $1 == --jq ]]; then
+      printf '%s' "$2" >"$GH_STUB_JQ_CAPTURE"
+      break
+    fi
+    shift
+  done
+  count=$(($(cat "$GH_STUB_COUNTER" 2>/dev/null || echo 0) + 1))
+  printf '%s\n' "$count" >"$GH_STUB_COUNTER"
+  [[ ! -f $GH_STUB_RECORDS.$count.fail ]] || exit 1
+  if [[ -f $GH_STUB_RECORDS.$count ]]; then
+    cat "$GH_STUB_RECORDS.$count"
+  else
+    cat "$GH_STUB_RECORDS"
+  fi
+  exit 0
+fi
+exit 2
+SH
+chmod +x "$stub_bin/gh"
+
+tab=$'\t'
+us=$'\x1f'
+# Print the arguments as one record joined with the unit separator, matching
+# the lines the command's jq program emits.
+_rec() {
+  local IFS=$us
+  printf '%s\n' "$*"
+}
+
+records="$fixtures/records"
+{
+  _rec repo alpha main aaaaaaa1111111111111111111111111111111 SUCCESS
+  _rec pr alpha 1 FAILURE false true https://github.test/o/alpha/pull/1 'Fix alpha'
+  _rec pr alpha 4 '' true true https://github.test/o/alpha/pull/4 'No checks yet'
+  _rec repo beta main ccccccc3333333333333333333333333333333 PENDING
+  _rec repo delta main ddddddd4444444444444444444444444444444 SUCCESS
+  _rec pr delta 2 SUCCESS true false https://github.test/o/delta/pull/2 'Draft delta'
+  _rec truncated delta 31
+  _rec repo empty '' '' ''
+  _rec repo epsilon main 7777777777777777777777777777777777777777 ERROR
+  _rec repo fail main 8888888888888888888888888888888888888888 SUCCESS
+  _rec repo gamma main fffffff6666666666666666666666666666666 ''
+  _rec pr gamma 5 '' false false https://github.test/o/gamma/pull/5 'Tab title \ slash'
+  _rec repo zeta main 9999999999999999999999999999999999999999 EXPECTED
+} >"$records"
+
+# Run gh-ci-status with arguments "$@" against the stub gh, serving $RECORDS
+# (default: the main fixture) and restarting the stub's call counter.
+run() {
+  rm -f "$fixtures/counter"
+  GH_STUB_LOG=$gh_log GH_STUB_JQ_CAPTURE=$jq_capture \
+    GH_STUB_COUNTER="$fixtures/counter" GH_STUB_RECORDS="${RECORDS:-$records}" \
+    PATH="$stub_bin:$PATH" "$command_path" "$@"
+}
+
+echo "=== default summary ==="
+
+: >"$gh_log"
+out=$(run 2>&1)
+rc=$?
+_assert_exit "summary: a failing item fails the run" 1 "$rc"
+_assert_contains "summary: owner defaults to the authenticated user" \
+  "owner: stub-user (8 repositories, 4 open pull requests)" "$out"
+graphql_call=$(grep 'api graphql' "$gh_log")
+_assert_contains "summary: owner is sent as a string field" "-f owner=stub-user" "$graphql_call"
+_assert_contains "summary: forks are filtered server-side" "-F isFork=false" "$graphql_call"
+_assert_contains "summary: archived repositories are filtered server-side" \
+  "-F isArchived=false" "$graphql_call"
+_assert_contains "summary: passing branch shows its short commit" \
+  "pass     alpha    main@aaaaaaa" "$out"
+_assert_contains "summary: failing pull request shows auto-merge" \
+  "  fail     #1 Fix alpha [auto-merge]" "$out"
+_assert_contains "summary: failing pull request links to GitHub" \
+  "https://github.test/o/alpha/pull/1" "$out"
+_assert_contains "summary: a no-checks pull request keeps its later fields" \
+  "  none     #4 No checks yet [draft] [auto-merge]" "$out"
+_assert_not_contains "summary: a no-checks pull request omits its link" \
+  "https://github.test/o/alpha/pull/4" "$out"
+_assert_contains "summary: pending branch is reported" "pending  beta" "$out"
+_assert_contains "summary: EXPECTED checks are pending" "pending  zeta" "$out"
+_assert_contains "summary: ERROR checks fail" "fail     epsilon" "$out"
+_assert_contains "summary: draft pull request is labelled" "#2 Draft delta [draft]" "$out"
+_assert_not_contains "summary: passing pull request omits its link" \
+  "https://github.test/o/delta/pull/2" "$out"
+_assert_contains "summary: truncated pull request lists warn" \
+  "warning  31 open pull requests; only the oldest 30 are checked" "$out"
+_assert_contains "summary: an empty repository has no default branch" \
+  "none     empty    no default branch (no checks)" "$out"
+_assert_contains "summary: repository without CI reports none" \
+  "none     gamma    main (no checks)" "$out"
+_assert_contains "summary: sanitized titles print verbatim" \
+  "#5 Tab title \\ slash" "$out"
+_assert_contains "summary: counts cover branches and pull requests" \
+  "summary: 4 pass, 2 fail, 2 pending, 4 without checks" "$out"
+
+echo ""
+echo "=== filters and porcelain ==="
+
+out=$(run --failing 2>&1)
+_assert_contains "failing: keeps a passing branch that has a failing PR" "alpha" "$out"
+_assert_contains "failing: keeps pending and failing branches" "beta" "$out"
+_assert_contains "failing: keeps truncation warnings" "31 open pull requests" "$out"
+_assert_contains "failing: keeps a repository whose PR list is truncated" "delta" "$out"
+_assert_not_contains "failing: hides non-problem pull requests" "No checks yet" "$out"
+_assert_not_contains "failing: hides repositories without checks" "gamma" "$out"
+_assert_not_contains "failing: hides a passing repository named fail" \
+  "pass     fail" "$out"
+
+: >"$gh_log"
+run --include-archived --include-forks >/dev/null 2>&1
+_assert_not_contains "include: forks are requested when asked" "-F isFork=false" "$(cat "$gh_log")"
+_assert_not_contains "include: archived repositories are requested when asked" \
+  "-F isArchived=false" "$(cat "$gh_log")"
+
+out=$(run --porcelain --owner=acme 2>&1)
+_assert_contains "porcelain: overall state" "state=fail" "$out"
+_assert_contains "porcelain: explicit owner" "owner=acme" "$out"
+_assert_contains "porcelain: counts" \
+  $'pass=4\nfail=2\npending=2\nnone=4\ntruncated=1' "$out"
+_assert_contains "porcelain: repo record" \
+  "repo${tab}pass${tab}alpha${tab}main${tab}aaaaaaa1111111111111111111111111111111" "$out"
+_assert_contains "porcelain: a no-checks pull request keeps every column" \
+  "pr${tab}none${tab}alpha${tab}4${tab}true${tab}true${tab}https://github.test/o/alpha/pull/4${tab}No checks yet" \
+  "$out"
+_assert_contains "porcelain: an empty repository keeps its empty columns" \
+  "repo${tab}none${tab}empty${tab}${tab}" "$out"
+out=$(run --porcelain --failing 2>&1)
+_assert_not_contains "porcelain failing: filters on the state column only" \
+  "repo${tab}pass${tab}fail" "$out"
+_assert_contains "porcelain failing: keeps the truncation record" "truncated${tab}none${tab}delta" "$out"
+: >"$gh_log"
+run --owner acme >/dev/null 2>&1
+_assert_not_contains "owner: an explicit owner skips the user lookup" "api user" "$(cat "$gh_log")"
+
+echo ""
+echo "=== exit status ==="
+
+pending_records="$fixtures/pending"
+grep -v -e FAILURE -e ERROR "$records" >"$pending_records"
+RECORDS=$pending_records run >/dev/null 2>&1
+_assert_exit "status: pending without failures exits 8" 8 "$?"
+
+green_records="$fixtures/green"
+grep -v -e FAILURE -e ERROR -e PENDING -e EXPECTED "$records" >"$green_records"
+out=$(RECORDS=$green_records run 2>&1)
+_assert_exit "status: passing checks exit 0 even with repositories lacking CI" 0 "$?"
+_assert_contains "status: repositories lacking CI are still listed" "gamma" "$out"
+
+echo ""
+echo "=== watch ==="
+
+cp "$pending_records" "$fixtures/watch.1"
+: >"$fixtures/watch.2.fail"
+cp "$green_records" "$fixtures/watch"
+out=$(RECORDS="$fixtures/watch" run --watch --interval=1 2>&1)
+_assert_exit "watch: polls until pending checks settle" 0 "$?"
+_assert_contains "watch: explains each wait" "2 pending, 0 failing; checking again in 1s" "$out"
+_assert_contains "watch: retries a failed poll" "query failed; retrying" "$out"
+_assert_file_content "watch: re-queries after a failed poll" "3" "$fixtures/counter"
+
+out=$(RECORDS=$pending_records run --watch --interval 1 --timeout 2 2>&1)
+_assert_exit "watch: a timeout reports checks still pending" 8 "$?"
+_assert_contains "watch: a timeout is explained" \
+  "stopped watching after 2s with checks still pending" "$out"
+
+echo ""
+echo "=== errors ==="
+
+printf 'missing-owner\n' >"$fixtures/missing"
+out=$(RECORDS="$fixtures/missing" run --owner ghost 2>&1)
+_assert_exit "errors: an unknown owner fails" 1 "$?"
+_assert_contains "errors: an unknown owner is named" \
+  "no such GitHub user or organization: ghost" "$out"
+
+out=$(GH_STUB_GRAPHQL_FAIL=1 run 2>&1)
+_assert_exit "errors: a failed query fails" 1 "$?"
+_assert_contains "errors: a failed query names the owner" "could not query GitHub for stub-user" "$out"
+
+out=$(GH_STUB_USER_FAIL=1 run 2>&1)
+_assert_exit "errors: an unresolvable user fails" 1 "$?"
+_assert_contains "errors: an unresolvable user suggests --owner" "pass --owner" "$out"
+
+run --interval 0 >/dev/null 2>&1
+_assert_exit "usage: a zero interval is rejected" 2 "$?"
+run --interval 00 >/dev/null 2>&1
+_assert_exit "usage: a zero-padded zero interval is rejected" 2 "$?"
+run --timeout x >/dev/null 2>&1
+_assert_exit "usage: a non-numeric timeout is rejected" 2 "$?"
+run --owner 'bad owner' >/dev/null 2>&1
+_assert_exit "usage: an invalid owner is rejected" 2 "$?"
+run --owner= >/dev/null 2>&1
+_assert_exit "usage: an empty owner is rejected" 2 "$?"
+run --bogus >/dev/null 2>&1
+_assert_exit "usage: an unknown option is rejected" 2 "$?"
+empty_bin=$(_tmpdir)
+PATH=$empty_bin "$BASH" "$command_path" >/dev/null 2>&1
+_assert_exit "usage: a missing gh is a local environment error" 2 "$?"
+
+echo ""
+echo "=== jq program ==="
+
+# The GraphQL document these records assume, including one missing-owner
+# page, rendered with the exact jq program the command sent to gh. The PR
+# with no commit nodes covers the same empty rollup as a null rollup.
+cat >"$fixtures/page.json" <<'JSON'
+{"data":{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+ {"name":"alpha",
+  "defaultBranchRef":{"name":"main","target":{"oid":"aaaaaaa1111111111111111111111111111111","statusCheckRollup":{"state":"SUCCESS"}}},
+  "pullRequests":{"totalCount":2,"nodes":[
+   {"number":1,"title":"Fix alpha","isDraft":false,"url":"https://github.test/o/alpha/pull/1","autoMergeRequest":{"enabledAt":"2026-01-01T00:00:00Z"},"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]}},
+   {"number":4,"title":"No checks yet","isDraft":true,"url":"https://github.test/o/alpha/pull/4","autoMergeRequest":{"enabledAt":"2026-01-01T00:00:00Z"},"commits":{"nodes":[]}}]}},
+ {"name":"beta",
+  "defaultBranchRef":{"name":"main","target":{"oid":"ccccccc3333333333333333333333333333333","statusCheckRollup":{"state":"PENDING"}}},
+  "pullRequests":{"totalCount":0,"nodes":[]}},
+ {"name":"delta",
+  "defaultBranchRef":{"name":"main","target":{"oid":"ddddddd4444444444444444444444444444444","statusCheckRollup":{"state":"SUCCESS"}}},
+  "pullRequests":{"totalCount":31,"nodes":[{"number":2,"title":"Draft delta","isDraft":true,"url":"https://github.test/o/delta/pull/2","autoMergeRequest":null,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS"}}}]}}]}},
+ {"name":"empty","defaultBranchRef":null,"pullRequests":{"totalCount":0,"nodes":[]}},
+ {"name":"epsilon",
+  "defaultBranchRef":{"name":"main","target":{"oid":"7777777777777777777777777777777777777777","statusCheckRollup":{"state":"ERROR"}}},
+  "pullRequests":{"totalCount":0,"nodes":[]}},
+ {"name":"fail",
+  "defaultBranchRef":{"name":"main","target":{"oid":"8888888888888888888888888888888888888888","statusCheckRollup":{"state":"SUCCESS"}}},
+  "pullRequests":{"totalCount":0,"nodes":[]}},
+ {"name":"gamma",
+  "defaultBranchRef":{"name":"main","target":{"oid":"fffffff6666666666666666666666666666666","statusCheckRollup":null}},
+  "pullRequests":{"totalCount":1,"nodes":[{"number":5,"title":"Tab\ttitle \\ slash","isDraft":false,"url":"https://github.test/o/gamma/pull/5","autoMergeRequest":null,"commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]}}]}},
+ {"name":"zeta",
+  "defaultBranchRef":{"name":"main","target":{"oid":"9999999999999999999999999999999999999999","statusCheckRollup":{"state":"EXPECTED"}}},
+  "pullRequests":{"totalCount":0,"nodes":[]}}
+]}}}}
+JSON
+printf '{"data":{"repositoryOwner":null}}\n' >"$fixtures/missing.json"
+if command -v jq >/dev/null 2>&1 && [[ -s $jq_capture ]]; then
+  _assert_eq "jq program: renders the records the fixtures assume" \
+    "$(cat "$records")" "$(jq -r "$(cat "$jq_capture")" "$fixtures/page.json")"
+  _assert_eq "jq program: renders a missing owner as one record" \
+    "missing-owner" "$(jq -r "$(cat "$jq_capture")" "$fixtures/missing.json")"
+else
+  echo "  SKIP: jq program replay (jq unavailable)"
+fi
+
+_test_summary
