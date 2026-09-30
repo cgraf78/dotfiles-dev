@@ -1,10 +1,21 @@
 # shellcheck shell=bash
 # Development tool environment. Final PATH priority is owned by base.
 
+# Base shell-loader.sh owns _shell_env_set: authoritative in interactive and
+# login shells, fill-only in non-interactive children so caller overrides
+# survive. Fall back to a plain export on a base checkout without it.
+command -v _shell_env_set >/dev/null 2>&1 ||
+  _shell_env_set() { export "$1=$2"; }
+
 if [ -d "$HOME/.bun/bin" ]; then
-  export BUN_INSTALL="$HOME/.bun"
+  _shell_env_set BUN_INSTALL "$HOME/.bun"
 fi
 
+# The Sley and agentguard blocks already yield to any inherited setting in
+# every mode, so a caller or test can point them at another repository. The
+# agentguard values are read by hook processes, whose environment comes from
+# the agent harness rather than from tool shells, so a tool shell cannot use a
+# fill-only load to weaken them.
 if [ -z "${SLEY_BARE_REPO_GIT_DIR+x}" ] && [ -d "$HOME/.dotfiles" ]; then
   export SLEY_BARE_REPO_GIT_DIR="$HOME/.dotfiles"
   export SLEY_BARE_REPO_WORK_TREE="$HOME"
