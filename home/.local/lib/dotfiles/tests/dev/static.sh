@@ -181,6 +181,36 @@ SH
   check_equal 'Explicit dev environment overrides survive Bash loading' \
     'explicit-gh|explicit-github|explicit-codex|0' "$override_output"
 
+  # Converted exports go through base's _shell_env_set. Without it (a base
+  # checkout that predates the helper) they stay plain exports; with a stub
+  # of its fill-only contract (keep any set value) a caller's values survive.
+  mkdir -p "$shell_fixture/.bun/bin"
+  # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
+  owned_probe='. "$1"; . "$2"; printf "%s|%s|%s|%s\n" "$BUN_INSTALL" "$LG_CONFIG_FILE" "$GITHOOK_PRECOMMIT_STRICT_LINT" "$DS_DEV_CHATBOT"'
+  # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
+  fill_stub='_shell_env_set() { eval "[ -n \"\${$1+x}\" ]" || export "$1=$2"; }; '
+  for owned_sh in bash zsh; do
+    command -v "$owned_sh" >/dev/null 2>&1 || continue
+    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      GITHOOK_PRECOMMIT_STRICT_LINT=0 \
+      "$owned_sh" -c "$owned_probe" \
+      _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
+    check_equal "Dev defaults are plain exports without the base helper ($owned_sh)" \
+      "$shell_fixture/.bun|$shell_fixture/.config/lazygit/config.yml|1|claude" "$owned_output"
+    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      GITHOOK_PRECOMMIT_STRICT_LINT=0 LG_CONFIG_FILE=/caller/lg.yml DS_DEV_CHATBOT=caller \
+      BUN_INSTALL=/caller/bun \
+      "$owned_sh" -c "$fill_stub$owned_probe" \
+      _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
+    check_equal "Fill-only load keeps caller dev values ($owned_sh)" \
+      "/caller/bun|/caller/lg.yml|0|caller" "$owned_output"
+    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      "$owned_sh" -c "$fill_stub$owned_probe" \
+      _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
+    check_equal "Fill-only load fills missing dev values ($owned_sh)" \
+      "$shell_fixture/.bun|$shell_fixture/.config/lazygit/config.yml|1|claude" "$owned_output"
+  done
+
   if command -v zsh >/dev/null 2>&1; then
     # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
     zsh_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \

@@ -17,7 +17,6 @@ _dr_run_agent_hook() {
         AGENTGUARD_PROCESS_DETECT=0 \
         AGENTGUARD_SLEY_GATE=0 \
         TMPDIR="$tmp" \
-        _SHELL_ENV_NONINTERACTIVE_LOADED_SHELLS='' \
         BASH_ENV="$HOME/.config/shell/env-noninteractive.sh" \
         "$hook" >"$out_file" 2>"$err_file"
   ) || rc=$?
