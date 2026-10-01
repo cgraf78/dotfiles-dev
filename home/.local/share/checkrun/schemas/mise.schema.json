@@ -66,6 +66,21 @@
         "passthrough"
       ]
     },
+    "daemon_proxy_idle_timeout": {
+      "description": "Stop this daemon after this long without proxy traffic when the proxy started it, for example \"30m\". false exempts it from idle shutdown even when pitchfork's proxy.idle_timeout is set; \"0\" does the same. Idle shutdown is off unless this or pitchfork's proxy.idle_timeout is set, and a daemon started with `mise daemons start` is never stopped for inactivity. Requires pitchfork 2.27.0.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\s*[0-9]"
+        },
+        {
+          "type": "boolean",
+          "enum": [
+            false
+          ]
+        }
+      ]
+    },
     "task_dependency_item": {
       "description": "task name and args",
       "oneOf": [
@@ -2932,9 +2947,9 @@
           "type": "object"
         },
         "includes": {
-          "description": "files/directories to include searching for tasks. Can be local paths or git repository URLs using git:: prefix (e.g., git::https://github.com/org/repo.git//path?ref=branch)",
+          "description": "files/directories to include searching for tasks. Can be local paths, git repository URLs using git:: prefix (e.g., git::https://github.com/org/repo.git//path?ref=branch), or OCI artifacts using oci:: prefix (e.g., oci::ghcr.io/org/tasks:1.0.0)",
           "items": {
-            "description": "file/directory root to include in task execution. Supports local paths and git URLs (git::https://github.com/org/repo.git//path?ref=branch)",
+            "description": "file/directory root to include in task execution. Supports local paths, git URLs (git::https://github.com/org/repo.git//path?ref=branch), and OCI artifacts (oci::ghcr.io/org/tasks:1.0.0)",
             "type": "string"
           },
           "type": "array"
@@ -4293,6 +4308,22 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/env"
+          }
+        }
+      ]
+    },
+    "include": {
+      "description": "remote config files merged into this one, ranking just below it: git::<url>//<path>.toml?ref=<ref> or oci::<registry>/<repo>[:tag|@sha256:<digest>] (the artifact holds a mise.toml). Paranoid mode requires a commit sha or digest; otherwise a branch or tag is refreshed after fetch_remote_versions_cache",
+      "oneOf": [
+        {
+          "description": "a remote config fragment",
+          "type": "string"
+        },
+        {
+          "description": "remote config fragments",
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       ]
@@ -6851,6 +6882,9 @@
               },
               "proxy_tls": {
                 "$ref": "#/$defs/daemon_proxy_tls"
+              },
+              "proxy_idle_timeout": {
+                "$ref": "#/$defs/daemon_proxy_idle_timeout"
               }
             },
             "additionalProperties": true
@@ -6909,6 +6943,9 @@
               },
               "proxy_tls": {
                 "$ref": "#/$defs/daemon_proxy_tls"
+              },
+              "proxy_idle_timeout": {
+                "$ref": "#/$defs/daemon_proxy_idle_timeout"
               }
             },
             "additionalProperties": true
@@ -6993,6 +7030,9 @@
               },
               "proxy_tls": {
                 "$ref": "#/$defs/daemon_proxy_tls"
+              },
+              "proxy_idle_timeout": {
+                "$ref": "#/$defs/daemon_proxy_idle_timeout"
               }
             },
             "additionalProperties": true
