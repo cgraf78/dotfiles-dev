@@ -5081,6 +5081,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoAstroConflictingSetDirectivesConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoAstroConflictingSetDirectivesOptions"
+        }
+      ]
+    },
+    "NoAstroConflictingSetDirectivesOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoAstroSetHtmlDirectiveConfiguration": {
       "oneOf": [
         {
@@ -7534,6 +7548,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoMeaninglessVoidOperatorConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoMeaninglessVoidOperatorOptions"
+        }
+      ]
+    },
+    "NoMeaninglessVoidOperatorOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoMisleadingCharacterClassConfiguration": {
       "oneOf": [
         {
@@ -7587,6 +7615,20 @@
       ]
     },
     "NoMisplacedAssertionOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoMisplacedListElementsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoMisplacedListElementsOptions"
+        }
+      ]
+    },
+    "NoMisplacedListElementsOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -8338,6 +8380,20 @@
       },
       "additionalProperties": false
     },
+    "NoReactObjectTypeAsDefaultPropConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoReactObjectTypeAsDefaultPropOptions"
+        }
+      ]
+    },
+    "NoReactObjectTypeAsDefaultPropOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoReactPropAssignmentsConfiguration": {
       "oneOf": [
         {
@@ -8711,6 +8767,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoSelfImportConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSelfImportOptions"
+        }
+      ]
+    },
+    "NoSelfImportOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoSetterReturnConfiguration": {
       "oneOf": [
         {
@@ -8937,6 +9007,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoSvelteExportLetConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSvelteExportLetOptions"
+        }
+      ]
+    },
+    "NoSvelteExportLetOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoSvelteLegacyConstConfiguration": {
       "oneOf": [
         {
@@ -9037,28 +9121,32 @@
       ]
     },
     "NoTailwindArbitraryValueOptions": {
-      "description": "Options for the `noTailwindArbitraryValue` rule.\n\nControls which attributes and utility functions are checked for arbitrary values.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoTailwindRawColorsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoTailwindRawColorsOptions"
+        }
+      ]
+    },
+    "NoTailwindRawColorsOptions": {
       "type": "object",
       "properties": {
-        "attributes": {
-          "description": "Additional attributes that will be checked.",
+        "allowedColors": {
+          "description": "Exact palette colors to allow, such as `slate-950` or `pink-500`. Defaults to none.",
           "type": [
             "array",
             "null"
           ],
           "items": {
             "type": "string"
-          }
-        },
-        "functions": {
-          "description": "Names of the functions or tagged templates that will be checked.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          },
+          "uniqueItems": true
         }
       },
       "additionalProperties": false
@@ -10680,6 +10768,17 @@
       "description": "A list of rules that belong to this group",
       "type": "object",
       "properties": {
+        "noAstroConflictingSetDirectives": {
+          "description": "Disallow conflicting content sources on Astro elements.\nSee https://biomejs.dev/linter/rules/no-astro-conflicting-set-directives",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoAstroConflictingSetDirectivesConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noAstroSetHtmlDirective": {
           "description": "Disallow the use of Astro's set:html directive.\nSee https://biomejs.dev/linter/rules/no-astro-set-html-directive",
           "anyOf": [
@@ -10944,11 +11043,33 @@
             }
           ]
         },
+        "noMeaninglessVoidOperator": {
+          "description": "Disallow void when it does not discard a call's return value or a thenable.\nSee https://biomejs.dev/linter/rules/no-meaningless-void-operator",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoMeaninglessVoidOperatorConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noMisleadingReturnType": {
           "description": "Detect return type annotations that are misleadingly wider than what the implementation actually returns.\nSee https://biomejs.dev/linter/rules/no-misleading-return-type",
           "anyOf": [
             {
               "$ref": "#/$defs/NoMisleadingReturnTypeConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noMisplacedListElements": {
+          "description": "Require \\<li> elements with an HTML element parent to be children of \\<ul>, \\<ol>, or \\<menu>.\nSee https://biomejs.dev/linter/rules/no-misplaced-list-elements",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoMisplacedListElementsConfiguration"
             },
             {
               "type": "null"
@@ -11142,6 +11263,17 @@
             }
           ]
         },
+        "noReactObjectTypeAsDefaultProp": {
+          "description": "Disallow array, object, and function values as default props in React components.\nSee https://biomejs.dev/linter/rules/no-react-object-type-as-default-prop",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoReactObjectTypeAsDefaultPropConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noReactStringRefs": {
           "description": "Disallow string refs in React components.\nSee https://biomejs.dev/linter/rules/no-react-string-refs",
           "anyOf": [
@@ -11175,6 +11307,17 @@
             }
           ]
         },
+        "noSelfImport": {
+          "description": "Forbid a module from importing itself.\nSee https://biomejs.dev/linter/rules/no-self-import",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSelfImportConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noSvelteAtDebugTags": {
           "description": "Disallow the use of Svelte's {@debug} tag.\nSee https://biomejs.dev/linter/rules/no-svelte-at-debug-tags",
           "anyOf": [
@@ -11191,6 +11334,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoSvelteAtHtmlTagsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noSvelteExportLet": {
+          "description": "Disallow declaring Svelte component props with export let.\nSee https://biomejs.dev/linter/rules/no-svelte-export-let",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSvelteExportLetConfiguration"
             },
             {
               "type": "null"
@@ -11224,6 +11378,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoTailwindArbitraryValueConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noTailwindRawColors": {
+          "description": "Disallow Tailwind CSS utility classes that use raw palette colors.\nSee https://biomejs.dev/linter/rules/no-tailwind-raw-colors",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoTailwindRawColorsConfiguration"
             },
             {
               "type": "null"
@@ -11677,6 +11842,17 @@
             }
           ]
         },
+        "useLogicalProperties": {
+          "description": "Enforce logical properties over physical properties.\nSee https://biomejs.dev/linter/rules/use-logical-properties",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseLogicalPropertiesConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "useMathMinMax": {
           "description": "Prefer Math.min() and Math.max() over ternaries for simple comparisons.\nSee https://biomejs.dev/linter/rules/use-math-min-max",
           "anyOf": [
@@ -11737,6 +11913,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/UsePlaywrightValidDescribeCallbackConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usePromiseRejectErrors": {
+          "description": "Require Error objects as Promise rejection reasons.\nSee https://biomejs.dev/linter/rules/use-promise-reject-errors",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsePromiseRejectErrorsConfiguration"
             },
             {
               "type": "null"
@@ -11864,11 +12051,33 @@
             }
           ]
         },
+        "useStrictBooleanExpressions": {
+          "description": "Require unambiguous boolean expressions in conditions.\nSee https://biomejs.dev/linter/rules/use-strict-boolean-expressions",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseStrictBooleanExpressionsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "useStringStartsEndsWith": {
           "description": "Prefer String#startsWith() and String#endsWith() over verbose prefix and suffix checks.\nSee https://biomejs.dev/linter/rules/use-string-starts-ends-with",
           "anyOf": [
             {
               "$ref": "#/$defs/UseStringStartsEndsWithConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "useSvelteKitRuneImports": {
+          "description": "Require importing SvelteKit's app state from $app/state instead of $app/stores.\nSee https://biomejs.dev/linter/rules/use-svelte-kit-rune-imports",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseSvelteKitRuneImportsConfiguration"
             },
             {
               "type": "null"
@@ -13349,6 +13558,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoAssignInExpressionsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoAstroConflictingSetDirectivesOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoAstroConflictingSetDirectivesOptions"
         }
       },
       "additionalProperties": false,
@@ -15951,6 +16175,31 @@
         "level"
       ]
     },
+    "RuleWithNoMeaninglessVoidOperatorOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoMeaninglessVoidOperatorOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoMisleadingCharacterClassOptions": {
       "type": "object",
       "properties": {
@@ -16014,6 +16263,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoMisplacedAssertionOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoMisplacedListElementsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoMisplacedListElementsOptions"
         }
       },
       "additionalProperties": false,
@@ -16961,6 +17225,21 @@
         "level"
       ]
     },
+    "RuleWithNoReactObjectTypeAsDefaultPropOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoReactObjectTypeAsDefaultPropOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoReactPropAssignmentsOptions": {
       "type": "object",
       "properties": {
@@ -17316,6 +17595,21 @@
         "level"
       ]
     },
+    "RuleWithNoSelfImportOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSelfImportOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoSetterReturnOptions": {
       "type": "object",
       "properties": {
@@ -17601,6 +17895,21 @@
         "level"
       ]
     },
+    "RuleWithNoSvelteExportLetOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSvelteExportLetOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoSvelteLegacyConstOptions": {
       "type": "object",
       "properties": {
@@ -17704,6 +18013,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoTailwindArbitraryValueOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoTailwindRawColorsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoTailwindRawColorsOptions"
         }
       },
       "additionalProperties": false,
@@ -21381,6 +21705,21 @@
         "level"
       ]
     },
+    "RuleWithUseLogicalPropertiesOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseLogicalPropertiesOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithUseLoneAnonymousOperationOptions": {
       "type": "object",
       "properties": {
@@ -21829,6 +22168,21 @@
         },
         "options": {
           "$ref": "#/$defs/UsePlaywrightValidDescribeCallbackOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUsePromiseRejectErrorsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UsePromiseRejectErrorsOptions"
         }
       },
       "additionalProperties": false,
@@ -22441,6 +22795,21 @@
         "level"
       ]
     },
+    "RuleWithUseStrictBooleanExpressionsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseStrictBooleanExpressionsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithUseStrictModeOptions": {
       "type": "object",
       "properties": {
@@ -22484,6 +22853,21 @@
         },
         "options": {
           "$ref": "#/$defs/UseStringStartsEndsWithOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUseSvelteKitRuneImportsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseSvelteKitRuneImportsOptions"
         }
       },
       "additionalProperties": false,
@@ -28332,6 +28716,40 @@
       "type": "object",
       "additionalProperties": false
     },
+    "UseLogicalPropertiesConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseLogicalPropertiesOptions"
+        }
+      ]
+    },
+    "UseLogicalPropertiesDirection": {
+      "type": "string",
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "UseLogicalPropertiesOptions": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "description": "The text direction used to map physical inline properties. Defaults to `\"ltr\"`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseLogicalPropertiesDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "UseLoneAnonymousOperationConfiguration": {
       "oneOf": [
         {
@@ -28757,6 +29175,20 @@
       ]
     },
     "UsePlaywrightValidDescribeCallbackOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UsePromiseRejectErrorsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUsePromiseRejectErrorsOptions"
+        }
+      ]
+    },
+    "UsePromiseRejectErrorsOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -29406,6 +29838,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "UseStrictBooleanExpressionsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseStrictBooleanExpressionsOptions"
+        }
+      ]
+    },
+    "UseStrictBooleanExpressionsOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "UseStrictModeConfiguration": {
       "oneOf": [
         {
@@ -29431,6 +29877,20 @@
       ]
     },
     "UseStringStartsEndsWithOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UseSvelteKitRuneImportsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseSvelteKitRuneImportsOptions"
+        }
+      ]
+    },
+    "UseSvelteKitRuneImportsOptions": {
       "type": "object",
       "additionalProperties": false
     },
