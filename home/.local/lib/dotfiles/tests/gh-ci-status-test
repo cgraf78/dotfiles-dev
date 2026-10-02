@@ -8,6 +8,10 @@
 
 set -o pipefail
 export NO_COLOR=1
+# jq 1.6's fromdateiso8601 applies the local zone's DST offset to UTC
+# timestamps, which would shift the replayed epochs on some hosts; gh's
+# embedded gojq does not, so pinning UTC only keeps the replay deterministic.
+export TZ=UTC
 
 # shellcheck source=dev/helpers.sh
 . "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
@@ -29,7 +33,11 @@ mkdir -p "$sched_dir"
 # active workflow ids (a missing file means none) and <repo>.workflows.fail
 # fails that call. <repo>.<id> is workflow <id>'s newest run record; per-call
 # files <repo>.<id>.<N> and <repo>.<id>.<N>.fail override the Nth read of it,
-# so --watch can see a run settle or a re-read fail.
+# so --watch can see a run settle or a re-read fail. A <repo>.<id>.json file
+# instead holds a raw GitHub runs listing that the stub pipes through the
+# command's own jq program, as gh does, so run selection is exercised end to
+# end; those cases need jq, and only the .<N>.fail per-call override applies
+# to them.
 cat >"$stub_bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STUB_LOG"
@@ -64,6 +72,10 @@ if [[ $1 == api && $2 == -X && $3 == GET ]]; then
       count=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
       printf '%s\n' "$count" >"$counter"
       [[ ! -f $dir/$repo.$id.$count.fail ]] || exit 1
+      if [[ -f $dir/$repo.$id.json ]]; then
+        jq -r "$(jq_program "$@")" "$dir/$repo.$id.json"
+        exit
+      fi
       if [[ -f $dir/$repo.$id.$count ]]; then
         cat "$dir/$repo.$id.$count"
       else
@@ -228,8 +240,8 @@ _assert_not_contains "scheduled: a repository without a default branch is not qu
   "repos/stub-user/empty/" "$(cat "$gh_log")"
 _assert_contains "scheduled: runs are read from the default branch" \
   "-f branch=main" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
-_assert_contains "scheduled: each workflow is asked for its newest run" \
-  "-F per_page=1" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
+_assert_contains "scheduled: each workflow is asked for a few recent runs" \
+  "-F per_page=5" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
 
 one_failed=$(_tmpdir)
 printf '11\n13\n' >"$one_failed/alpha.workflows"
@@ -381,6 +393,54 @@ _assert_eq "batching: scheduled records keep repository order" "$expected_order"
   "$(printf '%s\n' "$out" | awk -F'\t' '$1 == "sched" {printf "%s ", $3}')"
 
 echo ""
+echo "=== scheduled run ordering ==="
+
+# GitHub's filtered runs listing can return runs out of order, so the newest
+# run must be chosen by creation time rather than listing position. These
+# fixtures are raw listings that the stub renders with the command's own jq
+# program; the older success is listed first.
+if command -v jq >/dev/null 2>&1; then
+  order_records="$fixtures/order"
+  _rec repo alpha main aaaaaaa1111111111111111111111111111111 SUCCESS >"$order_records"
+  order_sched=$(_tmpdir)
+  printf '41\n' >"$order_sched/alpha.workflows"
+  older_at=$(jq -nr --argjson e "$((recent - 86400))" '$e | todate')
+  newer_at=$(jq -nr --argjson e "$recent" '$e | todate')
+  cat >"$order_sched/alpha.41.json" <<JSON
+{"total_count":2,"workflow_runs":[
+ {"id":900,"workflow_id":41,"name":"Tests","conclusion":"success","status":"completed","created_at":"$older_at","html_url":"https://github.test/o/alpha/actions/runs/900"},
+ {"id":800,"workflow_id":41,"name":"Tests","conclusion":"failure","status":"completed","created_at":"$newer_at","html_url":"https://github.test/o/alpha/actions/runs/800"}
+]}
+JSON
+  out=$(RECORDS=$order_records SCHED_DIR=$order_sched run --porcelain 2>&1)
+  rc=$?
+  _assert_exit "ordering: a newer failure listed after an older success fails the run" 1 "$rc"
+  _assert_contains "ordering: the overall state reflects the newest run" "state=fail" "$out"
+  _assert_contains "ordering: the newest run by creation time is reported" \
+    "sched${tab}fail${tab}alpha${tab}Tests${tab}failure${tab}$newer_at${tab}https://github.test/o/alpha/actions/runs/800" \
+    "$out"
+
+  # Runs created in the same second fall back to the larger run id, compared
+  # as a number: 10 is newer than 9 whichever is listed first.
+  for listing in '9 10' '10 9'; do
+    : >"$order_sched/alpha.41.json.runs"
+    for run_id in $listing; do
+      if [[ $run_id == 10 ]]; then conclusion=failure; else conclusion=success; fi
+      printf '{"id":%s,"workflow_id":41,"name":"Tests","conclusion":"%s","status":"completed","created_at":"%s","html_url":"https://github.test/o/alpha/actions/runs/%s"}\n' \
+        "$run_id" "$conclusion" "$newer_at" "$run_id" >>"$order_sched/alpha.41.json.runs"
+    done
+    jq -s '{total_count: length, workflow_runs: .}' "$order_sched/alpha.41.json.runs" \
+      >"$order_sched/alpha.41.json"
+    out=$(RECORDS=$order_records SCHED_DIR=$order_sched run --porcelain 2>&1)
+    _assert_contains "ordering: a same-second tie picks the larger run id (listed ${listing// /, })" \
+      "sched${tab}fail${tab}alpha${tab}Tests${tab}failure${tab}$newer_at${tab}https://github.test/o/alpha/actions/runs/10" \
+      "$out"
+  done
+else
+  echo "  SKIP: scheduled run ordering (jq unavailable)"
+fi
+
+echo ""
 echo "=== errors ==="
 
 printf 'missing-owner\n' >"$fixtures/missing"
@@ -453,17 +513,19 @@ if command -v jq >/dev/null 2>&1 && [[ -s $jq_capture ]]; then
     "$(cat "$records")" "$(jq -r "$(cat "$jq_capture")" "$fixtures/page.json")"
   _assert_eq "jq program: renders a missing owner as one record" \
     "missing-owner" "$(jq -r "$(cat "$jq_capture")" "$fixtures/missing.json")"
-  # The newest run is first in the API's listing; the epoch comes from
-  # created_at so the shell can apply the age cutoff.
+  # The newest run renders whether the listing puts it first or last; the
+  # epoch comes from created_at so the shell can apply the age cutoff.
   cat >"$fixtures/runs.json" <<'JSON'
 {"total_count":2,"workflow_runs":[
- {"workflow_id":21,"name":"Deploy\tcheck","conclusion":null,"status":"in_progress","created_at":"2026-01-02T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/21"},
- {"workflow_id":21,"name":"Deploy\tcheck","conclusion":"success","status":"completed","created_at":"2026-01-01T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/20"}
+ {"id":21,"workflow_id":21,"name":"Deploy\tcheck","conclusion":null,"status":"in_progress","created_at":"2026-01-02T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/21"},
+ {"id":20,"workflow_id":21,"name":"Deploy\tcheck","conclusion":"success","status":"completed","created_at":"2026-01-01T00:00:00Z","html_url":"https://github.test/o/alpha/actions/runs/20"}
 ]}
 JSON
+  jq '.workflow_runs |= reverse' "$fixtures/runs.json" >"$fixtures/runs-reversed.json"
   expected_run=$(_rec 21 'Deploy check' in_progress 2026-01-02T00:00:00Z 1767312000 \
     https://github.test/o/alpha/actions/runs/21)
   printf '{"total_count":0,"workflow_runs":[]}\n' >"$fixtures/no-runs.json"
+  printf '{"total_count":0}\n' >"$fixtures/no-runs-field.json"
   cat >"$fixtures/workflows.json" <<'JSON'
 {"total_count":3,"workflows":[
  {"id":11,"state":"active"},{"id":12,"state":"disabled_manually"},{"id":13,"state":"active"}
@@ -472,8 +534,12 @@ JSON
   if [[ -s $sched_jq_capture && -s $workflows_jq_capture ]]; then
     _assert_eq "jq program: renders a workflow's newest scheduled run" \
       "$expected_run" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/runs.json")"
+    _assert_eq "jq program: renders the newest run when it is listed last" \
+      "$expected_run" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/runs-reversed.json")"
     _assert_eq "jq program: a workflow without scheduled runs renders nothing" \
       "" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/no-runs.json")"
+    _assert_eq "jq program: a listing without a runs array renders nothing" \
+      "" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/no-runs-field.json")"
     _assert_eq "jq program: only active workflows are queried" $'11\n13' \
       "$(jq -r "$(cat "$workflows_jq_capture")" "$fixtures/workflows.json")"
   else
