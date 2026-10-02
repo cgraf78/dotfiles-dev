@@ -26,8 +26,8 @@ Options:
       --include-forks   Include forked repositories.
       --include-archived
                         Include archived repositories.
-      --no-scheduled    Skip scheduled workflow runs (one fewer API call per
-                        repository).
+      --no-scheduled    Skip scheduled workflow runs (saves one API call per
+                        repository plus one per active workflow).
       --porcelain       Print stable key=value summary fields followed by
                         tab-separated repo, sched, pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
