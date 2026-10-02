@@ -26,8 +26,8 @@ Options:
       --include-forks   Include forked repositories.
       --include-archived
                         Include archived repositories.
-      --no-scheduled    Skip scheduled workflow runs (one fewer API call per
-                        repository).
+      --no-scheduled    Skip scheduled workflow runs (saves one API call per
+                        repository plus one per active workflow).
       --porcelain       Print stable key=value summary fields followed by
                         tab-separated repo, sched, pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
@@ -245,10 +245,20 @@ _fetch() {
 # a shared listing of recent scheduled runs would let an hourly workflow crowd
 # a nightly one out of the window. Epoch seconds let the shell apply the age
 # cutoff without GNU/BSD `date` parsing differences.
+#
+# The newest run is chosen here rather than trusted to the listing's order:
+# the event- and branch-filtered runs listing is served from an eventually
+# consistent index and has been seen to put an older run first, which made
+# back-to-back invocations disagree. The newest run in a small page
+# (per_page in _fetch_scheduled_one) is picked by created_at, which GitHub
+# always renders as fixed-width UTC so it compares as a string, with the
+# numeric run id breaking same-second ties. This only corrects misordering
+# within that page: a run the index places beyond it, or has not listed at
+# all yet, stays invisible.
 # shellcheck disable=SC2016 # jq variables, not shell expansions.
 _sched_run_jq='
 def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
-.workflow_runs[0] // empty
+(.workflow_runs // []) | max_by([.created_at, .id]) // empty
 | [.workflow_id, .name, (.conclusion // .status), .created_at,
    (.created_at | fromdateiso8601), .html_url] | rec'
 _sched_workflows_jq='.workflows[] | select(.state == "active") | .id'
@@ -275,7 +285,9 @@ _sched_state() {
 # Write repository $1's newest scheduled run for each active workflow on
 # branch $2 to file $3 as sched records, or one schederror record when any
 # part cannot be read. The per-workflow queries run concurrently: each is
-# dominated by API latency rather than payload.
+# dominated by API latency rather than payload, so asking for a few runs per
+# workflow, for _sched_run_jq to pick the newest, costs no extra requests;
+# the responses are only larger.
 _fetch_scheduled_one() {
   local repo=$1 branch=$2 out=$3 ids id line name raw created epoch url now cutoff
   local failed=0
@@ -289,7 +301,7 @@ _fetch_scheduled_one() {
     [[ $id =~ ^[0-9]+$ ]] || continue
     {
       gh api -X GET "repos/$_owner/$repo/actions/workflows/$id/runs" \
-        -f event=schedule -f branch="$branch" -F per_page=1 \
+        -f event=schedule -f branch="$branch" -F per_page=5 \
         -F exclude_pull_requests=true --jq "$_sched_run_jq" >"$out.$id" 2>/dev/null ||
         : >"$out.$id.failed"
     } &
