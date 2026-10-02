@@ -422,6 +422,61 @@ TOML
 
   # The LSP policy query is a bounded probe: results come back through a
   # file, never Neovim's stdout. Stubs below answer through that file.
+  #
+  # The probe skips without timeout(1), and CI's controlled PATH (test/run)
+  # has none, nor does macOS without coreutils. So probe tests bring their
+  # own: stub tests use this shim, which really enforces the deadline, so they
+  # behave the same everywhere; the real-Neovim test prefers the platform's
+  # own timeout/gtimeout (BusyBox on Alpine) so its flags are exercised too.
+  _timeout_shim() {
+    cat >"$1/timeout" <<'SH'
+#!/usr/bin/env bash
+# Test stand-in for timeout(1): `timeout [-k KILL_AFTER] DURATION CMD...`.
+# Job control gives CMD and the watcher their own process groups, so the
+# deadline signals CMD's whole group, as GNU timeout does, and the watcher
+# (with its sleep) is reaped as a group once CMD finishes first.
+kill_after=1
+if [[ ${1:-} == -k ]]; then
+  kill_after=$2
+  shift 2
+fi
+duration=$1
+shift
+started=$SECONDS
+set -m
+"$@" &
+cmd=$!
+(
+  sleep "$duration"
+  kill -TERM -- "-$cmd" 2>/dev/null || exit 0
+  sleep "$kill_after"
+  kill -KILL -- "-$cmd" 2>/dev/null
+) &
+watcher=$!
+status=0
+wait "$cmd" 2>/dev/null || status=$?
+kill -TERM -- "-$watcher" 2>/dev/null
+wait "$watcher" 2>/dev/null
+# A signal death at or past the deadline is the deadline's doing.
+if ((status > 128 && SECONDS - started >= duration)); then
+  exit 124
+fi
+exit "$status"
+SH
+    chmod +x "$1/timeout"
+  }
+  _system_timeout() {
+    local candidate
+    for candidate in /usr/bin/timeout /bin/timeout \
+      /opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout \
+      ${PREFIX:+"$PREFIX/bin/timeout"}; do
+      [[ -x $candidate && ! -d $candidate ]] || continue
+      ln -s "$candidate" "$1/${candidate##*/}"
+      return 0
+    done
+    _timeout_shim "$1"
+  }
+  _timeout_shim "$doctor_bin"
   nvim_home=$(_tmpdir)
   mkdir -p "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
   nvim_calls=$(_tmpdir)/nvim-calls
@@ -537,6 +592,7 @@ NVIM
     real_tmp=$(_tmpdir)
     git_log=$(_tmpdir)/git-calls
     ln -s "$real_nvim" "$real_bin/nvim"
+    _system_timeout "$real_bin"
     cat >"$real_bin/git" <<SH
 #!/bin/sh
 printf '%s|%s\n' "\${GIT_ALLOW_PROTOCOL-unset}" "\$*" >>"$git_log"
