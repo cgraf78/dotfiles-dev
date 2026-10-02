@@ -26,9 +26,12 @@ _dr_check_dev_integrations() {
 # ---------------------------------------------------------------------------
 # Run git against the repository whose commits the hooks guard: the base
 # dotfiles client when its Git directory exists, otherwise whatever HOME is.
+# DOTFILES is a base compat global outside its documented overlay surface, so
+# derive the same default when a base does not set it.
 _dr_hooks_git() {
-  if [[ -d $DOTFILES ]]; then
-    git --git-dir="$DOTFILES" "$@"
+  local git_dir=${DOTFILES:-${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}}
+  if [[ -d $git_dir ]]; then
+    git --git-dir="$git_dir" "$@"
   else
     git -C "$HOME" "$@"
   fi

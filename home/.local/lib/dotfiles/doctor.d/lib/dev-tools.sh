@@ -5,7 +5,9 @@
 # `_dr_check_shdeps_bin_group LEVEL DEPENDENCY`); this overlay only passes its
 # dependency list. Base and overlays update independently, so an older base
 # without that module keeps the local fallback below. The source is quiet and
-# non-fatal when the module is absent.
+# non-fatal when the module is absent. The fallback deliberately has its own
+# name and is chosen at call time, so it can never replace base's helper
+# (which goes quiet when shdeps health covers bin links).
 dot_doctor_source doctor.d/lib/shdeps-links.sh || true
 
 _dr_dev_shdeps_link_issue() {
@@ -17,15 +19,17 @@ _dr_dev_shdeps_link_issue() {
 _dr_check_dev_shdeps_bin_group() {
   local level="$1" dependency="$2" rows cmd link expected extra actual
   local issue_count=0 command_count=0 conf_dir
-  # Current bases return the directory through REPLY (no subshell); reading
-  # it through a command substitution silently passed an empty directory.
-  # Bases before that contract printed it, so accept both.
+  # The base adapter returns the directory through REPLY (no subshell);
+  # reading it through a command substitution silently passed an empty
+  # directory. Guarded so a base without the adapter cannot abort the worker,
+  # and quiet so an older adapter that printed instead leaks nothing.
   REPLY=
   _dot_shdeps_conf_dir >/dev/null 2>&1 || true
   conf_dir=$REPLY
-  [[ -n $conf_dir ]] || conf_dir=$(_dot_shdeps_conf_dir 2>/dev/null) || conf_dir=
   if [[ -z $conf_dir ]]; then
-    _dr_dev_shdeps_link_issue "$level" "$dependency bin links unchecked" \
+    # Nothing is known to be wrong with the links, so this is a warning even
+    # for dependencies whose broken links would fail.
+    _dr_warn "$dependency bin links unchecked" \
       'could not resolve the shdeps config directory'
     return 0
   fi

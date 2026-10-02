@@ -8,7 +8,7 @@ dot_dev_doctor_test() {
   local installed_section fixture_health=false owner_root source_doctor host_doctor
   local grok_compat_path reg_home reg_bin reg_path reg_count python_bin hook
   local hooks_home shared_def shared_log nvim_dev_home module_path conf_def
-  local registration_def real_nvim nvim_head
+  local registration_def real_nvim nvim_head links_lib links_saved marker_def
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
   local -a modules=(
     21-dev-tools.sh
@@ -316,6 +316,15 @@ PLUGIN
   result=$(_reg_records)
   _assert_contains 'Registration table treats a symlinked OpenCode plugin as unmanaged' \
     $'warn\tOpenCode AgentGuard plugin unmanaged' "$result"
+  rm "$reg_home/.config/opencode/plugins/dotfiles-agentguard.js"
+  mv "$reg_home/plugin.js" "$reg_home/.config/opencode/plugins/dotfiles-agentguard.js"
+  marker_def=$(declare -f dot_agentguard_opencode_marker || true)
+  unset -f dot_agentguard_opencode_marker
+  result=$(_reg_records)
+  [[ -z $marker_def ]] || eval "$marker_def"
+  _assert_contains 'Registration table says so when base lacks the plugin marker helper' \
+    $'warn\tOpenCode AgentGuard plugin unchecked\tbase lacks dot_agentguard_opencode_marker' \
+    "$result"
   rm -f "$reg_bin/opencode"
 
   printf '#!/usr/bin/env bash\nexit 0\n' >"$doctor_bin/grok"
@@ -528,16 +537,54 @@ SHDEPS
   _assert_contains 'Doctor fallback passes the resolved shdeps config directory' \
     $'ok\tconf-dir bin links' "$result"
 
-  # Bases before the REPLY contract printed the directory; still accept them.
+  # An adapter that resolves nothing leaves the links unchecked, which is a
+  # warning even at fail level: no link is known to be broken.
   conf_def=$(declare -f _dot_shdeps_conf_dir)
   # shellcheck disable=SC2329  # _dr_check_dev_shdeps_bin_group invokes this.
-  _dot_shdeps_conf_dir() { printf '%s\n' "$HOME/.config/shdeps"; }
+  _dot_shdeps_conf_dir() { REPLY=; }
   result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
     DOCTOR_DIRECT_TOOL="$direct_tool" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn conf-dir)
+    _doctor_records _dr_check_dev_shdeps_bin_group fail conf-dir)
   eval "$conf_def"
-  _assert_contains 'Doctor fallback accepts an older stdout shdeps config adapter' \
-    $'ok\tconf-dir bin links' "$result"
+  _assert_contains 'Doctor fallback warns when the shdeps config dir is unresolved' \
+    $'warn\tconf-dir bin links unchecked\tcould not resolve the shdeps config directory' \
+    "$result"
+  _assert_not_contains 'Doctor fallback never fails an unchecked dependency' \
+    $'fail\t' "$result"
+
+  # Load-time selection through the real module source: a base that ships
+  # shdeps-links.sh keeps its own helper (it goes quiet under shdeps health),
+  # and an older base gets no same-named definition from dev at all.
+  links_lib=$DOT_EXTENSIONS_DIR/doctor.d/lib/shdeps-links.sh
+  links_saved=
+  if [[ -e $links_lib ]]; then
+    links_saved=$(_tmpdir)/shdeps-links.sh
+    mv "$links_lib" "$links_saved"
+  fi
+  shared_def=$(declare -f _dr_check_shdeps_bin_group || true)
+  shared_log=$(_tmpdir)/sourced-calls
+  : >"$shared_log"
+  cat >"$links_lib" <<SH
+# shellcheck shell=bash
+_dr_check_shdeps_bin_group() { printf 'base %s %s\\n' "\$1" "\$2" >>"$shared_log"; }
+SH
+  chmod 600 "$links_lib"
+  unset -f _dr_check_shdeps_bin_group
+  dot_doctor_source doctor.d/lib/dev-tools.sh
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
+    _doctor_records _dr_check_dev_tools || true)
+  _assert_eq 'Sourcing dev-tools keeps a successfully sourced base helper' \
+    $'base fail sley\nbase warn checkrun\nbase warn cmdblocks\nbase warn git-tools\nbase fail agentguard\nbase warn hive-memory' \
+    "$(<"$shared_log")"
+  _assert_not_contains 'A sourced base helper suppresses the local fallback rows' \
+    'bin links' "$result"
+  rm -f "$links_lib"
+  unset -f _dr_check_shdeps_bin_group
+  dot_doctor_source doctor.d/lib/dev-tools.sh
+  _assert_eq 'Sourcing dev-tools on an older base defines no shared-helper name' \
+    absent "$(declare -F _dr_check_shdeps_bin_group >/dev/null && printf present || printf absent)"
+  [[ -z $links_saved ]] || mv "$links_saved" "$links_lib"
+  [[ -z $shared_def ]] || eval "$shared_def"
 
   # Prefer base's shared helper when this host's base ships it; otherwise the
   # local fallback runs. Save and restore any real helper the host provides.
@@ -626,7 +673,7 @@ SHDEPS
       PATH="$hooks_home/selected-git:/usr/bin:/bin" \
         HOME="$hooks_home" XDG_CONFIG_HOME="$hooks_home/.config" \
         GIT_CONFIG_GLOBAL="$hooks_home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 \
-        DOTFILES="$hooks_home/.dotfiles" \
+        DOTFILES="${DOCTOR_DOTFILES-$hooks_home/.dotfiles}" \
         GIT="git --git-dir=$hooks_home/.dotfiles --work-tree=$hooks_home" \
         _doctor_records _dr_check_git_hooks
     )
@@ -647,6 +694,10 @@ SHDEPS
   _hooks_git config core.hooksPath /elsewhere
   result=$(_hooks_records)
   _assert_contains 'Git hooks doctor names the scope of an overriding hooksPath' \
+    $'warn\tcore.hooksPath points elsewhere\tgot /elsewhere (local)' "$result"
+  # A base whose compat does not set DOTFILES still resolves the client.
+  result=$(DOCTOR_DOTFILES='' DOT_CLIENT_GIT_DIR="$hooks_home/.dotfiles" _hooks_records)
+  _assert_contains 'Git hooks doctor derives the client git dir without DOTFILES' \
     $'warn\tcore.hooksPath points elsewhere\tgot /elsewhere (local)' "$result"
   _hooks_git config --unset core.hooksPath
   chmod -x "$hooks_home/.local/lib/dotfiles/git-hooks/commit-msg"

@@ -228,7 +228,15 @@ _dr_check_agentguard_registrations() {
         _dr_warn "$label AgentGuard plugin unmanaged" "$display"
         continue
       fi
-      marker=$(dot_agentguard_opencode_marker)
+      # The provider marker comes from base's shdeps adapter, which is not
+      # part of base's documented doctor surface; without it ownership
+      # cannot be proven, so say so instead of guessing.
+      marker=$(dot_agentguard_opencode_marker 2>/dev/null) || marker=
+      if [[ -z $marker ]]; then
+        _dr_warn "$label AgentGuard plugin unchecked" \
+          'base lacks dot_agentguard_opencode_marker'
+        continue
+      fi
     fi
     queued+=("$agent" "$kind" "$config")
     queued_labels+=("$label")
