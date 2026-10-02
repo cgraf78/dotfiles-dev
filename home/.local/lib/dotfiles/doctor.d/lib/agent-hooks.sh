@@ -89,9 +89,9 @@ _DR_AGENTGUARD_REGISTRATIONS=(
 # agent, status (ok|invalid|disabled|unmanaged|unverified), detail, and the sorted
 # agent-hook-* command names its hook entries reference. Python's json and
 # tomllib parse exactly what the agents parse; tomllib needs Python 3.11, so an
-# older interpreter still lists Codex's commands but reports the TOML syntax
-# as unverified instead of guessing. Args: plugin marker, then agent/kind/path
-# triples.
+# older interpreter still lists Codex's commands (and line-matches the
+# features.hooks switch) but reports the TOML syntax as unverified instead of
+# guessing. Args: plugin marker, then agent/kind/path triples.
 _dr_agentguard_inspect() {
   # -I: ignore PYTHONPATH and the cwd (the worker runs in HOME), so a stray
   # ~/json.py cannot shadow the standard library.
@@ -108,6 +108,29 @@ NAME = re.compile(r"(?<![A-Za-z0-9_/-])agent-hook-[a-z0-9]+(?:-[a-z0-9]+)*")
 TOML_COMMAND = re.compile(
     r"""^\s*command\s*=\s*("(?:[^"\\\n]|\\.)*"|'[^'\n]*')""", re.MULTILINE
 )
+# Without tomllib, a line match for the switch that turns Codex hooks off:
+# `hooks = false` under a `[features]` header, or a top-level
+# `features.hooks = false`. Comments and quoted keys are out of scope; this
+# only has to catch the plain form Codex and AgentGuard write.
+# Array-of-tables headers ([[x]]) end the [features] table too.
+TOML_HEADER = re.compile(r"^\s*\[\[?([^\[\]]+)\]\]?\s*(?:#.*)?$")
+TOML_HOOKS_OFF = re.compile(r"^\s*hooks\s*=\s*false\s*(?:#.*)?$")
+TOML_DOTTED_HOOKS_OFF = re.compile(r"^\s*features\s*\.\s*hooks\s*=\s*false\s*(?:#.*)?$")
+
+
+def toml_hooks_off(text):
+    table = ""
+    for line in text.splitlines():
+        header = TOML_HEADER.match(line)
+        if header:
+            table = header.group(1).strip()
+        elif table == "features" and TOML_HOOKS_OFF.match(line):
+            return True
+        elif table == "" and TOML_DOTTED_HOOKS_OFF.match(line):
+            return True
+    return False
+
+
 # In the JavaScript plugin, only whole quoted literals name a command; a
 # template such as `agent-hook-${phase}` or a comment does not.
 JS_LITERAL = re.compile(r"""["'`](agent-hook-[a-z0-9]+(?:-[a-z0-9]+)*)["'`]""")
@@ -162,6 +185,8 @@ for index in range(0, len(triples), 3):
                 import tomllib
             except ImportError:
                 status, sources = "unverified", TOML_COMMAND.findall(text)
+                if toml_hooks_off(text):
+                    status, detail = "disabled", "features.hooks is false"
             else:
                 document = tomllib.loads(text)
         else:

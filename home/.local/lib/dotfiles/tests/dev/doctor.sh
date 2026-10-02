@@ -9,6 +9,8 @@ dot_dev_doctor_test() {
   local grok_compat_path reg_home reg_bin reg_path reg_count python_bin hook
   local hooks_home shared_def shared_log nvim_dev_home module_path conf_def
   local registration_def real_nvim nvim_head links_lib links_saved marker_def
+  local nvim_home nvim_calls started real_home real_bin real_tmp git_log
+  local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
   local -a modules=(
     21-dev-tools.sh
@@ -251,6 +253,7 @@ TOML
   reg_count=$(wc -l <"$reg_home/python-calls")
   _assert_eq 'Registration table inspects every installed agent in one python3 process' \
     1 "${reg_count//[[:space:]]/}"
+  # Holds with or without tomllib: the fallback line-matches this switch.
   printf '[features]\nhooks = false\n' >>"$reg_home/.codex/config.toml"
   result=$(_reg_records)
   _assert_contains 'Registration table warns when Codex hooks are switched off' \
@@ -288,6 +291,29 @@ TOML
   _assert_contains 'Registration table reads Codex commands without tomllib' \
     $'ok\tCodex AgentGuard hooks\t1 command(s) in ~/.codex/config.toml; TOML syntax unchecked' \
     "$result"
+  # Without tomllib the hooks switch is still read, in both plain forms, and
+  # an enabled switch or another table's `hooks` key does not trip it.
+  _reg_no_tomllib() {
+    mv "$reg_bin/python3" "$reg_bin/python3.counting"
+    cp "$reg_home/no-tomllib-python3" "$reg_bin/python3"
+    _reg_records
+    mv "$reg_bin/python3.counting" "$reg_bin/python3"
+  }
+  printf '[features]\nhooks = false # off for now\n' >>"$reg_home/.codex/config.toml"
+  result=$(_reg_no_tomllib)
+  _assert_contains 'Registration table reads [features] hooks = false without tomllib' \
+    $'warn\tCodex AgentGuard hooks disabled\tfeatures.hooks is false in ~/.codex/config.toml' \
+    "$result"
+  printf 'features.hooks = false\n[[hooks.PreToolUse.hooks]]\ncommand = "agent-hook-pre-bash"\n' \
+    >"$reg_home/.codex/config.toml"
+  result=$(_reg_no_tomllib)
+  _assert_contains 'Registration table reads dotted features.hooks = false without tomllib' \
+    $'warn\tCodex AgentGuard hooks disabled' "$result"
+  printf '[features]\nhooks = true\n[other]\nhooks = false\n[features]\n[[mcp.x]]\nhooks = false\n[[hooks.PreToolUse.hooks]]\ncommand = "agent-hook-pre-bash"\n' \
+    >"$reg_home/.codex/config.toml"
+  result=$(_reg_no_tomllib)
+  _assert_contains 'Registration table ignores enabled or unrelated hooks keys without tomllib' \
+    $'ok\tCodex AgentGuard hooks\t1 command(s)' "$result"
   rm -f "$reg_bin/codex" "$reg_bin/muse" "$reg_bin/gemini" "$reg_bin/grok"
 
   _reg_agent opencode
@@ -394,9 +420,19 @@ TOML
   _assert_eq 'Doctor parser returns empty for an absent key' '' \
     "$(_dr_dev_value covered $'noise\nenabled=bashls')"
 
+  # The LSP policy query is a bounded probe: results come back through a
+  # file, never Neovim's stdout. Stubs below answer through that file.
+  nvim_home=$(_tmpdir)
+  mkdir -p "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
+  nvim_calls=$(_tmpdir)/nvim-calls
+  _nvim_policy() {
+    HOME="$nvim_home" XDG_DATA_HOME="$nvim_home/.local/share" \
+      PATH="$doctor_bin:$PATH" _doctor_records _dr_check_nvim_lsp_policy
+  }
   cat >"$doctor_bin/nvim" <<'NVIM'
 #!/usr/bin/env bash
-printf 'enabled=bashls pyright\ncovered=bashls\ndot_doctor_query=complete\n'
+printf 'enabled=bashls pyright\ncovered=bashls\ndot_doctor_query=complete\n' \
+  >"$DOT_NVIM_PROBE_RESULT"
 python3 - <<'PY'
 print('diagnostic=' + ('x' * 262144))
 PY
@@ -406,40 +442,88 @@ NVIM
   set +e
   (
     set -euo pipefail
-    HOME="$doctor_home" PATH="$doctor_bin:$PATH" _dr_check_nvim_lsp_policy
-  ) 2>"$doctor_home/nvim-policy-stderr"
+    HOME="$nvim_home" XDG_DATA_HOME="$nvim_home/.local/share" \
+      PATH="$doctor_bin:$PATH" _dr_check_nvim_lsp_policy
+  ) 2>"$nvim_home/nvim-policy-stderr"
   status=$?
   set -e
-  _assert_eq 'Doctor parses verbose Nvim output without a pipefail race' 0 "$status"
+  _assert_eq 'Doctor runs the LSP policy probe under the worker shell policy' 0 "$status"
   result=$(<"$result_file")
-  _assert_contains 'Doctor preserves parsed drift after verbose Nvim output' \
+  _assert_contains 'Doctor reports parsed drift from the probe result file' \
     'missing fallback policy for enabled server(s): pyright' "$result"
 
-  # `+luafile` errors leave Nvim's exit status at 0 with empty answers; that
-  # must not read as two matching (empty) server lists.
+  # A crash that leaves no result must not read as two matching (empty)
+  # server lists.
   cat >"$doctor_bin/nvim" <<'NVIM'
 #!/usr/bin/env bash
 printf 'E5113: Lua chunk: module config.mason-policy not found\n' >&2
 exit 0
 NVIM
   chmod +x "$doctor_bin/nvim"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_nvim_lsp_policy)
+  result=$(_nvim_policy)
   _assert_contains 'Doctor does not report a crashed LSP policy query as in sync' \
-    $'warn\tnvim LSP fallback policy check failed' "$result"
+    $'warn\tnvim LSP fallback policy check failed\tnvim exited with status 0: E5113: Lua chunk' \
+    "$result"
   _assert_not_contains 'Doctor withholds the in-sync row without the query sentinel' \
     'in sync' "$result"
   cat >"$doctor_bin/nvim" <<'NVIM'
 #!/usr/bin/env bash
-printf 'dot_doctor_error=lua: bad = value\n'
+printf 'dot_doctor_error=lua: bad = value\n' >"$DOT_NVIM_PROBE_RESULT"
 NVIM
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_nvim_lsp_policy)
+  result=$(_nvim_policy)
   _assert_contains 'Doctor reports the LSP policy query error in one line' \
     $'warn\tnvim LSP fallback policy check failed\tlua: bad = value' "$result"
 
-  # Run the real query through a real Nvim (not the dotfiles launcher) with an
-  # empty config: require() fails, and the check must say so in one line.
+  # Bounded: a Neovim that never answers costs the deadline, not doctor.
+  cat >"$doctor_bin/nvim" <<'NVIM'
+#!/usr/bin/env bash
+exec sleep 30
+NVIM
+  started=$SECONDS
+  result=$(_DR_DEV_NVIM_PROBE_TIMEOUT=1 _nvim_policy)
+  _assert_contains 'Doctor bounds a hung LSP policy query' \
+    $'warn\tnvim LSP fallback policy check timed out\tno result within 1s' "$result"
+  _assert_eq 'Doctor returns within the probe deadline' yes \
+    "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+
+  # Stat-level skips never start Neovim at all.
+  cat >"$doctor_bin/nvim" <<NVIM
+#!/usr/bin/env bash
+printf 'called\n' >>"$nvim_calls"
+NVIM
+  : >"$nvim_calls"
+  mkdir -p "$nvim_home/.local/share/nvim/lazy"
+  : >"$nvim_home/.local/share/nvim/lazy/lazy.nvim.update.lock"
+  result=$(_nvim_policy)
+  _assert_contains 'Doctor skips the LSP policy query while a Lazy update runs' \
+    $'skip\tnvim LSP fallback policy\ta Lazy plugin update is running' "$result"
+  touch -t 200001010000 "$nvim_home/.local/share/nvim/lazy/lazy.nvim.update.lock"
+  result=$(_nvim_policy)
+  _assert_contains 'Doctor names a stale Lazy update lock as the skip reason' \
+    $'skip\tnvim LSP fallback policy\tstale Lazy update lock' "$result"
+  rm "$nvim_home/.local/share/nvim/lazy/lazy.nvim.update.lock"
+  rmdir "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
+  result=$(_nvim_policy)
+  _assert_contains 'Doctor skips the LSP policy query without lazy.nvim' \
+    $'skip\tnvim LSP fallback policy\tlazy.nvim is not installed' "$result"
+  _assert_eq 'Doctor never starts Neovim for a skipped LSP policy query' '' "$(<"$nvim_calls")"
+  # Everything the probe and the stub need except timeout(1), so a regression
+  # that ran user config without a deadline would actually log a call.
+  mkdir -p "$nvim_home/no-timeout-bin"
+  for hook in bash env mktemp mkdir rm cat; do
+    ln -s "$(type -P "$hook")" "$nvim_home/no-timeout-bin/$hook"
+  done
+  cp "$doctor_bin/nvim" "$nvim_home/no-timeout-bin/nvim"
+  mkdir -p "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
+  result=$(HOME="$nvim_home" XDG_DATA_HOME="$nvim_home/.local/share" \
+    PATH="$nvim_home/no-timeout-bin" _doctor_records _dr_check_nvim_lsp_policy)
+  _assert_contains 'Doctor skips the LSP policy query without a timeout command' \
+    $'skip\tnvim LSP fallback policy\ttimeout command not available' "$result"
+  _assert_eq 'Doctor never runs user config without a deadline' '' "$(<"$nvim_calls")"
+
+  # Real Neovim (not the dotfiles launcher) on a fixture config: the query
+  # must answer, leave the fixture HOME byte-for-byte unchanged, and never
+  # reach the network.
   real_nvim=${DOT_TEST_HOST_HOME:-$HOME}/.local/share/neovim/neovim/bin/nvim
   if [[ ! -x $real_nvim ]]; then
     real_nvim=$(type -P nvim || true)
@@ -448,16 +532,72 @@ NVIM
     [[ $nvim_head != '#!' ]] || real_nvim=
   fi
   if [[ -n $real_nvim ]]; then
-    mkdir -p "$doctor_home/real-nvim" "$doctor_home/xdg"
-    ln -sf "$real_nvim" "$doctor_home/real-nvim/nvim"
-    mkdir -p "$doctor_home/xdg/runtime" "$doctor_home/xdg/tmp"
-    chmod 700 "$doctor_home/xdg/runtime"
-    result=$(HOME="$doctor_home" XDG_CONFIG_HOME="$doctor_home/xdg/config" \
-      XDG_DATA_HOME="$doctor_home/xdg/data" XDG_STATE_HOME="$doctor_home/xdg/state" \
-      XDG_CACHE_HOME="$doctor_home/xdg/cache" XDG_RUNTIME_DIR="$doctor_home/xdg/runtime" \
-      XDG_CONFIG_DIRS="$doctor_home/xdg/config-dirs" XDG_DATA_DIRS="$doctor_home/xdg/data-dirs" \
-      TMPDIR="$doctor_home/xdg/tmp" PATH="$doctor_home/real-nvim:$PATH" \
-      _doctor_records _dr_check_nvim_lsp_policy)
+    real_home=$(_tmpdir)
+    real_bin=$(_tmpdir)
+    real_tmp=$(_tmpdir)
+    git_log=$(_tmpdir)/git-calls
+    ln -s "$real_nvim" "$real_bin/nvim"
+    cat >"$real_bin/git" <<SH
+#!/bin/sh
+printf '%s|%s\n' "\${GIT_ALLOW_PROTOCOL-unset}" "\$*" >>"$git_log"
+exit 128
+SH
+    chmod +x "$real_bin/git"
+    mkdir -p "$real_home/.config/nvim/lua/config" \
+      "$real_home/.local/share/nvim/lazy/lazy.nvim/lua/lazy" \
+      "$real_home/.local/share/nvim/lazy/lazy.nvim/lua/lazyvim" \
+      "$real_home/.local/state" "$real_home/.cache"
+    # Shaped like the editor overlay's config.lazy: bytecode caching on, and
+    # a bootstrap clone unless plugin installs are disabled.
+    cat >"$real_home/.config/nvim/init.lua" <<'LUA'
+vim.loader.enable()
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.g.plugin_install_disabled then
+  vim.fn.system({ "git", "clone", "https://github.com/folke/lazy.nvim.git", lazypath })
+end
+if vim.env.DOCTOR_CONFIG_FETCHES == "1" then
+  vim.fn.system({ "git", "fetch", "https://github.com/folke/lazy.nvim.git" })
+end
+vim.opt.rtp:prepend(lazypath)
+LUA
+    printf '%s\n' 'return { lsp_server_packages = function() return { bashls = "bash-language-server" } end }' \
+      >"$real_home/.config/nvim/lua/config/mason-policy.lua"
+    printf '%s\n' 'return { load = function() end }' \
+      >"$real_home/.local/share/nvim/lazy/lazy.nvim/lua/lazy/init.lua"
+    printf '%s\n' 'return { opts = function() return { servers = { bashls = {}, ["*"] = {} } } end }' \
+      >"$real_home/.local/share/nvim/lazy/lazy.nvim/lua/lazyvim/util.lua"
+    _real_home_snapshot() (
+      shopt -s globstar dotglob nullglob
+      for entry in "$real_home"/**; do
+        printf '%s %s\n' "$entry" "$(stat -c '%s %Y' "$entry" 2>/dev/null || stat -f '%z %m' "$entry")"
+      done
+    )
+    _real_policy() {
+      HOME="$real_home" XDG_CONFIG_HOME="$real_home/.config" \
+        XDG_DATA_HOME="$real_home/.local/share" XDG_STATE_HOME="$real_home/.local/state" \
+        XDG_CACHE_HOME="$real_home/.cache" TMPDIR="$real_tmp" \
+        PATH="$real_bin:$PATH" _doctor_records _dr_check_nvim_lsp_policy
+    }
+    before_snapshot=$(_real_home_snapshot)
+    : >"$git_log"
+    result=$(_real_policy)
+    _assert_contains 'Doctor runs the real LSP policy query to completion' \
+      $'ok\tnvim LSP fallback policy in sync' "$result"
+    _assert_eq 'The LSP policy probe writes nothing under HOME' \
+      "$before_snapshot" "$(_real_home_snapshot)"
+    _assert_eq 'The LSP policy probe removes its private temp directory' '' \
+      "$(
+        shopt -s dotglob nullglob
+        printf '%s' "$real_tmp"/*
+      )"
+    _assert_eq 'The LSP policy probe disables plugin bootstrap clones' '' "$(<"$git_log")"
+    result=$(DOCTOR_CONFIG_FETCHES=1 _real_policy)
+    _assert_contains 'A config that fetches anyway gets only file-protocol git' \
+      'file|fetch https://github.com/folke/lazy.nvim.git' "$(<"$git_log")"
+    _assert_not_contains 'No git call escapes the file-protocol restriction' \
+      'unset|' "$(<"$git_log")"
+    rm "$real_home/.config/nvim/lua/config/mason-policy.lua"
+    result=$(_real_policy)
     _assert_contains 'Doctor reports a real Nvim query failure instead of in sync' \
       $'warn\tnvim LSP fallback policy check failed\t' "$result"
     _assert_contains 'Doctor names the failing module from the real query' \
