@@ -41,26 +41,39 @@ _dr_lsp_policy_diff() {
 }
 
 _dr_check_nvim_lsp_policy() {
-  local query_file output status enabled covered drift missing stale
+  local query_file output status enabled covered drift missing stale error
   query_file=$(mktemp "${TMPDIR:-/tmp}/dot-nvim-lsp-policy.XXXXXX") || {
     _dr_warn 'nvim LSP fallback policy check failed' 'could not create temp file'
     return 0
   }
+  # `+luafile` reports a Lua error on stderr but Nvim still exits 0, and an
+  # empty answer reads as two empty, matching lists. Run the query under pcall
+  # and require its closing sentinel, so only a query that ran to completion
+  # can report "in sync".
   cat >"$query_file" <<'LUA'
-local policy = require("config.mason-policy")
-require("lazy").load({ plugins = { "nvim-lspconfig" } })
-local opts = require("lazyvim.util").opts("nvim-lspconfig")
-local enabled, covered = {}, {}
-for server, server_opts in pairs(opts.servers or {}) do
-  if server ~= "*" and type(server_opts) == "table" and server_opts.enabled ~= false then
-    table.insert(enabled, server)
+local ok, err = pcall(function()
+  local policy = require("config.mason-policy")
+  require("lazy").load({ plugins = { "nvim-lspconfig" } })
+  local opts = require("lazyvim.util").opts("nvim-lspconfig")
+  local enabled, covered = {}, {}
+  for server, server_opts in pairs(opts.servers or {}) do
+    if server ~= "*" and type(server_opts) == "table" and server_opts.enabled ~= false then
+      table.insert(enabled, server)
+    end
   end
+  for server, _ in pairs(policy.lsp_server_packages()) do table.insert(covered, server) end
+  table.sort(enabled)
+  table.sort(covered)
+  print("enabled=" .. table.concat(enabled, " "))
+  print("covered=" .. table.concat(covered, " "))
+end)
+if ok then
+  print("dot_doctor_query=complete")
+else
+  -- One bounded line: doctor details are single-line and the full require()
+  -- search path would bury the reason.
+  print("dot_doctor_error=" .. tostring(err):gsub("%s+", " "):sub(1, 200))
 end
-for server, _ in pairs(policy.lsp_server_packages()) do table.insert(covered, server) end
-table.sort(enabled)
-table.sort(covered)
-print("enabled=" .. table.concat(enabled, " "))
-print("covered=" .. table.concat(covered, " "))
 LUA
   status=0
   output=$(nvim -i NONE --headless "${_DR_NVIM_DEV_SESSION_GUARD[@]}" \
@@ -69,6 +82,17 @@ LUA
   if [[ $status -ne 0 ]]; then
     _dr_warn 'nvim LSP fallback policy check failed' \
       'run nvim headless with Mason disabled to debug'
+    return 0
+  fi
+  if [[ $(_dr_dev_value dot_doctor_query "$output") != complete ]]; then
+    # Not _dr_dev_value: Lua error text may itself contain '='.
+    error=
+    if [[ $output == *dot_doctor_error=* ]]; then
+      error=${output#*dot_doctor_error=}
+      error=${error%%$'\n'*}
+    fi
+    _dr_warn 'nvim LSP fallback policy check failed' \
+      "${error:-query did not complete; run nvim headless with Mason disabled to debug}"
     return 0
   fi
   enabled=$(_dr_dev_value enabled "$output")
@@ -86,30 +110,13 @@ LUA
   fi
 }
 
-_dr_nvim_health_error_counts() {
-  local health_file="$1"
-  awk '
-    function should_ignore() {
-      if (section == "image" && image_disabled) return 1
-      if (section == "input" && /`vim\.ui\.input` is not set/) return 1
-      if (section == "notifier" && /is not ready/) return 1
-      return 0
-    }
-    /^Snacks\.image ~/ { section="image"; image_disabled=0; next }
-    /^Snacks\.input ~/ { section="input"; next }
-    /^Snacks\.notifier ~/ { section="notifier"; next }
-    /^[^[:space:]].* ~$/ && !/^Snacks\.(image|input|notifier) ~/ { section=""; image_disabled=0 }
-    section == "image" && /setup \{disabled\}/ { image_disabled=1; next }
-    /ERROR/ { if (should_ignore()) ignored_count++; else actionable++ }
-    END { printf "%d %d\n", actionable + 0, ignored_count + 0 }
-  ' "$health_file"
-}
-
 _dr_check_nvim_dev() {
-  local missing=0 path
+  local missing=0 module_path
   _dr_section 'Nvim development tooling'
 
-  for path in \
+  # Report only absent modules: present ones are already covered by core's
+  # overlay link check, and a row per healthy file was noise.
+  for module_path in \
     "$HOME/.config/nvim/lua/config/mason-policy.lua" \
     "$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua" \
     "$HOME/.config/nvim/lua/dotfiles/plugin_overrides/dev-tools.lua" \
@@ -117,15 +124,16 @@ _dr_check_nvim_dev() {
     "$HOME/.config/nvim/lua/dotfiles/final_policy/mason.lua" \
     "$HOME/.config/nvim/lua/plugins/formatting.lua" \
     "$HOME/.config/nvim/lua/plugins/linting.lua"; do
-    if [[ -r $path ]]; then
-      _dr_ok "${path##*/}" 'configured'
-    else
-      _dr_fail "${path##*/} missing" "$(_dr_tilde "$path")"
+    if [[ ! -r $module_path ]]; then
+      _dr_fail "${module_path##*/} missing" "$(_dr_tilde "$module_path")"
       missing=$((missing + 1))
     fi
   done
 
   ((missing == 0)) || return 0
-  command -v nvim >/dev/null 2>&1 || return 0
+  if ! command -v nvim >/dev/null 2>&1; then
+    _dr_skip 'nvim LSP fallback policy' 'nvim not installed'
+    return 0
+  fi
   _dr_check_nvim_lsp_policy
 }

@@ -24,37 +24,80 @@ _dr_check_dev_integrations() {
 # ---------------------------------------------------------------------------
 # Git hooks
 # ---------------------------------------------------------------------------
+# Run git against the repository whose commits the hooks guard: the base
+# dotfiles client when its Git directory exists, otherwise whatever HOME is.
+_dr_hooks_git() {
+  if [[ -d $DOTFILES ]]; then
+    git --git-dir="$DOTFILES" "$@"
+  else
+    git -C "$HOME" "$@"
+  fi
+}
+
 _dr_check_git_hooks() {
   _dr_section "Git hooks"
 
   local want_hooks="$HOME/.local/lib/dotfiles/git-hooks"
-  # Check global first, then fall back to the dotfiles repo-local config.
-  local actual_hooks scope=""
-  actual_hooks=$(git config --get --global core.hooksPath 2>/dev/null || echo "")
-  if [[ -n "$actual_hooks" ]]; then
-    scope="global"
-  elif [[ -d "$DOTFILES" ]]; then
-    actual_hooks=$($GIT config --get core.hooksPath 2>/dev/null || echo "")
-    [[ -n "$actual_hooks" ]] && scope="repo-local"
+  local output="" status=0 scope="" actual_hooks="" hook name display
+  local hook_count=0 issue_count=0
+
+  # One lookup with Git's own precedence and include handling yields the value
+  # a commit would actually use, labelled with the scope that set it. Reading
+  # `--global` first skipped include.path files, so a hooksPath set through an
+  # include fell through to the repository lookup and was mislabelled.
+  output=$(_dr_hooks_git config --show-scope --get core.hooksPath 2>/dev/null) ||
+    status=$?
+  if ((status == 129)); then
+    # Git before 2.26 has no --show-scope; keep the value, drop the label.
+    status=0
+    output=$(_dr_hooks_git config --get core.hooksPath 2>/dev/null) || status=$?
+    output=$'scope unknown\t'$output
   fi
-  # Normalize ~
+  case $status in
+    0) IFS=$'\t' read -r scope actual_hooks <<<"$output" ;;
+    1) ;; # Git's exit status for an unset key.
+    *)
+      _dr_warn "core.hooksPath unchecked" "git config exited $status"
+      ;;
+  esac
+  # Git expands a leading ~ in pathname values; compare the expanded form.
   actual_hooks="${actual_hooks/#\~/$HOME}"
 
-  if [[ "$actual_hooks" == "$want_hooks" ]]; then
-    _dr_ok "core.hooksPath" "$(_dr_tilde "$actual_hooks") ($scope)"
-  elif [[ -z "$actual_hooks" ]]; then
+  if [[ -n "$actual_hooks" && "${actual_hooks%/}" == "$want_hooks" ]]; then
+    _dr_ok "core.hooksPath" "$(_dr_tilde "$want_hooks") ($scope)"
+  elif [[ -n "$actual_hooks" ]]; then
+    _dr_warn "core.hooksPath points elsewhere" \
+      "got $actual_hooks ($scope), expected $(_dr_tilde "$want_hooks")"
+  elif ((status <= 1)); then
     _dr_warn "core.hooksPath not set" \
-      "dotfiles ship a pre-commit hook — see $(_dr_tilde "$want_hooks")"
-  else
-    _dr_warn "core.hooksPath points elsewhere" "got $actual_hooks, expected $(_dr_tilde "$want_hooks")"
+      "dotfiles ship Git hooks in $(_dr_tilde "$want_hooks")"
   fi
 
-  if [[ -x "$want_hooks/pre-commit" ]]; then
-    _dr_ok "pre-commit hook present and executable"
-  elif [[ -f "$want_hooks/pre-commit" ]]; then
-    _dr_fail "pre-commit hook not executable" "chmod +x $want_hooks/pre-commit"
-  else
-    _dr_warn "pre-commit hook missing" "$want_hooks/pre-commit"
+  # Check every shipped hook rather than only pre-commit: Git silently skips a
+  # hook it cannot execute, so a lost mode bit or a dangling link disables that
+  # gate without any error. Shipped hooks and helpers have no dot in their
+  # names; README.md, *.sample, *.orig, and editor backups are not hooks.
+  for hook in "$want_hooks"/*; do
+    [[ -e $hook || -L $hook ]] || continue
+    name=${hook##*/}
+    case $name in *.* | *~) continue ;; esac
+    hook_count=$((hook_count + 1))
+    display=$(_dr_tilde "$hook")
+    if [[ ! -e $hook ]]; then
+      issue_count=$((issue_count + 1))
+      _dr_fail "$name hook link broken" "$display"
+    elif [[ ! -f $hook ]]; then
+      issue_count=$((issue_count + 1))
+      _dr_fail "$name hook is not a file" "$display"
+    elif [[ ! -x $hook ]]; then
+      issue_count=$((issue_count + 1))
+      _dr_fail "$name hook not executable" "chmod +x $display"
+    fi
+  done
+  if ((hook_count == 0)); then
+    _dr_warn "Git hooks missing" "$(_dr_tilde "$want_hooks")"
+  elif ((issue_count == 0)); then
+    _dr_ok "Git hooks executable" "$hook_count hook(s)"
   fi
 }
 
