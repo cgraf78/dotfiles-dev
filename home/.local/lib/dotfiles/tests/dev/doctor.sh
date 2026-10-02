@@ -586,7 +586,12 @@ NVIM
     [[ -z $real_nvim ]] || IFS= read -r -n 2 nvim_head <"$real_nvim" || true
     [[ $nvim_head != '#!' ]] || real_nvim=
   fi
-  if [[ -n $real_nvim ]]; then
+  # The fixture config calls vim.loader, which Nvim before 0.9 lacks, so an
+  # unsupported editor (CentOS EPEL ships 0.8) would fail for that reason
+  # alone; test/run decides support once, from the same minimum as nvim-dev.
+  if [[ -n $real_nvim && ${DOT_TEST_NVIM_SUPPORTED:-true} != true ]]; then
+    _pass 'Real Nvim LSP policy query needs Neovim 0.11.2 or newer (skipped)'
+  elif [[ -n $real_nvim ]]; then
     real_home=$(_tmpdir)
     real_bin=$(_tmpdir)
     real_tmp=$(_tmpdir)

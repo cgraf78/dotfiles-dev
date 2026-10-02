@@ -535,6 +535,9 @@ fi
 nvim_version=$($nvim_path --version 2>/dev/null | sed -n '1s/^NVIM v//p')
 nvim_supported=false
 if nvim_version_supported "$nvim_version"; then nvim_supported=true; fi
+# Suites that run the real editor against a LazyVim-shaped config read this
+# instead of re-parsing the version: older Nvim lacks APIs the config uses.
+export DOT_TEST_NVIM_SUPPORTED=$nvim_supported
 if [[ $mode == --provider-compatibility && $nvim_supported != true ]]; then
   echo "provider compatibility requires Neovim 0.11.2 or newer, got ${nvim_version:-unknown}" >&2
   exit 1
