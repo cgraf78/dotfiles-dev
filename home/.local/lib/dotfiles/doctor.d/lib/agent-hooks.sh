@@ -67,39 +67,277 @@ _dr_probe_ok() {
   return "$rc"
 }
 
-_dr_check_opencode_agentguard() {
-  command -v "${DOT_OPENCODE_COMMAND:-opencode}" >/dev/null 2>&1 || return 0
+# Every agent runtime the dev merge hooks register AgentGuard for, as
+# command|display name|config format|config path relative to HOME. Keep this
+# aligned with merge-hooks.d/{claude,codex,muse,gemini,grok,opencode}.sh: the
+# command is the presence probe those hooks use, and the path is the file they
+# write. A merge that fails only warns and leaves the agent's last config in
+# place, so this table is what notices an agent running without its guards.
+_DR_AGENTGUARD_REGISTRATIONS=(
+  'claude|Claude Code|json|.claude/settings.json'
+  'codex|Codex|toml|.codex/config.toml'
+  'muse|Muse|json|.config/muse/settings.json'
+  'gemini|Gemini CLI|json|.gemini/settings.json'
+  'grok|Grok|json|.grok/hooks/agentguard.json'
+  'opencode|OpenCode|plugin|.config/opencode/plugins/dotfiles-agentguard.js'
+)
 
-  local plugin="$HOME/.config/opencode/plugins/dotfiles-agentguard.js"
-  local first_line=""
+# Parse every queued agent config in one Python process (doctor's per-check
+# budget is a handful of processes) and print one line per config, fields
+# separated by US (\x1f) because read collapses runs of whitespace IFS and
+# would shift an empty field:
+# agent, status (ok|invalid|disabled|unmanaged|unverified), detail, and the sorted
+# agent-hook-* command names its hook entries reference. Python's json and
+# tomllib parse exactly what the agents parse; tomllib needs Python 3.11, so an
+# older interpreter still lists Codex's commands (and line-matches the
+# features.hooks switch) but reports the TOML syntax as unverified instead of
+# guessing. Args: plugin marker, then agent/kind/path triples.
+_dr_agentguard_inspect() {
+  # -I: ignore PYTHONPATH and the cwd (the worker runs in HOME), so a stray
+  # ~/json.py cannot shadow the standard library.
+  python3 -I - "$@" <<'PY'
+import json
+import re
+import sys
 
-  if [[ ! -e "$plugin" && ! -L "$plugin" ]]; then
-    _dr_warn "OpenCode AgentGuard plugin missing" "run 'dot update'"
-    return 0
-  fi
-  if [[ ! -f "$plugin" || -L "$plugin" ]]; then
-    _dr_warn "OpenCode AgentGuard plugin unmanaged" "$(_dr_tilde "$plugin")"
-    return 0
-  fi
+# Bare names only: AgentGuard registers PATH-resolved commands, and a hook
+# configured by absolute path is the user's own.
+NAME = re.compile(r"(?<![A-Za-z0-9_/-])agent-hook-[a-z0-9]+(?:-[a-z0-9]+)*")
+# Without tomllib, read only the quoted value of `command = ...` assignments,
+# never comments (whole-line or trailing).
+TOML_COMMAND = re.compile(
+    r"""^\s*command\s*=\s*("(?:[^"\\\n]|\\.)*"|'[^'\n]*')""", re.MULTILINE
+)
+# Without tomllib, a line match for the switch that turns Codex hooks off:
+# `hooks = false` under a `[features]` header, or a top-level
+# `features.hooks = false`. Comments and quoted keys are out of scope; this
+# only has to catch the plain form Codex and AgentGuard write.
+# Array-of-tables headers ([[x]]) end the [features] table too.
+TOML_HEADER = re.compile(r"^\s*\[\[?([^\[\]]+)\]\]?\s*(?:#.*)?$")
+TOML_HOOKS_OFF = re.compile(r"^\s*hooks\s*=\s*false\s*(?:#.*)?$")
+TOML_DOTTED_HOOKS_OFF = re.compile(r"^\s*features\s*\.\s*hooks\s*=\s*false\s*(?:#.*)?$")
 
-  IFS= read -r first_line <"$plugin" || true
-  if [[ "$first_line" == "$(dot_agentguard_opencode_marker)" ]]; then
-    _dr_ok "OpenCode AgentGuard plugin installed" "$(_dr_tilde "$plugin")"
-  else
-    _dr_warn "OpenCode AgentGuard plugin unmanaged" "$(_dr_tilde "$plugin")"
-  fi
+
+def toml_hooks_off(text):
+    table = ""
+    for line in text.splitlines():
+        header = TOML_HEADER.match(line)
+        if header:
+            table = header.group(1).strip()
+        elif table == "features" and TOML_HOOKS_OFF.match(line):
+            return True
+        elif table == "" and TOML_DOTTED_HOOKS_OFF.match(line):
+            return True
+    return False
+
+
+# In the JavaScript plugin, only whole quoted literals name a command; a
+# template such as `agent-hook-${phase}` or a comment does not.
+JS_LITERAL = re.compile(r"""["'`](agent-hook-[a-z0-9]+(?:-[a-z0-9]+)*)["'`]""")
+
+
+def commands(node):
+    """Yield every hook command string below a native hooks table."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "command" and isinstance(value, str):
+                yield value
+            else:
+                yield from commands(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from commands(item)
+
+
+def one_line(text):
+    return " ".join(str(text).replace("\x1f", " ").split())
+
+
+def hook_table(document):
+    if not isinstance(document, dict):
+        raise ValueError("top level is not a table")
+    return document.get("hooks", {})
+
+
+def disabled_reason(document):
+    """Name a runtime switch that turns every registered hook off."""
+    if document.get("disableAllHooks") is True:
+        return "disableAllHooks is true"
+    features = document.get("features")
+    # Only an explicit false: a runtime that later enables hooks by default
+    # may drop the flag from AgentGuard's fragment altogether.
+    if isinstance(features, dict) and features.get("hooks") is False:
+        return "features.hooks is false"
+    return ""
+
+
+marker, triples = sys.argv[1], sys.argv[2:]
+for index in range(0, len(triples), 3):
+    agent, kind, path = triples[index : index + 3]
+    status, detail, sources, document = "ok", "", [], None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        if kind == "json":
+            document = json.loads(text)
+        elif kind == "toml":
+            try:
+                import tomllib
+            except ImportError:
+                status, sources = "unverified", TOML_COMMAND.findall(text)
+                if toml_hooks_off(text):
+                    status, detail = "disabled", "features.hooks is false"
+            else:
+                document = tomllib.loads(text)
+        else:
+            # The plugin is JavaScript: its command names are string literals,
+            # and the provider's first-line marker is what proves ownership.
+            if text.split("\n", 1)[0] != marker:
+                status = "unmanaged"
+            sources = [f'"{name}"' for name in JS_LITERAL.findall(text)]
+        if document is not None:
+            sources = list(commands(hook_table(document)))
+            detail = disabled_reason(document)
+            if detail:
+                status = "disabled"
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as error:
+        # JSONDecodeError and TOMLDecodeError both derive from ValueError.
+        print(agent, "invalid", one_line(error), "", sep="\x1f")
+        continue
+    names = sorted({name for source in sources for name in NAME.findall(source)})
+    print(agent, status, detail, " ".join(names), sep="\x1f")
+PY
 }
 
-_dr_check_grok_agentguard() {
-  command -v "${DOT_GROK_COMMAND:-grok}" >/dev/null 2>&1 || return 0
+# Succeed when NAME is an executable file on PATH or in ~/.local/bin, where
+# shdeps links AgentGuard's commands; doctor may run with a narrower PATH
+# (ssh, launchd) than the agents do. Not `type -P`: when only a
+# non-executable match exists it still prints that path, and walking PATH in
+# the shell costs no subprocess per command.
+_dr_executable_on_path() {
+  local name=$1 dir
+  local -a dirs=()
+  IFS=: read -r -a dirs <<<"$PATH"
+  for dir in "${dirs[@]}" "$HOME/.local/bin"; do
+    [[ -n $dir ]] || dir=.
+    [[ -f $dir/$name && -x $dir/$name ]] && return 0
+  done
+  return 1
+}
 
-  local hooks="$HOME/.grok/hooks/agentguard.json"
+# Report one row per installed agent: its config parses, it registers
+# AgentGuard at all, and every agent-hook-* command it names resolves to an
+# executable on PATH, the same lookup the agent's `env ... agent-hook-*` hook
+# command performs. Agents that are not installed get no row, matching the
+# merge hooks, which skip them too.
+_dr_check_agentguard_registrations() {
+  local entry agent label kind relative config marker='' output status=0
+  local result_agent result detail names name display index=0
+  local -a queued=() queued_labels=() queued_configs=() missing=() name_list=()
 
-  if [[ -f "$hooks" ]]; then
-    _dr_ok "Grok AgentGuard hooks installed" "$(_dr_tilde "$hooks")"
-  else
-    _dr_warn "Grok AgentGuard hooks missing" "run 'dot update'"
+  for entry in "${_DR_AGENTGUARD_REGISTRATIONS[@]}"; do
+    IFS='|' read -r agent label kind relative <<<"$entry"
+    command -v "$agent" >/dev/null 2>&1 || continue
+    config=$HOME/$relative
+    display=$(_dr_tilde "$config")
+    if [[ ! -e $config ]]; then
+      # The merge hooks rebuild a dangling config link like a missing file.
+      [[ ! -L $config ]] || display+=' is a broken link'
+      _dr_warn "$label AgentGuard hooks missing" "$display; run 'dot update'"
+      continue
+    fi
+    if [[ $kind == plugin ]]; then
+      # Dotfiles install the plugin as a regular file and never replace a
+      # user's symlink or directory there, so anything else is user-owned.
+      if [[ ! -f $config || -L $config ]]; then
+        _dr_warn "$label AgentGuard plugin unmanaged" "$display"
+        continue
+      fi
+      # The provider marker comes from base's shdeps adapter, which is not
+      # part of base's documented doctor surface; without it ownership
+      # cannot be proven, so say so instead of guessing.
+      marker=$(dot_agentguard_opencode_marker 2>/dev/null) || marker=
+      if [[ -z $marker ]]; then
+        _dr_warn "$label AgentGuard plugin unchecked" \
+          'base lacks dot_agentguard_opencode_marker'
+        continue
+      fi
+    fi
+    queued+=("$agent" "$kind" "$config")
+    queued_labels+=("$label")
+    queued_configs+=("$display")
+  done
+  ((${#queued[@]} > 0)) || return 0
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    for label in "${queued_labels[@]}"; do
+      _dr_warn "$label AgentGuard hooks unchecked" 'python3 is required'
+    done
+    return 0
   fi
+  # Keep stderr out of the protocol stream: an interpreter warning there would
+  # otherwise misalign every result line.
+  output=$(_dr_agentguard_inspect "$marker" "${queued[@]}" 2>/dev/null) || status=$?
+  if ((status != 0)); then
+    _dr_warn 'AgentGuard hook registration unchecked' "python3 exited $status"
+    return 0
+  fi
+
+  while IFS=$'\x1f' read -r result_agent result detail names; do
+    label=${queued_labels[index]:-}
+    display=${queued_configs[index]:-}
+    agent=${queued[index * 3]:-}
+    index=$((index + 1))
+    # The inspector answers in queue order; a mismatch means its output was
+    # not the protocol above, so say so rather than misattribute a result.
+    if [[ -z $label || $result_agent != "$agent" ]]; then
+      _dr_warn 'AgentGuard hook registration unchecked' 'unexpected inspector output'
+      return 0
+    fi
+    case $result in
+      invalid)
+        _dr_fail "$label AgentGuard config invalid" "$display: $detail"
+        continue
+        ;;
+      unmanaged)
+        _dr_warn "$label AgentGuard plugin unmanaged" "$display"
+        continue
+        ;;
+      disabled)
+        _dr_warn "$label AgentGuard hooks disabled" "$detail in $display"
+        continue
+        ;;
+    esac
+    if [[ -z $names ]]; then
+      _dr_warn "$label AgentGuard hooks missing" \
+        "no agent-hook-* commands in $display; run 'dot update'"
+      continue
+    fi
+    # Every AgentGuard fragment registers the pre-bash guard. Without it the
+    # remaining lifecycle hooks still look registered while shell commands
+    # run unguarded, e.g. after a user layer replaced that one entry.
+    if [[ " $names " != *' agent-hook-pre-bash '* ]]; then
+      _dr_warn "$label AgentGuard pre-bash guard not registered" \
+        "$display; run 'dot update'"
+      continue
+    fi
+    read -r -a name_list <<<"$names"
+    missing=()
+    for name in "${name_list[@]}"; do
+      _dr_executable_on_path "$name" || missing+=("$name")
+    done
+    if ((${#missing[@]} > 0)); then
+      _dr_fail "$label AgentGuard hook commands missing" \
+        "not executable on PATH or in ~/.local/bin: ${missing[*]}"
+      continue
+    fi
+    detail="${#name_list[@]} command(s) in $display"
+    [[ $result != unverified ]] ||
+      detail+='; TOML syntax unchecked (python3 lacks tomllib)'
+    _dr_ok "$label AgentGuard hooks" "$detail"
+  done <<<"$output"
+  ((index == ${#queued_labels[@]})) ||
+    _dr_warn 'AgentGuard hook registration unchecked' 'inspector output was truncated'
 }
 
 _dr_check_grok_compat() {
@@ -176,8 +414,7 @@ _dr_check_agent_hooks() {
   local pre_bash="$HOME/.local/bin/agent-hook-pre-bash"
   local stop_hook="$HOME/.local/bin/agent-hook-stop"
 
-  _dr_check_opencode_agentguard
-  _dr_check_grok_agentguard
+  _dr_check_agentguard_registrations
   _dr_check_grok_compat
 
   if [[ ! -x "$pre_bash" ]]; then
@@ -208,10 +445,14 @@ _dr_check_agent_hooks() {
   # report pass/fail through their result files, not through wait.
   wait "${probe_pids[@]}" || true
 
+  # Generic smoke rows: one probe proves the hook lets an ordinary command
+  # through, the other proves it blocks one that policy forbids. Exit status 2
+  # is the hook protocol's block signal; the stderr wording is display text for
+  # the agent and is deliberately not matched here.
   if _dr_probe_ok "$results/dot-status"; then
-    _dr_ok "agent pre-bash allows dot status"
+    _dr_ok "agent pre-bash allows a benign command" 'dot status'
   else
-    _dr_fail "agent pre-bash failed dot status smoke" \
+    _dr_fail "agent pre-bash rejects a benign command" \
       "${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
   fi
 
@@ -219,16 +460,19 @@ _dr_check_agent_hooks() {
   _dr_probe_ok "$results/raw-git" || raw_git_rc=$?
   if [[ "$raw_git_rc" -eq 0 ]]; then
     if _dr_is_dotfiles_checkout; then
-      _dr_ok "agent pre-bash allows raw git status in checkout"
+      _dr_ok "agent pre-bash enforces policy" \
+        'raw git status is allowed: HOME is a Git checkout'
     else
-      _dr_fail "agent pre-bash allows raw dotfiles git status" \
-        "expected the hook to steer agents to 'dot status'"
+      _dr_fail "agent pre-bash does not enforce policy" \
+        "raw dotfiles git status was allowed; expected a block (exit 2)"
     fi
-  elif [[ "$raw_git_rc" -eq 2 && "$_DR_AGENT_HOOK_STDERR" == *"dot status"* ]]; then
-    _dr_ok "agent pre-bash guards raw dotfiles git status"
+  elif [[ "$raw_git_rc" -eq 2 && -n "$_DR_AGENT_HOOK_STDERR" ]]; then
+    # The protocol pairs exit 2 with a reason on stderr for the agent; a bare
+    # exit 2 is more likely a shell or jq usage error than a block.
+    _dr_ok "agent pre-bash enforces policy" 'blocks raw dotfiles git status'
   else
-    _dr_fail "agent pre-bash raw git smoke returned unexpected result" \
-      "${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
+    _dr_fail "agent pre-bash policy probe failed" \
+      "exit $raw_git_rc: ${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
   fi
 
   if [[ -x "$stop_hook" ]]; then

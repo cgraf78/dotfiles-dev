@@ -98,13 +98,17 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_st
   # shell startup files, hooks, and small launchers that need to source a file.
 
   # Directory holding shdeps configuration (dependency lists and install hooks).
+  # Mirror the base contract exactly: the value comes back through REPLY, not
+  # stdout. A stdout stub here once hid a `$(_dot_shdeps_conf_dir)` caller that
+  # silently received an empty directory against the real base adapter.
   _dot_shdeps_conf_dir() {
-    printf '%s\n' "$HOME/.config/shdeps"
+    REPLY="$HOME/.config/shdeps"
   }
 
   dot_shdeps_dep_file() {
     local conf_dir
-    conf_dir="$(_dot_shdeps_conf_dir)"
+    _dot_shdeps_conf_dir
+    conf_dir="$REPLY"
 
     if command -v shdeps >/dev/null 2>&1; then
       SHDEPS_CONF_DIR="$conf_dir" command shdeps dep-file "$@"

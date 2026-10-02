@@ -1,15 +1,39 @@
 # shellcheck shell=bash
 # dot doctor: development command checks.
 
+# Base dotfiles own the shdeps bin-link check (doctor.d/lib/shdeps-links.sh,
+# `_dr_check_shdeps_bin_group LEVEL DEPENDENCY`); this overlay only passes its
+# dependency list. Base and overlays update independently, so an older base
+# without that module keeps the local fallback below. The source is quiet and
+# non-fatal when the module is absent. The fallback deliberately has its own
+# name and is chosen at call time, so it can never replace base's helper
+# (which goes quiet when shdeps health covers bin links).
+dot_doctor_source doctor.d/lib/shdeps-links.sh || true
+
 _dr_dev_shdeps_link_issue() {
   local level="$1" label="$2" detail="${3:-}"
   if [[ $level == fail ]]; then _dr_fail "$label" "$detail"; else _dr_warn "$label" "$detail"; fi
 }
 
+# Fallback copy of base's helper for bases that predate shdeps-links.sh.
 _dr_check_dev_shdeps_bin_group() {
   local level="$1" dependency="$2" rows cmd link expected extra actual
-  local issue_count=0 command_count=0
-  if ! rows=$(SHDEPS_CONF_DIR="$(_dot_shdeps_conf_dir)" \
+  local issue_count=0 command_count=0 conf_dir
+  # The base adapter returns the directory through REPLY (no subshell);
+  # reading it through a command substitution silently passed an empty
+  # directory. Guarded so a base without the adapter cannot abort the worker,
+  # and quiet so an older adapter that printed instead leaks nothing.
+  REPLY=
+  _dot_shdeps_conf_dir >/dev/null 2>&1 || true
+  conf_dir=$REPLY
+  if [[ -z $conf_dir ]]; then
+    # Nothing is known to be wrong with the links, so this is a warning even
+    # for dependencies whose broken links would fail.
+    _dr_warn "$dependency bin links unchecked" \
+      'could not resolve the shdeps config directory'
+    return 0
+  fi
+  if ! rows=$(SHDEPS_CONF_DIR="$conf_dir" \
     command shdeps dep-links "cgraf78/$dependency" 2>/dev/null); then
     _dr_dev_shdeps_link_issue "$level" "$dependency bin links unchecked" \
       "shdeps cannot resolve command links for cgraf78/$dependency"
@@ -57,6 +81,16 @@ _dr_check_dev_shdeps_bin_group() {
   ((issue_count != 0)) || _dr_ok "$dependency bin links" "$command_count command(s)"
 }
 
+# Check one dependency's command links through base's shared helper when this
+# host's base ships it, else through the local fallback.
+_dr_check_dev_bin_links() {
+  if declare -F _dr_check_shdeps_bin_group >/dev/null; then
+    _dr_check_shdeps_bin_group "$@"
+  else
+    _dr_check_dev_shdeps_bin_group "$@"
+  fi
+}
+
 _dr_check_dev_tools() {
   local command_name
   _dr_section 'Development tools'
@@ -76,12 +110,12 @@ _dr_check_dev_tools() {
   fi
 
   if command -v shdeps >/dev/null 2>&1; then
-    _dr_check_dev_shdeps_bin_group fail sley
-    _dr_check_dev_shdeps_bin_group warn checkrun
-    _dr_check_dev_shdeps_bin_group warn cmdblocks
-    _dr_check_dev_shdeps_bin_group warn git-tools
-    _dr_check_dev_shdeps_bin_group fail agentguard
-    _dr_check_dev_shdeps_bin_group warn hive-memory
+    _dr_check_dev_bin_links fail sley
+    _dr_check_dev_bin_links warn checkrun
+    _dr_check_dev_bin_links warn cmdblocks
+    _dr_check_dev_bin_links warn git-tools
+    _dr_check_dev_bin_links fail agentguard
+    _dr_check_dev_bin_links warn hive-memory
   else
     _dr_warn 'development dependency command links unchecked' 'shdeps is not on PATH'
   fi
