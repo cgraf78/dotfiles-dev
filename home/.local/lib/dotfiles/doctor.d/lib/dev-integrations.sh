@@ -1,26 +1,100 @@
 # shellcheck shell=bash
 # dot doctor: development shell integrations.
 
+# Every shell asset the dev integrations load through
+# `_tool_init NAME _tool_shdeps_source_emit DEP ASSET`, as NAME DEP ASSET
+# triples. Keep this aligned with interactive.d/80-dev-integrations.{bash,zsh};
+# the dev-doctor suite fails when they drift apart.
+_DR_DEV_SHELL_ASSETS=(
+  sley cgraf78/sley share/sley/shell.sh
+  git-tools cgraf78/git-tools share/git-tools/shell.sh
+)
+# Deadline in seconds for the asset probe: two `shdeps dep-file` lookups.
+_DR_DEV_SHELL_DEADLINE=10
+
+# Probe what an interactive shell actually does at startup. `_tool_init`
+# skips an integration silently when its command is missing or its init
+# fails, and keeps sourcing the last good cache for up to a week, so a
+# provider asset that stopped resolving only shows up days later as missing
+# shell functions. Resolve each asset through the overlay's own adapter
+# (70-dev-tool-init.sh, which loads base's shdeps helper) in one bare Bash
+# with a private cache, so a cached answer cannot hide a broken resolution
+# and the user's cache is left alone. Resolution is the same in Bash and
+# Zsh, so one shell covers both. direnv's hook comes from the binary itself,
+# so PATH is all it needs.
 _dr_check_dev_integrations() {
-  local shell_name path content
+  local adapter=$HOME/.config/shell/interactive.d/70-dev-tool-init.sh
+  local cache output='' status=0 name dep asset index issues=0 list=''
+  local -a names=()
   _dr_section 'Development shell integrations'
 
-  for shell_name in bash zsh; do
-    path="$HOME/.config/shell/interactive.d/80-dev-integrations.$shell_name"
-    if [[ ! -r $path ]]; then
-      _dr_fail "$shell_name dev integrations missing" "$(_dr_tilde "$path")"
-      continue
-    fi
-    content=$(<"$path")
-    if [[ $content == *'_tool_init sley '* &&
-      $content == *'_tool_init git-tools '* &&
-      $content == *'_tool_init direnv '* ]]; then
-      _dr_ok "$shell_name dev integrations" 'sley, git-tools, direnv'
+  if [[ ! -r $adapter ]]; then
+    _dr_warn 'dev shell integration adapter missing' \
+      "$(_dr_tilde "$adapter"); run 'dot update'"
+    issues=1
+  elif ! cache=$(mktemp -d "${TMPDIR:-/tmp}/dot-doctor-dev-shell.XXXXXX" 2>/dev/null); then
+    _dr_warn 'dev shell integrations unchecked' 'could not create a temporary cache directory'
+    issues=1
+  else
+    # BASH_ENV and ENV would load the user's env.d into the probe, which
+    # costs time and is not how the interactive files run. The worker's own
+    # Bash is 4 or newer; the first `bash` on PATH may be macOS's 3.2.
+    # shellcheck disable=SC2016  # $1... expand in the probe shell.
+    output=$(XDG_CACHE_HOME=$cache _dr_dev_bounded "$_DR_DEV_SHELL_DEADLINE" \
+      env -u BASH_ENV -u ENV "$BASH" --noprofile --norc -c '
+        . "$1" || exit 3
+        shift
+        while (($# >= 3)); do
+          if _tool_shdeps_source_emit "$2" "$3" >/dev/null 2>&1; then
+            printf "%s=1\n" "$1"
+          else
+            printf "%s=0\n" "$1"
+          fi
+          shift 3
+        done
+      ' dot-doctor "$adapter" "${_DR_DEV_SHELL_ASSETS[@]}" 2>/dev/null </dev/null) ||
+      status=$?
+    rm -rf "$cache" 2>/dev/null || true
+    if _dr_dev_deadline_status "$status"; then
+      _dr_warn 'dev shell integrations unchecked' \
+        "resolving their shell assets took longer than ${_DR_DEV_SHELL_DEADLINE}s"
+      issues=1
     else
-      _dr_warn "$shell_name dev integrations incomplete" "$(_dr_tilde "$path")"
+      for ((index = 0; index < ${#_DR_DEV_SHELL_ASSETS[@]}; index += 3)); do
+        name=${_DR_DEV_SHELL_ASSETS[index]}
+        dep=${_DR_DEV_SHELL_ASSETS[index + 1]}
+        asset=${_DR_DEV_SHELL_ASSETS[index + 2]}
+        names+=("$name")
+        case $'\n'$output$'\n' in
+          *$'\n'"$name=1"$'\n'*) ;;
+          *$'\n'"$name=0"$'\n'*)
+            _dr_warn "$name shell integration unavailable" \
+              "$dep $asset does not resolve, so new shells skip it; run 'dot update'"
+            issues=1
+            ;;
+          *)
+            # No verdict at all: the adapter did not load or the shell died.
+            _dr_warn "$name shell integration unchecked" "the asset probe exited $status"
+            issues=1
+            ;;
+        esac
+      done
     fi
+  fi
+
+  names+=(direnv)
+  if ! command -v direnv >/dev/null 2>&1; then
+    _dr_warn 'direnv shell integration unavailable' \
+      "direnv is not on PATH, so new shells skip its hook; run 'dot update'"
+    issues=1
+  fi
+  ((issues == 0)) || return 0
+  for name in "${names[@]}"; do
+    list+=${list:+, }$name
   done
+  _dr_ok 'dev shell integrations' "$list"
 }
+
 # ---------------------------------------------------------------------------
 # Git hooks
 # ---------------------------------------------------------------------------
@@ -102,37 +176,4 @@ _dr_check_git_hooks() {
   elif ((issue_count == 0)); then
     _dr_ok "Git hooks executable" "$hook_count hook(s)"
   fi
-}
-
-# Hive Memory binary/config skew.
-#
-# The hm config is dotfiles-managed and syncs to machines independently of
-# hive-memory releases, so a machine can carry a config key its installed hm
-# does not understand yet (or no longer understands). hm deliberately
-# downgrades unknown keys to a stderr warning so the hook path never fails —
-# which means the configured memory policy silently stays on defaults unless
-# something surfaces the skew. This check is that something.
-_dr_check_hive_memory() {
-  _dr_section "Hive Memory"
-
-  if ! command -v hm >/dev/null 2>&1; then
-    _dr_skip "hive-memory config" "hm not installed"
-    return 0
-  fi
-
-  # `stores list` is the cheapest read-only command that still loads (and
-  # therefore validates) the full config. Capture stderr only.
-  local stderr unknown
-  if ! stderr=$(hm stores list --json 2>&1 >/dev/null); then
-    _dr_warn "hm config unchecked" "${stderr%%$'\n'*}"
-    return 0
-  fi
-
-  unknown=$(printf '%s\n' "$stderr" | grep -F 'unknown config key' || true)
-  if [[ -n "$unknown" ]]; then
-    _dr_warn "hm binary behind configured keys" \
-      "${unknown%%$'\n'*} — update hive-memory (shdeps) or drop the key"
-    return 0
-  fi
-  _dr_ok "hm understands configured keys"
 }
