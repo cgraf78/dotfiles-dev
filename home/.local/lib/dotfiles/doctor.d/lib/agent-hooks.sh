@@ -1,6 +1,18 @@
 # shellcheck shell=bash
-# dot doctor: Agent Hooks checks.
+# dot doctor: Agent tooling checks: AgentGuard registration and smoke probes,
+# Grok's Claude-compat switches, Hive Memory, and leftover temporaries in the
+# agent config folders the dev merge hooks write.
 
+# Per-probe deadline in seconds. A healthy hook answers in well under one;
+# a hung one would otherwise hold the whole section.
+_DR_AGENT_HOOK_DEADLINE=10
+
+# Run one hook the way agents do. Every command AgentGuard's integration
+# fragments register starts with `env -u BASH_ENV -u ENV`, so the hook never
+# inherits a startup file; a probe that set BASH_ENV instead could pass while
+# the real hook fails. The remaining variables name a neutral agent and turn
+# off the hook's side effects (memory hooks, process detection, the commit
+# gate), and TMPDIR keeps its scratch files in a private directory.
 _dr_run_agent_hook() {
   local hook="$1" payload="$2"
   local tmp out_file err_file rc=0
@@ -8,22 +20,32 @@ _dr_run_agent_hook() {
   out_file="$tmp/out"
   err_file="$tmp/err"
 
+  # The hook opens its payload itself, through a bare Bash that execs it: a
+  # pipe into the bounded command would not reach it under base's builtin
+  # watchdog (hosts without a coreutils timeout), which starts the command
+  # as a background job, and Bash gives those /dev/null for stdin.
+  printf '%s' "$payload" >"$tmp/payload" || {
+    rm -rf "$tmp" 2>/dev/null || true
+    return 1
+  }
   (
     cd "$HOME" || exit 1
-    printf '%s' "$payload" |
+    # shellcheck disable=SC2016  # $1 and $2 expand in the exec shell.
+    _dr_dev_bounded "$_DR_AGENT_HOOK_DEADLINE" \
+      env -u BASH_ENV -u ENV \
       AGENTGUARD_NAME=agent \
-        AGENTGUARD_SESSION_ID="dot-doctor-$$" \
-        AGENTGUARD_HIVE_MEMORY_HOOKS=0 \
-        AGENTGUARD_PROCESS_DETECT=0 \
-        AGENTGUARD_SLEY_GATE=0 \
-        TMPDIR="$tmp" \
-        BASH_ENV="$HOME/.config/shell/env-noninteractive.sh" \
-        "$hook" >"$out_file" 2>"$err_file"
+      AGENTGUARD_SESSION_ID="dot-doctor-$$" \
+      AGENTGUARD_HIVE_MEMORY_HOOKS=0 \
+      AGENTGUARD_PROCESS_DETECT=0 \
+      AGENTGUARD_SLEY_GATE=0 \
+      TMPDIR="$tmp" \
+      "$BASH" --noprofile --norc -c 'exec "$1" <"$2"' dot-doctor "$hook" "$tmp/payload" \
+      >"$out_file" 2>"$err_file" </dev/null
   ) || rc=$?
 
   _DR_AGENT_HOOK_STDOUT=$(cat "$out_file" 2>/dev/null || true)
   _DR_AGENT_HOOK_STDERR=$(cat "$err_file" 2>/dev/null || true)
-  rm -f "$out_file" "$err_file"
+  rm -f "$out_file" "$err_file" "$tmp/payload"
   rmdir "$tmp" 2>/dev/null || true
   return "$rc"
 }
@@ -81,6 +103,29 @@ _DR_AGENTGUARD_REGISTRATIONS=(
   'grok|Grok|json|.grok/hooks/agentguard.json'
   'opencode|OpenCode|plugin|.config/opencode/plugins/dotfiles-agentguard.js'
 )
+# Agent config folders the dev merge hooks also write, beyond the folder of
+# each registration above: grok-config.sh writes ~/.grok/config.toml.
+_DR_AGENT_CONFIG_EXTRA_DIRS=(.grok)
+
+# Merge hooks rewrite agent configs through sibling temporaries, and an
+# update killed mid-write leaves one behind. Base owns the check and its
+# naming rules; this overlay owns the list of folders its hooks write, which
+# is this table, so the two cannot drift. The module is newer than some
+# bases, and doctor workers run under `set -e`, so a base without it skips
+# the check rather than failing the section.
+_dr_check_agent_config_temporaries() {
+  local entry relative
+  local -a dirs=()
+  for entry in "${_DR_AGENTGUARD_REGISTRATIONS[@]}"; do
+    relative=${entry##*|}
+    dirs+=("${relative%/*}")
+  done
+  dirs+=("${_DR_AGENT_CONFIG_EXTRA_DIRS[@]}")
+  if dot_doctor_source doctor.d/lib/config-temporaries.sh &&
+    declare -F _dr_check_config_temporaries >/dev/null; then
+    _dr_check_config_temporaries "${dirs[@]}"
+  fi
+}
 
 # Parse every queued agent config in one Python process (doctor's per-check
 # budget is a handful of processes) and print one line per config, fields
@@ -341,7 +386,9 @@ _dr_check_agentguard_registrations() {
 }
 
 _dr_check_grok_compat() {
-  command -v "${DOT_GROK_COMMAND:-grok}" >/dev/null 2>&1 || return 0
+  # The same presence gate as the registration table and the grok merge
+  # hooks (`_dot_tool_present grok`).
+  command -v grok >/dev/null 2>&1 || return 0
 
   local cfg="$HOME/.grok/config.toml"
   local hooks="$HOME/.grok/hooks/agentguard.json"
@@ -408,14 +455,12 @@ PY
   fi
 }
 
-_dr_check_agent_hooks() {
-  _dr_section "Agent hooks"
-
+# Smoke-probe the installed pre-bash and stop hooks; results go to DIR.
+_dr_check_agent_hook_probes() {
+  local results=$1
   local pre_bash="$HOME/.local/bin/agent-hook-pre-bash"
   local stop_hook="$HOME/.local/bin/agent-hook-stop"
-
-  _dr_check_agentguard_registrations
-  _dr_check_grok_compat
+  local -a probe_pids=()
 
   if [[ ! -x "$pre_bash" ]]; then
     _dr_warn "agent pre-bash hook unavailable" "$(_dr_tilde "$pre_bash")"
@@ -428,10 +473,6 @@ _dr_check_agent_hooks() {
   # are the same file tests as before, so a missing pre-bash still returns
   # before any hook runs, and results are applied below in the original
   # order, so records are unchanged.
-  local results
-  local -a probe_pids
-  probe_pids=()
-  results=$(mktemp -d 2>/dev/null || mktemp -d -t dot-doctor-agent-hooks) || return 1
   _dr_run_agent_hook_async "$results/dot-status" "$pre_bash" '{"tool_input":{"command":"dot status"}}'
   probe_pids+=("$!")
   _dr_run_agent_hook_async "$results/raw-git" "$pre_bash" '{"tool_input":{"command":"git status -uall"}}'
@@ -448,17 +489,19 @@ _dr_check_agent_hooks() {
   # Generic smoke rows: one probe proves the hook lets an ordinary command
   # through, the other proves it blocks one that policy forbids. Exit status 2
   # is the hook protocol's block signal; the stderr wording is display text for
-  # the agent and is deliberately not matched here.
-  if _dr_probe_ok "$results/dot-status"; then
+  # the agent and is deliberately not matched here. Exit status 124 (or 137
+  # after a SIGKILL) is the probe deadline.
+  local rc=0
+  _dr_probe_ok "$results/dot-status" || rc=$?
+  if ((rc == 0)); then
     _dr_ok "agent pre-bash allows a benign command" 'dot status'
   else
-    _dr_fail "agent pre-bash rejects a benign command" \
-      "${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
+    _dr_fail "agent pre-bash rejects a benign command" "$(_dr_probe_reason "$rc")"
   fi
 
-  local raw_git_rc=0
-  _dr_probe_ok "$results/raw-git" || raw_git_rc=$?
-  if [[ "$raw_git_rc" -eq 0 ]]; then
+  rc=0
+  _dr_probe_ok "$results/raw-git" || rc=$?
+  if ((rc == 0)); then
     if _dr_is_dotfiles_checkout; then
       _dr_ok "agent pre-bash enforces policy" \
         'raw git status is allowed: HOME is a Git checkout'
@@ -466,25 +509,54 @@ _dr_check_agent_hooks() {
       _dr_fail "agent pre-bash does not enforce policy" \
         "raw dotfiles git status was allowed; expected a block (exit 2)"
     fi
-  elif [[ "$raw_git_rc" -eq 2 && -n "$_DR_AGENT_HOOK_STDERR" ]]; then
+  elif ((rc == 2)) && [[ -n "$_DR_AGENT_HOOK_STDERR" ]]; then
     # The protocol pairs exit 2 with a reason on stderr for the agent; a bare
     # exit 2 is more likely a shell or jq usage error than a block.
     _dr_ok "agent pre-bash enforces policy" 'blocks raw dotfiles git status'
+  elif _dr_dev_deadline_status "$rc" || [[ -z $_DR_AGENT_HOOK_STDERR ]]; then
+    _dr_fail "agent pre-bash policy probe failed" "$(_dr_probe_reason "$rc")"
   else
-    _dr_fail "agent pre-bash policy probe failed" \
-      "exit $raw_git_rc: ${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
+    _dr_fail "agent pre-bash policy probe failed" "exit $rc: $(_dr_probe_reason "$rc")"
   fi
 
   if [[ -x "$stop_hook" ]]; then
-    if _dr_probe_ok "$results/stop"; then
+    rc=0
+    _dr_probe_ok "$results/stop" || rc=$?
+    if ((rc == 0)); then
       _dr_ok "agent stop hook runs"
     else
-      _dr_fail "agent stop hook failed" "${_DR_AGENT_HOOK_STDERR%%$'\n'*}"
+      _dr_fail "agent stop hook failed" "$(_dr_probe_reason "$rc")"
     fi
   else
     _dr_warn "agent stop hook unavailable" "$(_dr_tilde "$stop_hook")"
   fi
-  local check_rc=$?
+}
+
+# Print why a collected probe failed with status $1: the deadline, or the
+# first line the hook wrote to stderr, as record text (a tab or carriage
+# return would make the record helper fail the worker), or its bare status.
+_dr_probe_reason() {
+  local line
+  if _dr_dev_deadline_status "$1"; then
+    printf 'no answer within %ss' "$_DR_AGENT_HOOK_DEADLINE"
+  else
+    line=${_DR_AGENT_HOOK_STDERR%%$'\n'*}
+    line=${line//[$'\t\r']/ }
+    printf '%s' "${line:-exited $1 without a message}"
+  fi
+}
+
+_dr_check_agent_tooling() {
+  local results
+  _dr_section "Agent tooling"
+
+  results=$(mktemp -d 2>/dev/null || mktemp -d -t dot-doctor-agent-hooks) || return 1
+  # hm may wait on a network mount, so it runs alongside everything else.
+  _dr_hive_memory_start "$results"
+  _dr_check_agentguard_registrations
+  _dr_check_grok_compat
+  _dr_check_agent_hook_probes "$results"
+  _dr_hive_memory_finish "$results"
+  _dr_check_agent_config_temporaries
   rm -rf "$results" 2>/dev/null || true
-  return "$check_rc"
 }
