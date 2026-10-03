@@ -464,15 +464,20 @@ fi
 duration=$1
 shift
 started=$SECONDS
+# Under job control Bash reports a finished or killed job ("[2]+
+# Terminated ...") on its own stderr, which is CMD's stderr as the caller
+# captures it. Only CMD gets the caller's stderr (fd 3); the shim's own goes
+# to /dev/null, as a real timeout(1) adds nothing to CMD's output.
+exec 3>&2 2>/dev/null
 set -m
-"$@" &
+"$@" 2>&3 3>&- &
 cmd=$!
 (
   sleep "$duration"
   kill -TERM -- "-$cmd" 2>/dev/null || exit 0
   sleep "$kill_after"
   kill -KILL -- "-$cmd" 2>/dev/null
-) &
+) 3>&- &
 watcher=$!
 status=0
 wait "$cmd" 2>/dev/null || status=$?
@@ -538,6 +543,38 @@ SH
   _assert_eq 'The fallback runner bounds a run with a coreutils timeout' 124 "$status"
   _assert_eq 'The fallback runner returns within its deadline' yes \
     "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  # A bounded runner must add nothing to the command's stderr: the hook
+  # probes report the first stderr line as the hook's own message. Job
+  # notices from a watcher are racy, so repeat a fast, silent failure.
+  _bounded_stderr() {
+    local i err
+    for ((i = 0; i < 100; i++)); do
+      err=$("$@" sh -c 'exit 6' 2>&1 >/dev/null) || true
+      [[ -z $err ]] || {
+        printf '%s' "$err"
+        return 0
+      }
+    done
+  }
+  _assert_eq 'The timeout test shim adds nothing to stderr' '' \
+    "$(_bounded_stderr "$doctor_bin/timeout" 5)"
+  _assert_eq 'The fallback runner adds nothing to stderr' '' \
+    "$(
+      unset -f _dr_run_bounded
+      unset _DR_DEV_TIMEOUT_BIN
+      PATH="$doctor_bin:$PATH" _bounded_stderr _dr_dev_bounded 5
+    )"
+  if declare -F _dr_run_bounded >/dev/null; then
+    _assert_eq "Base's bounded runner adds nothing to stderr" '' \
+      "$(PATH="$doctor_bin:$PATH" _fresh_deadline _bounded_stderr _dr_dev_bounded 5)"
+    _assert_eq "Base's builtin watchdog adds nothing to stderr" '' \
+      "$(
+        _DR_TIMEOUT_BIN=
+        _bounded_stderr _dr_dev_bounded 5
+      )"
+  else
+    _pass "Base's bounded runner stderr check needs _dr_run_bounded (skipped)"
+  fi
   nvim_home=$(_tmpdir)
   mkdir -p "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
   nvim_calls=$(_tmpdir)/nvim-calls
