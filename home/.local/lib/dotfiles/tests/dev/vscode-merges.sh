@@ -961,7 +961,7 @@ dot_dev_vscode_merges_test() {
       local rel=.config/dot/merge-hooks.d/vscode/keybindings
       local git_root git_prefix git_rel head origin base base_sha path deploy_path old_root
       local source family report report_family
-      local old_all current_all
+      local old_all current_all history_deferred=0
       origin=""
       base=""
 
@@ -1007,16 +1007,21 @@ dot_dev_vscode_merges_test() {
         ! git -C "$git_root" diff --quiet HEAD -- "$git_rel" 2>/dev/null; then
         base="$head"
       elif [[ -z "${base:-}" ]]; then
-        base=$(git -C "$git_root" rev-parse HEAD^ 2>/dev/null || true)
+        # --verify keeps an unresolvable parent empty. Plain rev-parse echoes
+        # the literal `HEAD^` on a shallow or root commit, which then read as
+        # an empty history and passed the guard instead of deferring it.
+        base=$(git -C "$git_root" rev-parse --verify --quiet 'HEAD^' 2>/dev/null || true)
       fi
 
       if [[ -z "$base" ]]; then
         if [[ $(git -C "$git_root" rev-parse --is-shallow-repository 2>/dev/null) == true ]]; then
-          _pass "vscode keybindings: dynamic retirement history guard deferred to full-history CI"
+          # Only the comparison with history needs a base. The checks that
+          # read the current tree alone still run below.
+          history_deferred=1
+        else
+          _fail "vscode keybindings: retirement history guard requires a Git base"
           return
         fi
-        _fail "vscode keybindings: retirement history guard requires a Git base"
-        return
       fi
       old_all=$(_tmpfile)
       current_all=$(_tmpfile)
@@ -1038,7 +1043,8 @@ dot_dev_vscode_merges_test() {
           return
         fi
       done < <(
-        git -C "$git_root" ls-tree -r --name-only "$base" -- "$git_rel" |
+        ((history_deferred)) ||
+          git -C "$git_root" ls-tree -r --name-only "$base" -- "$git_rel" |
           LC_ALL=C sort
       )
 
@@ -1092,20 +1098,25 @@ dot_dev_vscode_merges_test() {
       # reason.
       report=$(_tmpfile)
       _vscode_test_retirement_report "$old_all" "$current_all" >"$report"
-      _assert_eq "vscode linux keybindings: changed and deleted bindings enter retirement history" \
-        '[]' "$(jq -c '.missing.linux' "$report")"
-      _assert_eq "vscode macos keybindings: changed and deleted bindings enter retirement history" \
-        '[]' "$(jq -c '.missing.macos' "$report")"
-      _assert_eq "vscode windows keybindings: changed and deleted bindings enter retirement history" \
-        '[]' "$(jq -c '.missing.windows' "$report")"
-      _assert_eq "vscode linux no-termnav keybindings: capability moves enter retirement history" \
-        '[]' "$(jq -c '.missing.linux_no_termnav' "$report")"
-      _assert_eq "vscode macos no-termnav keybindings: capability moves enter retirement history" \
-        '[]' "$(jq -c '.missing.macos_no_termnav' "$report")"
-      _assert_eq "vscode windows no-termnav keybindings: capability moves enter retirement history" \
-        '[]' "$(jq -c '.missing.windows_no_termnav' "$report")"
-      _assert_eq "vscode keybindings: retirement history is append-only" \
-        '[]' "$(jq -c '.removed' "$report")"
+      if ((history_deferred)); then
+        # Against the empty stand-in history these would pass vacuously.
+        _pass "vscode keybindings: dynamic retirement history guard deferred to full-history CI"
+      else
+        _assert_eq "vscode linux keybindings: changed and deleted bindings enter retirement history" \
+          '[]' "$(jq -c '.missing.linux' "$report")"
+        _assert_eq "vscode macos keybindings: changed and deleted bindings enter retirement history" \
+          '[]' "$(jq -c '.missing.macos' "$report")"
+        _assert_eq "vscode windows keybindings: changed and deleted bindings enter retirement history" \
+          '[]' "$(jq -c '.missing.windows' "$report")"
+        _assert_eq "vscode linux no-termnav keybindings: capability moves enter retirement history" \
+          '[]' "$(jq -c '.missing.linux_no_termnav' "$report")"
+        _assert_eq "vscode macos no-termnav keybindings: capability moves enter retirement history" \
+          '[]' "$(jq -c '.missing.macos_no_termnav' "$report")"
+        _assert_eq "vscode windows no-termnav keybindings: capability moves enter retirement history" \
+          '[]' "$(jq -c '.missing.windows_no_termnav' "$report")"
+        _assert_eq "vscode keybindings: retirement history is append-only" \
+          '[]' "$(jq -c '.removed' "$report")"
+      fi
 
       # All platforms consume all.d, making it the only safe home for an exact
       # retirement synchronized across machines. A platform-local retirement
@@ -1123,7 +1134,7 @@ dot_dev_vscode_merges_test() {
         '[]' "$(jq -c '.legacy_proof_missing' "$report")"
       _assert_eq "vscode keybindings: retirement proof labels stay allowlisted" \
         '[]' "$(jq -c '.invalid_proofs' "$report")"
-      if [[ -n ${DOT_TEST_VSCODE_HISTORY_MARKER:-} ]]; then
+      if ((! history_deferred)) && [[ -n ${DOT_TEST_VSCODE_HISTORY_MARKER:-} ]]; then
         printf 'executed\n' >"$DOT_TEST_VSCODE_HISTORY_MARKER"
       fi
     }
@@ -1249,6 +1260,47 @@ JSON
     ) || vscode_self_base_rc=$?
     _assert_eq "vscode history guard: clean checkout cannot compare with itself" \
       "23" "$vscode_self_base_rc"
+
+    # A clean checkout without an event base falls back to HEAD's parent. When
+    # that parent is unavailable, the guard must defer its history checks
+    # (shallow) or fail (root commit) rather than compare against an empty
+    # history and pass; checks of the current tree alone still run.
+    _vscode_guard_fallback_outcome() (
+      local repo=$1
+      unset DOT_VSCODE_KEYBINDING_BASE_SHA DOT_TEST_VSCODE_HISTORY_MARKER
+      _pass() { printf 'pass: %s\n' "$1"; }
+      _fail() { printf 'fail: %s\n' "$1"; }
+      _assert_eq() { printf 'assert: %s\n' "$1"; }
+      _assert_vscode_retirement_history "$repo" 2>&1
+    )
+    git -C "$vscode_base_guard_repo" \
+      -c user.name=dot-fixture -c user.email=dot.fixture.invalid \
+      commit -q --no-verify --allow-empty -m second
+    vscode_shallow_guard_repo=$(_tmpdir)/shallow
+    git -c protocol.file.allow=always clone -q --depth 1 \
+      "file://$vscode_base_guard_repo" "$vscode_shallow_guard_repo"
+    vscode_shallow_outcome=$(_vscode_guard_fallback_outcome "$vscode_shallow_guard_repo")
+    _assert_contains "vscode history guard: shallow clean checkout defers history checks" \
+      "pass: vscode keybindings: dynamic retirement history guard deferred to full-history CI" \
+      "$vscode_shallow_outcome"
+    _assert_not_contains "vscode history guard: shallow checkout skips history comparisons" \
+      "enter retirement history" "$vscode_shallow_outcome"
+    _assert_contains "vscode history guard: shallow checkout still runs tree-only checks" \
+      "assert: vscode keybindings: retirement records are globally available from all.d" \
+      "$vscode_shallow_outcome"
+    _assert_not_contains "vscode history guard: shallow checkout reads no missing parent" \
+      "fatal:" "$vscode_shallow_outcome"
+
+    vscode_root_guard_repo=$(_tmpdir)
+    cp -R "$vscode_base_guard_repo/.config" "$vscode_root_guard_repo/.config"
+    git -C "$vscode_root_guard_repo" init -q
+    git -C "$vscode_root_guard_repo" add .
+    git -C "$vscode_root_guard_repo" \
+      -c user.name=dot-fixture -c user.email=dot.fixture.invalid \
+      commit -q --no-verify -m root
+    _assert_eq "vscode history guard: root commit without a base fails" \
+      "fail: vscode keybindings: retirement history guard requires a Git base" \
+      "$(_vscode_guard_fallback_outcome "$vscode_root_guard_repo")"
 
     _dev_vscode_merges_fixture
 
