@@ -232,13 +232,18 @@ SH
     fail=$((fail + 1))
   fi
 
-  if python3 - "$root/.config/claude/settings.d" <<'PY'
+  # The fragments live under the merge-hook family directory. An empty glob
+  # must fail: a moved directory would otherwise make this check vacuous.
+  if python3 - "$root/.config/dot/merge-hooks.d/claude/settings.d" <<'PY'
 import json
 import pathlib
 import sys
 
 invalid = []
-for path in pathlib.Path(sys.argv[1]).glob("*.json"):
+fragments = sorted(pathlib.Path(sys.argv[1]).glob("*.json"))
+if not fragments:
+    raise SystemExit(f"{sys.argv[1]}: no Claude settings fragments")
+for path in fragments:
     data = json.loads(path.read_text(encoding="utf-8"))
     for rule in data.get("permissions", {}).get("allow", []):
         if isinstance(rule, str) and rule.endswith("(*)"):
@@ -251,6 +256,88 @@ PY
     pass=$((pass + 1))
   else
     printf 'FAIL: Claude permission allow rules use the supported schema spelling\n' >&2
+    fail=$((fail + 1))
+  fi
+
+  # AgentGuard owns native lifecycle vocabulary and adapter behavior; this
+  # overlay keeps only user policy plus the generic machinery that installs
+  # those assets. The negative contract keeps a future hook tweak from quietly
+  # recreating a second, drifting integration copy here. It moved with the
+  # agent payloads from the base repository, where it had stopped finding its
+  # inputs. Any interpreter failure, including a missing input, fails the row.
+  if python3 - "$root" <<'PY'
+import json
+import pathlib
+import sys
+import tomllib
+
+root = pathlib.Path(sys.argv[1])
+errors = []
+
+config_root = root / ".config/dot/merge-hooks.d"
+# The base repository's profile-ownership-policy.tsv owns which merge-hook
+# namespaces belong to this overlay; keep this list in step with its rows.
+owned_dirs = [config_root / name for name in ("claude", "codex", "gemini", "muse", "opencode")]
+for directory in owned_dirs:
+    for path in directory.rglob("*"):
+        if not path.is_file() or path.name == "README.md":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "agent-hook-" in text or "AGENTGUARD_NAME=" in text:
+            errors.append(f"{path.relative_to(root)}: contains provider-owned integration code")
+
+for agent in ("claude", "muse"):
+    policy = config_root / agent / "settings.d/20-permissions.json"
+    if not policy.is_file():
+        errors.append(f"{policy.relative_to(root)}: missing local permission policy")
+        continue
+    with policy.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if "permissions" not in data or "hooks" in data:
+        errors.append(f"{policy.relative_to(root)}: must contain permissions without hooks")
+
+codex_config = config_root / "codex/config.d/10-settings.toml"
+codex_data = {}
+if codex_config.is_file():
+    with codex_config.open("rb") as f:
+        codex_data = tomllib.load(f)
+else:
+    errors.append(f"{codex_config.relative_to(root)}: missing shared Codex settings")
+if codex_data.get("features", {}).get("hooks") is not None or "hooks" in codex_data:
+    errors.append(f"{codex_config.relative_to(root)}: contains provider-owned hook config")
+
+# Bare Codex follows each machine's local model state. Deliberate model policy
+# belongs only in explicitly selected Codex profiles, not the shared layer.
+base_model_policy = {
+    "model",
+    "model_provider",
+    "model_reasoning_effort",
+    "model_reasoning_summary",
+    "model_verbosity",
+    "service_tier",
+}
+managed_model_policy = sorted(base_model_policy.intersection(codex_data))
+if managed_model_policy:
+    errors.append(
+        f"{codex_config.relative_to(root)}: contains shared model policy: "
+        + ", ".join(managed_model_policy)
+    )
+
+if list((config_root / "gemini/settings.d").glob("*.json")):
+    errors.append("gemini/settings.d: local JSON integration fragment remains")
+
+opencode_adapter = config_root / "opencode/agentguard.js"
+if opencode_adapter.exists():
+    errors.append(f"{opencode_adapter.relative_to(root)}: provider adapter remains in dotfiles")
+
+if errors:
+    raise SystemExit("\n".join(errors))
+PY
+  then
+    printf 'PASS: agent integrations keep policy, not provider adapters\n'
+    pass=$((pass + 1))
+  else
+    printf 'FAIL: agent integrations keep policy, not provider adapters\n' >&2
     fail=$((fail + 1))
   fi
 
