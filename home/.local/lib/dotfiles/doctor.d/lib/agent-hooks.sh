@@ -7,12 +7,27 @@
 # a hung one would otherwise hold the whole section.
 _DR_AGENT_HOOK_DEADLINE=10
 
+# What the probes set for every hook run: a neutral agent name, and the
+# hook's side effects (memory hooks, process detection, the commit gate)
+# switched off. The reproduction hints print the same settings.
+_DR_AGENT_HOOK_ENV=(
+  AGENTGUARD_NAME=agent
+  AGENTGUARD_HIVE_MEMORY_HOOKS=0
+  AGENTGUARD_PROCESS_DETECT=0
+  AGENTGUARD_SLEY_GATE=0
+)
+# The probe payloads: an ordinary command, one policy forbids, and the stop
+# hook's empty event.
+_DR_AGENT_PROBE_BENIGN='{"tool_input":{"command":"dot status"}}'
+_DR_AGENT_PROBE_FORBIDDEN='{"tool_input":{"command":"git status -uall"}}'
+_DR_AGENT_PROBE_STOP='{}'
+
 # Run one hook the way agents do. Every command AgentGuard's integration
 # fragments register starts with `env -u BASH_ENV -u ENV`, so the hook never
 # inherits a startup file; a probe that set BASH_ENV instead could pass while
-# the real hook fails. The remaining variables name a neutral agent and turn
-# off the hook's side effects (memory hooks, process detection, the commit
-# gate), and TMPDIR keeps its scratch files in a private directory.
+# the real hook fails. _DR_AGENT_HOOK_ENV names a neutral agent and turns off
+# the hook's side effects, and TMPDIR keeps its scratch files in a private
+# directory.
 _dr_run_agent_hook() {
   local hook="$1" payload="$2"
   local tmp out_file err_file rc=0
@@ -33,11 +48,8 @@ _dr_run_agent_hook() {
     # shellcheck disable=SC2016  # $1 and $2 expand in the exec shell.
     _dr_dev_bounded "$_DR_AGENT_HOOK_DEADLINE" \
       env -u BASH_ENV -u ENV \
-      AGENTGUARD_NAME=agent \
+      "${_DR_AGENT_HOOK_ENV[@]}" \
       AGENTGUARD_SESSION_ID="dot-doctor-$$" \
-      AGENTGUARD_HIVE_MEMORY_HOOKS=0 \
-      AGENTGUARD_PROCESS_DETECT=0 \
-      AGENTGUARD_SLEY_GATE=0 \
       TMPDIR="$tmp" \
       "$BASH" --noprofile --norc -c 'exec "$1" <"$2"' dot-doctor "$hook" "$tmp/payload" \
       >"$out_file" 2>"$err_file" </dev/null
@@ -270,6 +282,10 @@ _dr_executable_on_path() {
   return 1
 }
 
+# Next steps shared by several registration rows.
+_DR_AGENTGUARD_UNMANAGED_HINT="dotfiles do not own what is there: move it aside, then run 'dot update' to install the managed plugin"
+_DR_AGENTGUARD_INSPECTOR_HINT="rerun 'dot doctor'; if it persists, check that each installed agent's config file parses (an unexpected shape can stop the inspector), then run 'dot update'"
+
 # Report one row per installed agent: its config parses, it registers
 # AgentGuard at all, and every agent-hook-* command it names resolves to an
 # executable on PATH, the same lookup the agent's `env ... agent-hook-*` hook
@@ -288,14 +304,15 @@ _dr_check_agentguard_registrations() {
     if [[ ! -e $config ]]; then
       # The merge hooks rebuild a dangling config link like a missing file.
       [[ ! -L $config ]] || display+=' is a broken link'
-      _dr_warn "$label AgentGuard hooks missing" "$display; run 'dot update'"
+      _dr_dev_row warn "$label AgentGuard hooks missing" "$display" "run 'dot update'"
       continue
     fi
     if [[ $kind == plugin ]]; then
       # Dotfiles install the plugin as a regular file and never replace a
       # user's symlink or directory there, so anything else is user-owned.
       if [[ ! -f $config || -L $config ]]; then
-        _dr_warn "$label AgentGuard plugin unmanaged" "$display"
+        _dr_dev_row warn "$label AgentGuard plugin unmanaged" "$display" \
+          "$_DR_AGENTGUARD_UNMANAGED_HINT"
         continue
       fi
       # The provider marker comes from base's shdeps adapter, which is not
@@ -303,8 +320,8 @@ _dr_check_agentguard_registrations() {
       # cannot be proven, so say so instead of guessing.
       marker=$(dot_agentguard_opencode_marker 2>/dev/null) || marker=
       if [[ -z $marker ]]; then
-        _dr_warn "$label AgentGuard plugin unchecked" \
-          'base lacks dot_agentguard_opencode_marker'
+        _dr_dev_row warn "$label AgentGuard plugin unchecked" \
+          'base lacks dot_agentguard_opencode_marker' "run 'dot update' to update base"
         continue
       fi
     fi
@@ -316,7 +333,8 @@ _dr_check_agentguard_registrations() {
 
   if ! command -v python3 >/dev/null 2>&1; then
     for label in "${queued_labels[@]}"; do
-      _dr_warn "$label AgentGuard hooks unchecked" 'python3 is required'
+      _dr_dev_row warn "$label AgentGuard hooks unchecked" 'python3 is required' \
+        'install python3 to check them'
     done
     return 0
   fi
@@ -324,7 +342,8 @@ _dr_check_agentguard_registrations() {
   # otherwise misalign every result line.
   output=$(_dr_agentguard_inspect "$marker" "${queued[@]}" 2>/dev/null) || status=$?
   if ((status != 0)); then
-    _dr_warn 'AgentGuard hook registration unchecked' "python3 exited $status"
+    _dr_dev_row warn 'AgentGuard hook registration unchecked' "python3 exited $status" \
+      "$_DR_AGENTGUARD_INSPECTOR_HINT"
     return 0
   fi
 
@@ -336,34 +355,38 @@ _dr_check_agentguard_registrations() {
     # The inspector answers in queue order; a mismatch means its output was
     # not the protocol above, so say so rather than misattribute a result.
     if [[ -z $label || $result_agent != "$agent" ]]; then
-      _dr_warn 'AgentGuard hook registration unchecked' 'unexpected inspector output'
+      _dr_dev_row warn 'AgentGuard hook registration unchecked' 'unexpected inspector output' \
+        "$_DR_AGENTGUARD_INSPECTOR_HINT"
       return 0
     fi
     case $result in
       invalid)
-        _dr_fail "$label AgentGuard config invalid" "$display: $detail"
+        _dr_dev_row fail "$label AgentGuard config invalid" "$display: $detail" \
+          "fix the file, then run 'dot update'"
         continue
         ;;
       unmanaged)
-        _dr_warn "$label AgentGuard plugin unmanaged" "$display"
+        _dr_dev_row warn "$label AgentGuard plugin unmanaged" "$display" \
+          "$_DR_AGENTGUARD_UNMANAGED_HINT"
         continue
         ;;
       disabled)
-        _dr_warn "$label AgentGuard hooks disabled" "$detail in $display"
+        _dr_dev_row warn "$label AgentGuard hooks disabled" "$detail in $display" \
+          'remove that setting to turn the hooks back on'
         continue
         ;;
     esac
     if [[ -z $names ]]; then
-      _dr_warn "$label AgentGuard hooks missing" \
-        "no agent-hook-* commands in $display; run 'dot update'"
+      _dr_dev_row warn "$label AgentGuard hooks missing" \
+        "no agent-hook-* commands in $display" "run 'dot update'"
       continue
     fi
     # Every AgentGuard fragment registers the pre-bash guard. Without it the
     # remaining lifecycle hooks still look registered while shell commands
     # run unguarded, e.g. after a user layer replaced that one entry.
     if [[ " $names " != *' agent-hook-pre-bash '* ]]; then
-      _dr_warn "$label AgentGuard pre-bash guard not registered" \
-        "$display; run 'dot update'"
+      _dr_dev_row warn "$label AgentGuard pre-bash guard not registered" \
+        "$display" "run 'dot update'"
       continue
     fi
     read -r -a name_list <<<"$names"
@@ -372,8 +395,9 @@ _dr_check_agentguard_registrations() {
       _dr_executable_on_path "$name" || missing+=("$name")
     done
     if ((${#missing[@]} > 0)); then
-      _dr_fail "$label AgentGuard hook commands missing" \
-        "not executable on PATH or in ~/.local/bin: ${missing[*]}"
+      _dr_dev_row fail "$label AgentGuard hook commands missing" \
+        "not executable on PATH or in ~/.local/bin: ${missing[*]}" \
+        "run 'dot update' to reinstall AgentGuard"
       continue
     fi
     detail="${#name_list[@]} command(s) in $display"
@@ -382,7 +406,8 @@ _dr_check_agentguard_registrations() {
     _dr_ok "$label AgentGuard hooks" "$detail"
   done <<<"$output"
   ((index == ${#queued_labels[@]})) ||
-    _dr_warn 'AgentGuard hook registration unchecked' 'inspector output was truncated'
+    _dr_dev_row warn 'AgentGuard hook registration unchecked' 'inspector output was truncated' \
+      "$_DR_AGENTGUARD_INSPECTOR_HINT"
 }
 
 _dr_check_grok_compat() {
@@ -403,11 +428,12 @@ _dr_check_grok_compat() {
   [[ $expect_hooks -eq 1 || $expect_rules -eq 1 ]] || return 0
 
   if [[ ! -f $cfg ]]; then
-    _dr_warn "Grok Claude-compat cells missing" "run 'dot update'"
+    _dr_dev_row warn "Grok Claude-compat cells missing" "$(_dr_tilde "$cfg")" "run 'dot update'"
     return 0
   fi
   if ! command -v python3 >/dev/null 2>&1; then
-    _dr_warn "Grok Claude-compat cells unverified" "python3 is required"
+    _dr_dev_row warn "Grok Claude-compat cells unverified" "python3 is required" \
+      'install python3 to check them'
     return 0
   fi
 
@@ -450,9 +476,33 @@ PY
     _dr_ok "Grok disables Claude-compat discovery" \
       "$(_dr_tilde "$cfg")"
   else
-    _dr_warn "Grok Claude-compat discovery still enabled" \
-      "run 'dot update'"
+    _dr_dev_row warn "Grok Claude-compat discovery still enabled" \
+      "$(_dr_tilde "$cfg")" "run 'dot update'"
   fi
+}
+
+# Report via REPLY the next step for a failed probe: the reinstall, then
+# (after NOTE, if any) the command that reruns HOOK (a path) on PAYLOAD by
+# hand the way the probe ran it. The command comes last, so it can be
+# pasted from "(" to the end; it runs in a subshell, from ~, without the
+# shell's startup files, under a throwaway session ID and a private TMPDIR
+# it removes. The directory is made before the `cd`, so `t` is always the
+# subshell's own (empty if mktemp failed) and a failed `cd` removes only
+# what the command created, never a `t` the caller's shell set. Without
+# that session ID the hook would fall back to the calling agent's own
+# session and could, for one, use up that session's completion bell. The hook path is quoted: under HOME as "$HOME/...",
+# elsewhere in single quotes.
+_dr_agent_repro_hint() {
+  local hook=$1 payload=$2 note=${3:-} shown
+  case $hook in
+    "$HOME"/*) shown="\"\$HOME/${hook#"$HOME"/}\"" ;;
+    *\'*) shown='<hook>' ;;
+    *) shown="'$hook'" ;;
+  esac
+  REPLY="reinstall AgentGuard with 'dot update'; to see the failure first, run${note:+ ($note)}:"
+  REPLY+=" (t=\$(mktemp -d) && cd ~ && echo '$payload' | env -u BASH_ENV -u ENV"
+  REPLY+=" ${_DR_AGENT_HOOK_ENV[*]} AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR=\"\$t\" $shown;"
+  REPLY+=" rc=\$?; rm -rf \"\$t\"; exit \$rc)"
 }
 
 # Smoke-probe the installed pre-bash and stop hooks; results go to DIR.
@@ -463,7 +513,8 @@ _dr_check_agent_hook_probes() {
   local -a probe_pids=()
 
   if [[ ! -x "$pre_bash" ]]; then
-    _dr_warn "agent pre-bash hook unavailable" "$(_dr_tilde "$pre_bash")"
+    _dr_dev_row warn "agent pre-bash hook unavailable" "$(_dr_tilde "$pre_bash")" \
+      "run 'dot update' to reinstall AgentGuard"
     return 0
   fi
 
@@ -473,12 +524,12 @@ _dr_check_agent_hook_probes() {
   # are the same file tests as before, so a missing pre-bash still returns
   # before any hook runs, and results are applied below in the original
   # order, so records are unchanged.
-  _dr_run_agent_hook_async "$results/dot-status" "$pre_bash" '{"tool_input":{"command":"dot status"}}'
+  _dr_run_agent_hook_async "$results/dot-status" "$pre_bash" "$_DR_AGENT_PROBE_BENIGN"
   probe_pids+=("$!")
-  _dr_run_agent_hook_async "$results/raw-git" "$pre_bash" '{"tool_input":{"command":"git status -uall"}}'
+  _dr_run_agent_hook_async "$results/raw-git" "$pre_bash" "$_DR_AGENT_PROBE_FORBIDDEN"
   probe_pids+=("$!")
   if [[ -x "$stop_hook" ]]; then
-    _dr_run_agent_hook_async "$results/stop" "$stop_hook" '{}'
+    _dr_run_agent_hook_async "$results/stop" "$stop_hook" "$_DR_AGENT_PROBE_STOP"
     probe_pids+=("$!")
   fi
   # probe_pids always holds at least the two pre-bash probes here. Under
@@ -496,7 +547,8 @@ _dr_check_agent_hook_probes() {
   if ((rc == 0)); then
     _dr_ok "agent pre-bash allows a benign command" 'dot status'
   else
-    _dr_fail "agent pre-bash rejects a benign command" "$(_dr_probe_reason "$rc")"
+    _dr_agent_repro_hint "$pre_bash" "$_DR_AGENT_PROBE_BENIGN"
+    _dr_dev_row fail "agent pre-bash rejects a benign command" "$(_dr_probe_reason "$rc")" "$REPLY"
   fi
 
   rc=0
@@ -506,17 +558,21 @@ _dr_check_agent_hook_probes() {
       _dr_ok "agent pre-bash enforces policy" \
         'raw git status is allowed: HOME is a Git checkout'
     else
-      _dr_fail "agent pre-bash does not enforce policy" \
-        "raw dotfiles git status was allowed; expected a block (exit 2)"
+      _dr_agent_repro_hint "$pre_bash" "$_DR_AGENT_PROBE_FORBIDDEN" 'a block exits 2 with a reason'
+      _dr_dev_row fail "agent pre-bash does not enforce policy" \
+        "raw dotfiles git status was allowed; expected a block (exit 2)" "$REPLY"
     fi
   elif ((rc == 2)) && [[ -n "$_DR_AGENT_HOOK_STDERR" ]]; then
     # The protocol pairs exit 2 with a reason on stderr for the agent; a bare
     # exit 2 is more likely a shell or jq usage error than a block.
     _dr_ok "agent pre-bash enforces policy" 'blocks raw dotfiles git status'
   elif _dr_dev_deadline_status "$rc" || [[ -z $_DR_AGENT_HOOK_STDERR ]]; then
-    _dr_fail "agent pre-bash policy probe failed" "$(_dr_probe_reason "$rc")"
+    _dr_agent_repro_hint "$pre_bash" "$_DR_AGENT_PROBE_FORBIDDEN" 'a block exits 2 with a reason'
+    _dr_dev_row fail "agent pre-bash policy probe failed" "$(_dr_probe_reason "$rc")" "$REPLY"
   else
-    _dr_fail "agent pre-bash policy probe failed" "exit $rc: $(_dr_probe_reason "$rc")"
+    _dr_agent_repro_hint "$pre_bash" "$_DR_AGENT_PROBE_FORBIDDEN" 'a block exits 2 with a reason'
+    _dr_dev_row fail "agent pre-bash policy probe failed" "exit $rc: $(_dr_probe_reason "$rc")" \
+      "$REPLY"
   fi
 
   if [[ -x "$stop_hook" ]]; then
@@ -525,10 +581,12 @@ _dr_check_agent_hook_probes() {
     if ((rc == 0)); then
       _dr_ok "agent stop hook runs"
     else
-      _dr_fail "agent stop hook failed" "$(_dr_probe_reason "$rc")"
+      _dr_agent_repro_hint "$stop_hook" "$_DR_AGENT_PROBE_STOP"
+      _dr_dev_row fail "agent stop hook failed" "$(_dr_probe_reason "$rc")" "$REPLY"
     fi
   else
-    _dr_warn "agent stop hook unavailable" "$(_dr_tilde "$stop_hook")"
+    _dr_dev_row warn "agent stop hook unavailable" "$(_dr_tilde "$stop_hook")" \
+      "run 'dot update' to reinstall AgentGuard"
   fi
 }
 
@@ -550,7 +608,11 @@ _dr_check_agent_tooling() {
   local results
   _dr_section "Agent tooling"
 
-  results=$(mktemp -d 2>/dev/null || mktemp -d -t dot-doctor-agent-hooks) || return 1
+  if ! results=$(mktemp -d 2>/dev/null || mktemp -d -t dot-doctor-agent-hooks); then
+    _dr_dev_row warn 'Agent tooling unchecked' 'could not create a temporary directory' \
+      "$_DR_DEV_TMPDIR_HINT"
+    return 0
+  fi
   # hm may wait on a network mount, so it runs alongside everything else.
   _dr_hive_memory_start "$results"
   _dr_check_agentguard_registrations
