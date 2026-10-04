@@ -140,6 +140,52 @@ records="$fixtures/records"
   _rec repo zeta main 9999999999999999999999999999999999999999 EXPECTED
 } >"$records"
 
+# Run the command under a real pseudo-terminal only for presentation tests.
+invoke() {
+  if [[ ${CI_TEST_TTY:-0} != 1 ]]; then
+    "$@"
+    return
+  fi
+  python3 - "$@" <<'PYTTY'
+import errno
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+master, slave = pty.openpty()
+child = subprocess.Popen(sys.argv[1:], stdout=slave, stderr=subprocess.STDOUT)
+os.close(slave)
+deadline = time.monotonic() + 10
+try:
+    while True:
+        if time.monotonic() > deadline:
+            child.kill()
+            raise RuntimeError("terminal fixture timed out")
+        if not select.select([master], [], [], 0.1)[0]:
+            continue
+        try:
+            data = os.read(master, 65536)
+        except OSError as error:
+            if error.errno == errno.EIO:
+                break
+            raise
+        if not data:
+            break
+        sys.stdout.buffer.write(data)
+finally:
+    os.close(master)
+    try:
+        child.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
+sys.exit(child.returncode)
+PYTTY
+}
+
 # Run gh-ci-status with arguments "$@" against the stub gh, serving $RECORDS
 # (default: the main fixture) and restarting the stub's call counter.
 run() {
@@ -149,7 +195,7 @@ run() {
     GH_STUB_WORKFLOWS_JQ_CAPTURE=$workflows_jq_capture \
     GH_STUB_SCHED_DIR="${SCHED_DIR:-$sched_dir}" \
     GH_STUB_COUNTER="$fixtures/counter" GH_STUB_RECORDS="${RECORDS:-$records}" \
-    PATH="$stub_bin:$PATH" "$command_path" "$@"
+    PATH="$stub_bin:$PATH" invoke "$command_path" "$@"
 }
 
 # Scheduled runs: epochs are relative to now so the 45-day cutoff holds no
@@ -181,6 +227,46 @@ _sched "$sched_dir" zeta 71 Timeout timed_out "$recent"
 _sched "$sched_dir" zeta 72 Skipper skipped "$recent"
 empty_sched=$(_tmpdir)
 
+echo "=== status presentation ==="
+
+out=$(NO_COLOR='' run --no-scheduled --color always 2>&1)
+rc=$?
+_assert_exit "color: rendering preserves failure exit" 1 "$rc"
+_assert_contains "color: pass uses Dot green and check" $'\e[38;2;63;185;80m✓ pass' "$out"
+_assert_contains "color: fail uses Dot red and cross" $'\e[38;2;248;81;73m✗ fail' "$out"
+_assert_contains "color: pending uses yellow and clock" $'\e[38;2;210;153;34m◷ pending' "$out"
+_assert_contains "color: no checks uses gray and circle" $'\e[38;2;139;148;158m○ none' "$out"
+_assert_contains "color: warnings are distinct" $'\e[38;2;210;153;34m! warning' "$out"
+_assert_contains "color: failed summary stands out" $'\e[38;2;248;81;73m✗ summary:' "$out"
+
+out=$(NO_COLOR='' run --no-scheduled --color never 2>&1)
+_assert_not_contains "color: never emits no escapes" $'\e[' "$out"
+_assert_contains "color: plain output retains symbols" '✗ fail' "$out"
+out=$(NO_COLOR='' run --no-scheduled 2>&1)
+_assert_not_contains "color: auto leaves redirected output plain" $'\e[' "$out"
+out=$(NO_COLOR=1 run --no-scheduled --color=always 2>&1)
+_assert_not_contains "color: NO_COLOR overrides always" $'\e[' "$out"
+if command -v python3 >/dev/null 2>&1; then
+  out=$(NO_COLOR='' TERM=xterm CI_TEST_TTY=1 run --no-scheduled 2>&1)
+  _assert_contains "color: auto styles real terminal output" $'\e[38;2;63;185;80m✓ pass' "$out"
+  out=$(NO_COLOR='' TERM=dumb CI_TEST_TTY=1 run --no-scheduled 2>&1)
+  _assert_not_contains "color: dumb terminal stays plain" $'\e[' "$out"
+  out=$(NO_COLOR=1 TERM=xterm CI_TEST_TTY=1 run --no-scheduled 2>&1)
+  _assert_not_contains "color: NO_COLOR keeps terminal output plain" $'\e[' "$out"
+else
+  echo 'SKIP: terminal presentation checks need python3'
+fi
+plain=$(run --porcelain --no-scheduled)
+colored=$(NO_COLOR='' run --porcelain --no-scheduled --color always)
+_assert_eq "color: porcelain is byte-identical" "$plain" "$colored"
+_assert_not_contains "color: porcelain has no symbols" '✓' "$colored"
+out=$(run --color wrong 2>&1)
+rc=$?
+_assert_exit "color: invalid mode is a usage error" 2 "$rc"
+out=$(run --color 2>&1)
+rc=$?
+_assert_exit "color: missing mode is a usage error" 2 "$rc"
+
 echo "=== default summary ==="
 
 : >"$gh_log"
@@ -197,11 +283,11 @@ _assert_contains "summary: archived repositories are filtered server-side" \
 _assert_contains "summary: passing branch shows its short commit" \
   "pass     alpha    main@aaaaaaa" "$out"
 _assert_contains "summary: failing pull request shows auto-merge" \
-  "  fail     #1 Fix alpha [auto-merge]" "$out"
+  "  ✗ fail     #1 Fix alpha [auto-merge]" "$out"
 _assert_contains "summary: failing pull request links to GitHub" \
   "https://github.test/o/alpha/pull/1" "$out"
 _assert_contains "summary: a no-checks pull request keeps its later fields" \
-  "  none     #4 No checks yet [draft] [auto-merge]" "$out"
+  "  ○ none     #4 No checks yet [draft] [auto-merge]" "$out"
 _assert_not_contains "summary: a no-checks pull request omits its link" \
   "https://github.test/o/alpha/pull/4" "$out"
 _assert_contains "summary: pending branch is reported" "pending  beta" "$out"
@@ -221,15 +307,15 @@ _assert_contains "summary: sanitized titles print verbatim" \
 _assert_contains "summary: counts cover branches, scheduled runs, and pull requests" \
   "summary: 5 pass, 5 fail, 3 pending, 4 without checks (5 scheduled runs checked)" "$out"
 _assert_contains "scheduled: a failing nightly is listed under its repository" \
-  "  fail     scheduled Nightly: failure (2026-01-02 03:04Z)" "$out"
+  "  ✗ fail     scheduled Nightly: failure (2026-01-02 03:04Z)" "$out"
 _assert_contains "scheduled: a failing nightly links to its run" \
   "https://github.test/o/alpha/actions/runs/11" "$out"
 _assert_contains "scheduled: a running nightly is pending" \
-  "  pending  scheduled Nightly: in_progress" "$out"
+  "  ◷ pending  scheduled Nightly: in_progress" "$out"
 _assert_not_contains "scheduled: a run older than 45 days is ignored" "Weekly" "$out"
 _assert_contains "scheduled: a run awaiting approval needs attention" \
-  "  fail     scheduled Approval: waiting" "$out"
-_assert_contains "scheduled: a timed-out run fails" "  fail     scheduled Timeout: timed_out" "$out"
+  "  ✗ fail     scheduled Approval: waiting" "$out"
+_assert_contains "scheduled: a timed-out run fails" "  ✗ fail     scheduled Timeout: timed_out" "$out"
 _assert_not_contains "scheduled: a skipped run is ignored" "Skipper" "$out"
 _assert_not_contains "scheduled: a cancelled run is ignored" "Superseded" "$out"
 _assert_not_contains "scheduled: a passing nightly is counted but not listed" \
