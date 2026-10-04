@@ -1083,14 +1083,19 @@ PY
     _grok_config_seed_toml
     printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
     printf '{"keep":true}\n' >"$grok_config_user_hooks"
-    grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    # Snapshot exact bytes with POSIX od: capability CI runs this suite with an
+    # audited command allowlist that has no sha256sum, and a missing hasher
+    # turned both snapshots empty so the comparison below passed vacuously.
+    grok_config_hooks_bytes=$(od -An -tx1 -v "$grok_config_user_hooks")
+    _assert_contains "Grok config merge: sibling hooks snapshot holds the opening brace byte" \
+      "7b" "$grok_config_hooks_bytes"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
       "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
-    grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    grok_config_hooks_bytes_after=$(od -An -tx1 -v "$grok_config_user_hooks")
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
-      "$grok_config_hooks_hash" "$grok_config_hooks_after"
+      "$grok_config_hooks_bytes" "$grok_config_hooks_bytes_after"
 
     grok_config_again_status=0
     _run_grok_config_merge >/dev/null || grok_config_again_status=$?
@@ -1162,7 +1167,12 @@ if [[ "${1:-}" == "--config" ]]; then
 fi
 case "$1 $2" in
   "stores show")
-    [[ "${HIVE_MEMORY_STORES_SHOW_RC:-0}" == 0 ]] || exit "$HIVE_MEMORY_STORES_SHOW_RC"
+    if [[ "${HIVE_MEMORY_STORES_SHOW_RC:-0}" != 0 ]]; then
+      # A failing hm can still print a parsable report first.
+      [[ "${HIVE_MEMORY_STORES_SHOW_JSON_ON_FAILURE:-0}" != 1 ]] ||
+        printf '%s\n' "$HIVE_MEMORY_STORES_SHOW_JSON"
+      exit "$HIVE_MEMORY_STORES_SHOW_RC"
+    fi
     if [[ -n ${HIVE_MEMORY_STORES_SHOW_JSON:-} ]]; then
       printf '%s\n' "$HIVE_MEMORY_STORES_SHOW_JSON"
     else
@@ -1195,7 +1205,8 @@ HM
     unset -f merge _hive_memory_config _hive_memory_effective_store_spec \
       _hive_memory_cloud_root_for \
       _hive_memory_warn _hive_memory_init_default_store \
-      _hive_memory_check_config _hive_memory_remove_legacy_core hm 2>/dev/null
+      _hive_memory_check_config _hive_memory_remove_legacy_core \
+      _hive_memory_core_path _hive_memory_core_installed hm 2>/dev/null
     # shellcheck source=/dev/null
     . "$_HIVE_HOOK"
     # shellcheck disable=SC2329 # merge resolves this fixture through command lookup.
@@ -1208,7 +1219,8 @@ HM
     export HIVE_MEMORY_STORES_SHOW_JSON="${HIVE_MEMORY_STORES_SHOW_JSON:-}"
     export PATH="$_HIVE_BIN:$PATH"
     hash -r
-    merge >/dev/null
+    # Callers that inspect the hook row set _HIVE_MERGE_STDOUT to a file.
+    merge >"${_HIVE_MERGE_STDOUT:-/dev/null}"
     rc=$?
     export PATH="$old_path"
     hash -r
@@ -1464,6 +1476,50 @@ TOML
     "effective config unavailable" "$_hive_invalid_layer_output"
   _assert_not_contains "hive hook: invalid layered config skips store init" \
     "stores init" "$(cat "$_HIVE_LOG")"
+
+  # Dot runs hooks under pipefail, so hm failing after printing a parsable
+  # report always meant "unavailable"; the merge harness runs without it, so
+  # the outcome is asserted explicitly rather than inherited.
+  export HIVE_MEMORY_STORES_SHOW_RC=1 HIVE_MEMORY_STORES_SHOW_JSON_ON_FAILURE=1
+  : >"$_HIVE_LOG"
+  _hive_failed_report_output=$(_run_hive_merge 2>&1)
+  unset HIVE_MEMORY_STORES_SHOW_RC HIVE_MEMORY_STORES_SHOW_JSON_ON_FAILURE
+  _assert_contains "hive hook: failing hm with a parsable report warns" \
+    "effective config unavailable" "$_hive_failed_report_output"
+  _assert_not_contains "hive hook: failing hm with a parsable report skips store init" \
+    "stores init" "$(cat "$_HIVE_LOG")"
+
+  # The tracked launcher exits 127 for every call when the real hm is not
+  # installed (Android, or a client without a dependency provider).
+  _hive_absent_core_stdout=$(_tmpfile)
+  export HIVE_MEMORY_STORES_SHOW_RC=127 HIVE_MEMORY_STORES_LIST_RC=127
+  : >"$_HIVE_LOG"
+  _hive_absent_core_output=$(_HIVE_MERGE_STDOUT=$_hive_absent_core_stdout \
+    _run_hive_merge 2>&1)
+  _hive_absent_core_rc=$?
+  _assert_exit "hive hook: absent hm core is a successful no-op" \
+    0 "$_hive_absent_core_rc"
+  _assert_eq "hive hook: absent hm core emits no warning" \
+    "" "$_hive_absent_core_output"
+  _assert_eq "hive hook: absent hm core prints no Hive Memory row" \
+    "" "$(cat "$_hive_absent_core_stdout")"
+  _assert_not_contains "hive hook: absent hm core skips the config check" \
+    "stores list" "$(cat "$_HIVE_LOG")"
+
+  # The launcher also exits 127 for an unavailable AgentGuard. With the core
+  # installed, that is a broken install, not an absent tool.
+  _hive_core="$TEST_HOME/.local/share/cgraf78/hive-memory/hm"
+  mkdir -p "${_hive_core%/*}"
+  printf '#!/bin/sh\nexit 0\n' >"$_hive_core"
+  chmod +x "$_hive_core"
+  : >"$_HIVE_LOG"
+  _hive_broken_launcher_output=$(_run_hive_merge 2>&1)
+  rm -f "$_hive_core"
+  unset HIVE_MEMORY_STORES_SHOW_RC HIVE_MEMORY_STORES_LIST_RC
+  _assert_contains "hive hook: 127 with an installed core still warns" \
+    "effective config unavailable" "$_hive_broken_launcher_output"
+  _assert_contains "hive hook: 127 with an installed core reports the config check" \
+    "config check reported issues" "$_hive_broken_launcher_output"
   unset HIVE_MEMORY_STORES_SHOW_JSON
 
   _HIVE_XDG_CONFIG=$(_tmpdir)/config
