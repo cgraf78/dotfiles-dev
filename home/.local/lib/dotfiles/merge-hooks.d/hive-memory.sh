@@ -32,12 +32,25 @@ _hive_memory_warn() {
   dot_hook_warn "    warning: Hive Memory $1"
 }
 
+# The fixed path where Shdeps installs the real hm, through REPLY. The tracked
+# launcher delegates to this same installation contract.
+_hive_memory_core_path() {
+  [[ -n "${HOME:-}" ]] || return 1
+  REPLY="$HOME/.local/share/cgraf78/hive-memory/hm"
+}
+
+# Succeed when the real hm is installed, by the launcher's own test.
+_hive_memory_core_installed() {
+  _hive_memory_core_path || return 1
+  [[ -x "$REPLY" && ! -d "$REPLY" ]]
+}
+
 _hive_memory_remove_legacy_core() {
-  [[ -n "${HOME:-}" ]] || return 0
+  _hive_memory_core_path || return 0
 
   local legacy_dir="$HOME/.local/share/hive-memory/bin"
   local legacy_core="$legacy_dir/hm-core"
-  local stable_core="$HOME/.local/share/cgraf78/hive-memory/hm"
+  local stable_core="$REPLY"
   local launcher="$HOME/.local/bin/hm"
   local launcher_marker
   local expected_marker="# Dotfiles-owned front door for the generic \`hm\` binary."
@@ -85,10 +98,18 @@ _hive_memory_remove_legacy_core() {
   rmdir "$legacy_dir" "${legacy_dir%/*}" 2>/dev/null || true
 }
 
+# Print the effective default store as one field per line. Returns 127 when
+# hm itself exits 127 and 1 for any other hm failure (even with a parsable
+# report, as Dot's pipefail worker always treated it) or a parse failure.
 _hive_memory_effective_store_spec() {
-  local config="$1"
+  local config="$1" json rc
 
-  hm --config "$config" stores show --json | python3 -c '
+  json=$(hm --config "$config" stores show --json) || {
+    rc=$?
+    ((rc == 127)) && return 127
+    return 1
+  }
+  printf '%s\n' "$json" | python3 -c '
 import json
 import sys
 
@@ -112,7 +133,7 @@ print(
         ]
     )
 )
-'
+' || return 1
 }
 
 _hive_memory_cloud_root_for() {
@@ -134,15 +155,14 @@ _hive_memory_cloud_root_for() {
   return 1
 }
 
+# Initialize the default store from SPEC, the effective store spec, which was
+# read with status SPEC_RC.
 _hive_memory_init_default_store() {
-  local config="$1"
-  local spec store root description sensitivity available line
+  local config="$1" spec_rc="$2" spec="$3"
+  local store root description sensitivity available line
   local -a fields=()
 
-  # Ask Hive for its effective layered configuration rather than parsing the
-  # primary TOML ourselves. This keeps config.local.toml precedence, expansion,
-  # validation, and future schema behavior owned by the provider.
-  if ! spec=$(_hive_memory_effective_store_spec "$config" 2>/dev/null); then
+  if ((spec_rc != 0)); then
     _hive_memory_warn "effective config unavailable"
     return 0
   fi
@@ -197,15 +217,30 @@ _hive_memory_check_config() {
 
 merge() {
   _dot_tool_present hive-memory || return 0
-  local config
+  local config spec spec_rc
   _hive_memory_remove_legacy_core
   _hive_memory_config || return 0
   config="$REPLY"
 
   [[ -f "$config" ]] || return 0
 
+  # Ask Hive for its effective layered configuration rather than parsing the
+  # primary TOML ourselves. This keeps config.local.toml precedence, expansion,
+  # validation, and future schema behavior owned by the provider.
+  spec_rc=0
+  spec=$(_hive_memory_effective_store_spec "$config" 2>/dev/null) || spec_rc=$?
+  # The tracked launcher stays linked where the real hm is never installed:
+  # Android is excluded from the dependency, and a client without a dependency
+  # provider never converges it. The launcher exits 127 there, which is an
+  # absent tool, not a broken config, so skip quietly like any other missing
+  # tool. A 127 while the core is installed (the launcher also uses it for an
+  # unavailable AgentGuard) is a broken install and still warns below.
+  if ((spec_rc == 127)) && ! _hive_memory_core_installed; then
+    return 0
+  fi
+
   dot_hook_log "  Hive Memory"
 
-  _hive_memory_init_default_store "$config"
+  _hive_memory_init_default_store "$config" "$spec_rc" "$spec"
   _hive_memory_check_config "$config"
 }
