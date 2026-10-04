@@ -136,8 +136,16 @@ _dr_hive_memory_finish() {
 
   local problems=0
   if [[ -n $keys ]]; then
+    # hm reads HIVE_MEMORY_CONFIG when set, else config.toml with
+    # config.local.toml layered over it, so the key may be in either file.
+    local hm_keys_hint="run 'dot update' to update hive-memory, or drop the key(s) from "
+    if [[ -n ${HIVE_MEMORY_CONFIG:-} ]]; then
+      hm_keys_hint+=$(_dr_tilde "$HIVE_MEMORY_CONFIG")
+    else
+      hm_keys_hint+="config.toml or config.local.toml in $(_dr_tilde "${XDG_CONFIG_HOME:-$HOME/.config}/hive-memory")"
+    fi
     _dr_dev_row warn 'hm binary behind configured keys' "unknown key(s): $keys" \
-      "run 'dot update' to update hive-memory, or drop the key(s) from $(_dr_tilde "${XDG_CONFIG_HOME:-$HOME/.config}/hive-memory/config.toml")"
+      "$hm_keys_hint"
     problems=1
   fi
   if [[ $reachable == false ]]; then
