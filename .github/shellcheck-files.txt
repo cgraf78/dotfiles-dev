@@ -20,15 +20,14 @@ program	home/.config/shell/interactive.d/70-dev-tool-init.sh
 program	home/.config/shell/interactive.d/80-dev-integrations.bash
 program	home/.local/bin/gh-ci-status
 program	home/.local/bin/hm
-program	home/.local/lib/dotfiles/doctor.d/21-dev-tools.sh
 program	home/.local/lib/dotfiles/doctor.d/31-dev-shell-integrations.sh
 program	home/.local/lib/dotfiles/doctor.d/32-git-hooks.sh
 program	home/.local/lib/dotfiles/doctor.d/40-agent-hooks.sh
-program	home/.local/lib/dotfiles/doctor.d/50-hive-memory.sh
 program	home/.local/lib/dotfiles/doctor.d/75-nvim-dev.sh
 program	home/.local/lib/dotfiles/doctor.d/lib/agent-hooks.sh
+program	home/.local/lib/dotfiles/doctor.d/lib/dev-common.sh
 program	home/.local/lib/dotfiles/doctor.d/lib/dev-integrations.sh
-program	home/.local/lib/dotfiles/doctor.d/lib/dev-tools.sh
+program	home/.local/lib/dotfiles/doctor.d/lib/hive-memory.sh
 program	home/.local/lib/dotfiles/doctor.d/lib/nvim-dev.sh
 program	home/.local/lib/dotfiles/git-hooks/commit-msg
 program	home/.local/lib/dotfiles/git-hooks/pre-applypatch

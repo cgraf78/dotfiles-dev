@@ -243,7 +243,8 @@ _dr_check_nvim_dev() {
   _dr_section 'Nvim development tooling'
 
   # Report only absent modules: present ones are already covered by core's
-  # overlay link check, and a row per healthy file was noise.
+  # overlay link check, and a row per healthy file was noise. A missing one
+  # warns, as core's link check does: the next update relinks it.
   for module_path in \
     "$HOME/.config/nvim/lua/config/mason-policy.lua" \
     "$HOME/.config/nvim/lua/dotfiles/lazyvim_extras/dev.lua" \
@@ -253,7 +254,7 @@ _dr_check_nvim_dev() {
     "$HOME/.config/nvim/lua/plugins/formatting.lua" \
     "$HOME/.config/nvim/lua/plugins/linting.lua"; do
     if [[ ! -r $module_path ]]; then
-      _dr_fail "${module_path##*/} missing" "$(_dr_tilde "$module_path")"
+      _dr_warn "${module_path##*/} missing" "$(_dr_tilde "$module_path"); run 'dot update'"
       missing=$((missing + 1))
     fi
   done

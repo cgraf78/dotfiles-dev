@@ -2,22 +2,22 @@
 
 dot_dev_doctor_test() {
   local result_file current_module sections failures extension_home path
-  local doctor_home doctor_bin result drift expected direct_tool status
-  local relative_link relative_target symlink_root symlink_alias
+  local doctor_home doctor_bin result drift expected status
+  local hm_home hm_bin hm_store hm_healthy hm_old integ_home integ_bin
+  local integ_call integ_name integ_emitter integ_dep integ_asset
+  local probe_root tooling_home temps_lib temps_saved temps_def temps_log
   local agent_home installed_config installed_config_before installed_doctor_output
   local installed_section fixture_health=false owner_root source_doctor host_doctor
   local grok_compat_path reg_home reg_bin reg_path reg_count python_bin hook
-  local hooks_home shared_def shared_log nvim_dev_home module_path conf_def
-  local registration_def real_nvim nvim_head links_lib links_saved marker_def
+  local hooks_home nvim_dev_home module_path
+  local registration_def real_nvim nvim_head marker_def
   local nvim_home nvim_calls started real_home real_bin real_tmp git_log
   local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
   local -a modules=(
-    21-dev-tools.sh
     31-dev-shell-integrations.sh
     32-git-hooks.sh
     40-agent-hooks.sh
-    50-hive-memory.sh
     75-nvim-dev.sh
   )
 
@@ -73,7 +73,9 @@ dot_dev_doctor_test() {
 
   sections=$(awk -F '\t' '$1 == "section" { count++ } END { print count+0 }' "$result_file")
   failures=$(awk -F '\t' '$1 == "fail" { count++ } END { print count+0 }' "$result_file")
-  _assert_eq 'All six dev doctor wrappers publish a section' 6 "$sections"
+  _assert_eq 'All four dev doctor wrappers publish a section' 4 "$sections"
+  _assert_not_contains 'Dev doctor publishes no hand-picked Development tools section' \
+    $'section\tDevelopment tools' "$(<"$result_file")"
   if $fixture_health; then
     _assert_eq 'Dev doctor wrappers publish no failures in the fixture' 0 "$failures"
   fi
@@ -356,12 +358,25 @@ PLUGIN
   printf '#!/usr/bin/env bash\nexit 0\n' >"$doctor_bin/grok"
   chmod +x "$doctor_bin/grok"
   grok_compat_path="$doctor_bin:/usr/bin:/bin"
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
+  # The gate is `grok` on PATH, as for the registration table and the merge
+  # hooks; the retired DOT_GROK_COMMAND override no longer moves it.
+  mkdir -p "$doctor_home/.grok/hooks" "$doctor_home/.grok/rules"
+  printf '{"hooks":{}}\n' >"$doctor_home/.grok/hooks/agentguard.json"
+  printf '# grok rules\n' >"$doctor_home/.grok/rules/agent-rules.md"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:/usr/bin:/bin" \
     DOT_GROK_COMMAND=missing-grok-binary \
     _doctor_records _dr_check_grok_compat)
+  _assert_contains 'Doctor gates Grok Claude-compat on grok, not DOT_GROK_COMMAND' \
+    'Grok Claude-compat cells missing' "$result"
+  mv "$doctor_bin/grok" "$doctor_bin/grok-renamed"
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:/usr/bin:/bin" \
+    DOT_GROK_COMMAND=grok-renamed \
+    _doctor_records _dr_check_grok_compat)
+  mv "$doctor_bin/grok-renamed" "$doctor_bin/grok"
   _assert_not_contains 'Doctor skips Grok Claude-compat when grok is absent' \
     'Grok Claude-compat' "$result"
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+  rm -rf "$doctor_home/.grok"
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
     _doctor_records _dr_check_grok_compat)
   _assert_not_contains \
     'Doctor skips Grok Claude-compat when native replacements are absent' \
@@ -369,7 +384,7 @@ PLUGIN
   mkdir -p "$doctor_home/.grok/hooks" "$doctor_home/.grok/rules"
   printf '{"hooks":{}}\n' >"$doctor_home/.grok/hooks/agentguard.json"
   printf '# grok rules\n' >"$doctor_home/.grok/rules/agent-rules.md"
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor warns when Grok Claude-compat cells are absent' \
     $'warn\tGrok Claude-compat cells missing' "$result"
@@ -379,7 +394,7 @@ hooks = true
 rules = true
 agents = true
 TOML
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor warns when Grok Claude-compat cells stay enabled' \
     $'warn\tGrok Claude-compat discovery still enabled' "$result"
@@ -391,7 +406,7 @@ agents = true
 skills = false
 mcps = false
 TOML
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor warns when Grok Claude-compat cells are only partly disabled' \
     $'warn\tGrok Claude-compat discovery still enabled' "$result"
@@ -403,7 +418,7 @@ agents = false
 skills = true
 mcps = true
 TOML
-  result=$(HOME="$doctor_home" PATH="$grok_compat_path" DOT_GROK_COMMAND=grok \
+  result=$(HOME="$doctor_home" PATH="$grok_compat_path" \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor accepts Claude skills and MCPs while hooks/rules/agents are off' \
     $'ok\tGrok disables Claude-compat discovery' "$result"
@@ -435,6 +450,12 @@ TOML
 # Job control gives CMD and the watcher their own process groups, so the
 # deadline signals CMD's whole group, as GNU timeout does, and the watcher
 # (with its sleep) is reaped as a group once CMD finishes first.
+# Identify as coreutils: doctor bounded runners only trust a timeout whose
+# status 124 means the deadline, and this shim keeps that contract.
+if [[ ${1:-} == --version ]]; then
+  printf 'timeout (GNU coreutils) test shim\n'
+  exit 0
+fi
 kill_after=1
 if [[ ${1:-} == -k ]]; then
   kill_after=$2
@@ -443,15 +464,20 @@ fi
 duration=$1
 shift
 started=$SECONDS
+# Under job control Bash reports a finished or killed job ("[2]+
+# Terminated ...") on its own stderr, which is CMD's stderr as the caller
+# captures it. Only CMD gets the caller's stderr (fd 3); the shim's own goes
+# to /dev/null, as a real timeout(1) adds nothing to CMD's output.
+exec 3>&2 2>/dev/null
 set -m
-"$@" &
+"$@" 2>&3 3>&- &
 cmd=$!
 (
   sleep "$duration"
   kill -TERM -- "-$cmd" 2>/dev/null || exit 0
   sleep "$kill_after"
   kill -KILL -- "-$cmd" 2>/dev/null
-) &
+) 3>&- &
 watcher=$!
 status=0
 wait "$cmd" 2>/dev/null || status=$?
@@ -477,6 +503,78 @@ SH
     _timeout_shim "$1"
   }
   _timeout_shim "$doctor_bin"
+  # Bounded runners resolve their timeout command once per worker. Deadline
+  # cases run in a fresh resolution so they find this shim even when an
+  # earlier check resolved under a PATH without it (CI has no timeout).
+  _fresh_deadline() {
+    unset _DR_DEV_TIMEOUT_BIN _DR_TIMEOUT_BIN
+    "$@"
+  }
+  expected=
+  for status in 124 137 0 1; do
+    if _dr_dev_deadline_status "$status"; then expected+=y; else expected+=n; fi
+  done
+  _assert_eq 'A deadline status is 124 or 137' yynn "$expected"
+  # Without base's runner, only a coreutils timeout bounds a run: BusyBox's
+  # rejects -k on older releases.
+  mkdir -p "$doctor_home/busybox-timeout"
+  cat >"$doctor_home/busybox-timeout/timeout" <<SH
+#!/bin/sh
+[ "\$1" = --version ] && { echo 'BusyBox v1.36.1'; exit 0; }
+echo used >>"$doctor_home/busybox-calls"
+exit 2
+SH
+  chmod +x "$doctor_home/busybox-timeout/timeout"
+  result=$(
+    unset -f _dr_run_bounded
+    unset _DR_DEV_TIMEOUT_BIN
+    PATH="$doctor_home/busybox-timeout:$PATH" _dr_dev_bounded 5 printf ran
+  )
+  _assert_eq 'The fallback runner passes over a BusyBox timeout' ran "$result"
+  _assert_eq 'The fallback runner never calls a BusyBox timeout' absent \
+    "$([[ -e $doctor_home/busybox-calls ]] && printf present || printf absent)"
+  started=$SECONDS
+  status=0
+  (
+    unset -f _dr_run_bounded
+    unset _DR_DEV_TIMEOUT_BIN
+    PATH="$doctor_bin:$PATH" _dr_dev_bounded 1 sleep 30
+  ) || status=$?
+  _assert_eq 'The fallback runner bounds a run with a coreutils timeout' 124 "$status"
+  _assert_eq 'The fallback runner returns within its deadline' yes \
+    "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  # A bounded runner must add nothing to the command's stderr: the hook
+  # probes report the first stderr line as the hook's own message. Job
+  # notices from a watcher are racy, so repeat a fast, silent failure.
+  _bounded_stderr() {
+    local i err
+    for ((i = 0; i < 100; i++)); do
+      err=$("$@" sh -c 'exit 6' 2>&1 >/dev/null) || true
+      [[ -z $err ]] || {
+        printf '%s' "$err"
+        return 0
+      }
+    done
+  }
+  _assert_eq 'The timeout test shim adds nothing to stderr' '' \
+    "$(_bounded_stderr "$doctor_bin/timeout" 5)"
+  _assert_eq 'The fallback runner adds nothing to stderr' '' \
+    "$(
+      unset -f _dr_run_bounded
+      unset _DR_DEV_TIMEOUT_BIN
+      PATH="$doctor_bin:$PATH" _bounded_stderr _dr_dev_bounded 5
+    )"
+  if declare -F _dr_run_bounded >/dev/null; then
+    _assert_eq "Base's bounded runner adds nothing to stderr" '' \
+      "$(PATH="$doctor_bin:$PATH" _fresh_deadline _bounded_stderr _dr_dev_bounded 5)"
+    _assert_eq "Base's builtin watchdog adds nothing to stderr" '' \
+      "$(
+        _DR_TIMEOUT_BIN=
+        _bounded_stderr _dr_dev_bounded 5
+      )"
+  else
+    _pass "Base's bounded runner stderr check needs _dr_run_bounded (skipped)"
+  fi
   nvim_home=$(_tmpdir)
   mkdir -p "$nvim_home/.local/share/nvim/lazy/lazy.nvim"
   nvim_calls=$(_tmpdir)/nvim-calls
@@ -687,159 +785,10 @@ LUA
     $'skip\tnvim LSP fallback policy\tnvim not installed' "$result"
   rm "$nvim_dev_home/.config/nvim/lua/plugins/linting.lua"
   result=$(HOME="$nvim_dev_home" PATH="$reg_bin" _doctor_records _dr_check_nvim_dev)
-  _assert_contains 'Nvim dev doctor still fails a missing module' \
-    $'fail\tlinting.lua missing\t~/.config/nvim/lua/plugins/linting.lua' "$result"
-
-  cat >"$doctor_bin/shdeps" <<'SHDEPS'
-#!/usr/bin/env bash
-case ${2:-} in
-  cgraf78/empty) exit 0 ;;
-  cgraf78/malformed) printf 'bad\trow\n' ;;
-  cgraf78/direct) printf 'tool\t%s\t%s\n' "$DOCTOR_DIRECT_TOOL" "$DOCTOR_DIRECT_TOOL" ;;
-  cgraf78/conf-dir)
-    [[ ${SHDEPS_CONF_DIR:-} == "$HOME/.config/shdeps" ]] || exit 1
-    printf 'tool\t%s\t%s\n' "$DOCTOR_DIRECT_TOOL" "$DOCTOR_DIRECT_TOOL"
-    ;;
-  cgraf78/relative) printf 'tool\t%s\t%s\n' "$DOCTOR_RELATIVE_LINK" "$DOCTOR_RELATIVE_TARGET" ;;
-  cgraf78/symlink-parent) printf 'tool\t%s\t%s\n' "$DOCTOR_SYMLINK_LINK" "$DOCTOR_SYMLINK_TARGET" ;;
-  *) exit 1 ;;
-esac
-SHDEPS
-  chmod +x "$doctor_bin/shdeps"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_dev_tools || true)
-  _assert_not_contains \
-    'Doctor does not require a nonexistent AgentGuard umbrella command' \
-    'agentguard missing' "$result"
-  direct_tool="$doctor_home/.local/bin/tool"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$direct_tool"
-  chmod +x "$direct_tool"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn empty)
-  _assert_contains 'Doctor reports empty Shdeps link inventories' \
-    'empty bin links missing' "$result"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn malformed)
-  _assert_contains 'Doctor reports malformed Shdeps link rows' \
-    'malformed bin links malformed' "$result"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_DIRECT_TOOL="$direct_tool" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn direct)
-  _assert_contains 'Doctor accepts direct executable Shdeps targets' \
-    'direct bin links' "$result"
-  _assert_not_contains 'Doctor does not require a direct target to be a symlink' \
-    'tool not linked' "$result"
-
-  # The base adapter answers through REPLY; the fallback must hand shdeps the
-  # resolved directory, not an empty command substitution.
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_DIRECT_TOOL="$direct_tool" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn conf-dir)
-  _assert_contains 'Doctor fallback passes the resolved shdeps config directory' \
-    $'ok\tconf-dir bin links' "$result"
-
-  # An adapter that resolves nothing leaves the links unchecked, which is a
-  # warning even at fail level: no link is known to be broken.
-  conf_def=$(declare -f _dot_shdeps_conf_dir)
-  # shellcheck disable=SC2329  # _dr_check_dev_shdeps_bin_group invokes this.
-  _dot_shdeps_conf_dir() { REPLY=; }
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_DIRECT_TOOL="$direct_tool" \
-    _doctor_records _dr_check_dev_shdeps_bin_group fail conf-dir)
-  eval "$conf_def"
-  _assert_contains 'Doctor fallback warns when the shdeps config dir is unresolved' \
-    $'warn\tconf-dir bin links unchecked\tcould not resolve the shdeps config directory' \
-    "$result"
-  _assert_not_contains 'Doctor fallback never fails an unchecked dependency' \
+  _assert_contains 'Nvim dev doctor warns about a missing module, as core does' \
+    $'warn\tlinting.lua missing\t~/.config/nvim/lua/plugins/linting.lua; run \'dot update\'' "$result"
+  _assert_not_contains 'Nvim dev doctor never fails a module the next update relinks' \
     $'fail\t' "$result"
-
-  # Load-time selection through the real module source: a base that ships
-  # shdeps-links.sh keeps its own helper (it goes quiet under shdeps health),
-  # and an older base gets no same-named definition from dev at all.
-  links_lib=$DOT_EXTENSIONS_DIR/doctor.d/lib/shdeps-links.sh
-  links_saved=
-  if [[ -e $links_lib ]]; then
-    links_saved=$(_tmpdir)/shdeps-links.sh
-    mv "$links_lib" "$links_saved"
-  fi
-  shared_def=$(declare -f _dr_check_shdeps_bin_group || true)
-  shared_log=$(_tmpdir)/sourced-calls
-  : >"$shared_log"
-  cat >"$links_lib" <<SH
-# shellcheck shell=bash
-_dr_check_shdeps_bin_group() { printf 'base %s %s\\n' "\$1" "\$2" >>"$shared_log"; }
-SH
-  chmod 600 "$links_lib"
-  unset -f _dr_check_shdeps_bin_group
-  dot_doctor_source doctor.d/lib/dev-tools.sh
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_dev_tools || true)
-  _assert_eq 'Sourcing dev-tools keeps a successfully sourced base helper' \
-    $'base fail sley\nbase warn checkrun\nbase warn cmdblocks\nbase warn git-tools\nbase fail agentguard\nbase warn hive-memory' \
-    "$(<"$shared_log")"
-  _assert_not_contains 'A sourced base helper suppresses the local fallback rows' \
-    'bin links' "$result"
-  rm -f "$links_lib"
-  unset -f _dr_check_shdeps_bin_group
-  dot_doctor_source doctor.d/lib/dev-tools.sh
-  _assert_eq 'Sourcing dev-tools on an older base defines no shared-helper name' \
-    absent "$(declare -F _dr_check_shdeps_bin_group >/dev/null && printf present || printf absent)"
-  [[ -z $links_saved ]] || mv "$links_saved" "$links_lib"
-  [[ -z $shared_def ]] || eval "$shared_def"
-
-  # Prefer base's shared helper when this host's base ships it; otherwise the
-  # local fallback runs. Save and restore any real helper the host provides.
-  shared_def=$(declare -f _dr_check_shdeps_bin_group || true)
-  unset -f _dr_check_shdeps_bin_group
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_DIRECT_TOOL="$direct_tool" \
-    _doctor_records _dr_check_dev_bin_links warn conf-dir)
-  _assert_contains 'Doctor uses the local bin-link fallback on an older base' \
-    $'ok\tconf-dir bin links' "$result"
-  shared_log=$(_tmpdir)/shared-calls
-  : >"$shared_log"
-  # shellcheck disable=SC2329  # _dr_check_dev_bin_links invokes this helper.
-  _dr_check_shdeps_bin_group() { printf '%s %s\n' "$1" "$2" >>"$shared_log"; }
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_dev_tools || true)
-  _assert_eq 'Doctor passes its dependency list to the shared base helper' \
-    $'fail sley\nwarn checkrun\nwarn cmdblocks\nwarn git-tools\nfail agentguard\nwarn hive-memory' \
-    "$(<"$shared_log")"
-  _assert_not_contains 'Doctor skips the local fallback when base ships the helper' \
-    'bin links unchecked' "$result"
-  unset -f _dr_check_shdeps_bin_group
-  [[ -z $shared_def ]] || eval "$shared_def"
-
-  mkdir -p "$doctor_home/.local/share/tool/bin"
-  relative_target="$doctor_home/.local/share/tool/bin/tool"
-  relative_link="$doctor_home/.local/bin/relative-tool"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$relative_target"
-  chmod +x "$relative_target"
-  ln -s ../share/tool/bin/tool "$relative_link"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_RELATIVE_LINK="$relative_link" \
-    DOCTOR_RELATIVE_TARGET="$relative_target" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn relative)
-  _assert_contains 'Doctor accepts relative Shdeps command links' \
-    'relative bin links' "$result"
-  _assert_not_contains 'Doctor canonicalizes relative Shdeps link targets' \
-    'link target drift' "$result"
-
-  symlink_root=$(_tmpdir)
-  symlink_alias=$(_tmpdir)/root
-  mkdir -p "$symlink_root/bin" "$symlink_root/share/tool"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$symlink_root/share/tool/tool"
-  chmod +x "$symlink_root/share/tool/tool"
-  ln -s ../share/tool/tool "$symlink_root/bin/tool"
-  ln -s "$symlink_root" "$symlink_alias"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    DOCTOR_SYMLINK_LINK="$symlink_alias/bin/tool" \
-    DOCTOR_SYMLINK_TARGET="$symlink_root/share/tool/tool" \
-    _doctor_records _dr_check_dev_shdeps_bin_group warn symlink-parent)
-  _assert_contains 'Doctor accepts Shdeps links through a symlinked parent' \
-    'symlink-parent bin links' "$result"
-  _assert_not_contains 'Doctor canonicalizes symlinked parent directories' \
-    'link target drift' "$result"
 
   # Git hooks: report the scope git itself resolves (includes count) and check
   # every shipped hook, not only pre-commit.
@@ -934,48 +883,226 @@ SH
   _assert_contains 'Git hooks doctor warns when hooksPath is unset' \
     $'warn\tcore.hooksPath not set' "$result"
 
-  cat >"$doctor_bin/hm" <<'HM'
+  # Hive Memory: one bounded `hm sync-status --json`; stdout is the JSON
+  # report and stderr stays apart. The stub answers from DOCTOR_HM_*.
+  hm_home=$(_tmpdir)
+  hm_bin=$(_tmpdir)
+  cat >"$hm_bin/hm" <<'HM'
 #!/usr/bin/env bash
-[[ ${DOCTOR_HM_SKEW:-0} == 1 ]] &&
-  printf 'warning: unknown config key: defaults.context_strategy\n' >&2
-printf '[]\n'
+if [[ "$*" != 'sync-status --json' ]]; then
+  printf 'unexpected arguments: %s\n' "$*" >&2
+  exit 9
+fi
+[[ -z ${DOCTOR_HM_SLEEP:-} ]] || exec sleep "$DOCTOR_HM_SLEEP"
+[[ -z ${DOCTOR_HM_STDERR:-} ]] || printf '%s\n' "$DOCTOR_HM_STDERR" >&2
+[[ -z ${DOCTOR_HM_JSON:-} ]] || printf '%s\n' "$DOCTOR_HM_JSON"
+exit "${DOCTOR_HM_EXIT:-0}"
 HM
-  chmod +x "$doctor_bin/hm"
-  result=$(HOME="$doctor_home" DOCTOR_HM_SKEW=1 PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_hive_memory)
-  _assert_contains 'Doctor reports Hive binary/config skew' \
-    'hm binary behind configured keys' "$result"
-  _assert_contains 'Doctor names the unsupported Hive config key' \
-    'defaults.context_strategy' "$result"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_hive_memory)
-  _assert_contains 'Doctor accepts Hive config without skew' \
-    'hm understands configured keys' "$result"
+  chmod +x "$hm_bin/hm"
+  # shellcheck disable=SC2329  # _doctor_records invokes this.
+  _hm_probe() {
+    _dr_hive_memory_start "$1"
+    _dr_hive_memory_finish "$1"
+  }
+  _hm_records() {
+    HOME="$hm_home" PATH="$hm_bin:$doctor_bin:$PATH" \
+      _doctor_records _hm_probe "$(_tmpdir)"
+  }
+  hm_store=$hm_home/store
+  hm_healthy='{"store":"personal","root":"'$hm_store'","reachable":true,"manifest_error":null,"store_error":null,"index_stale":true,"cloud_conflict_files":0,"unknown_config_keys":[]}'
+  result=$(DOCTOR_HM_JSON=$hm_healthy _hm_records)
+  _assert_contains 'Hive Memory reports a reachable store with every key understood' \
+    $'ok\tHive Memory store reachable\t~/store; every config key understood' "$result"
+  _assert_not_contains 'Hive Memory files no row for an index hm rebuilds on the next read' \
+    'index' "$result"
+  result=$(DOCTOR_HM_JSON=${hm_healthy/'"unknown_config_keys":[]'/'"unknown_config_keys":["defaults.context_strategy","stores.work.extra"]'} \
+    DOCTOR_HM_STDERR='warning: unknown config key: defaults.context_strategy' _hm_records)
+  _assert_contains 'Hive Memory names unknown config keys from the structured field' \
+    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, stores.work.extra; update hive-memory (shdeps) or drop the key(s)' \
+    "$result"
+  _assert_not_contains 'Hive Memory withholds the ok row when a key is unknown' \
+    'store reachable' "$result"
+  result=$(DOCTOR_HM_JSON='{"root":"'$hm_store'","reachable":false,"manifest_error":null,"store_error":"read '$hm_store'/inbox: Transport endpoint is not connected (os error 107)","cloud_conflict_files":3,"unknown_config_keys":[]}' \
+    _hm_records)
+  _assert_contains 'Hive Memory warns when the store scan fails' \
+    $'warn\tHive Memory store unreachable\tread '"$hm_store"$'/inbox: Transport endpoint is not connected (os error 107); check that' \
+    "$result"
+  _assert_not_contains 'Hive Memory ignores scan counts from an unreachable store' \
+    'conflict' "$result"
+  result=$(DOCTOR_HM_JSON='{"root":"'$hm_store'","reachable":false,"manifest_error":"store manifest missing","store_error":null,"unknown_config_keys":[]}' \
+    _hm_records)
+  _assert_contains 'Hive Memory names a manifest error when the store is unreachable' \
+    $'warn\tHive Memory store unreachable\tstore manifest missing; ' "$result"
+  result=$(DOCTOR_HM_JSON=${hm_healthy/'"cloud_conflict_files":0'/'"cloud_conflict_files":2'} _hm_records)
+  _assert_contains 'Hive Memory warns about cloud conflict copies' \
+    $'warn\tHive Memory store has 2 cloud conflict file(s)\trun \'hm doctor --fix\' to quarantine them' \
+    "$result"
+  # An hm before the structured fields: no unknown_config_keys and no
+  # store_error, and a conflict count that still included quarantined copies.
+  hm_old='{"store":"personal","root":"'$hm_store'","reachable":true,"manifest_error":null,"index_stale":false,"cloud_conflict_files":4}'
+  result=$(DOCTOR_HM_JSON=$hm_old _hm_records)
+  _assert_contains 'Hive Memory accepts an older hm report' \
+    $'ok\tHive Memory store reachable\t~/store' "$result"
+  _assert_not_contains 'Hive Memory never claims keys an older hm cannot list' \
+    'understood' "$result"
+  _assert_not_contains 'Hive Memory ignores the conflict count of an older hm' \
+    'conflict' "$result"
+  result=$(DOCTOR_HM_JSON=$hm_old \
+    DOCTOR_HM_STDERR=$'warning: unknown config key: defaults.context_strategy\nwarning: unknown config key: x.y' \
+    _hm_records)
+  _assert_contains 'Hive Memory reads unknown keys from an older hm stderr' \
+    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, x.y; ' \
+    "$result"
+  result=$(DOCTOR_HM_EXIT=1 DOCTOR_HM_STDERR='error: scan '"$hm_store"': Input/output error' \
+    _hm_records)
+  _assert_contains 'Hive Memory leaves the store unchecked without a report' \
+    $'warn\tHive Memory unchecked\terror: scan '"$hm_store"$': Input/output error; run \'hm sync-status\'' \
+    "$result"
+  # With --json, hm reports a failure as a JSON object on stderr, sometimes
+  # after warning lines.
+  result=$(DOCTOR_HM_EXIT=3 DOCTOR_HM_STDERR=$'warning: unknown config key: x.y\n{\n  "ok": false,\n  "error": {\n    "code": "config_error",\n    "message": "failed to read config: denied"\n  }\n}' \
+    _hm_records)
+  _assert_contains 'Hive Memory names the error hm reports as JSON' \
+    $'warn\tHive Memory unchecked\tfailed to read config: denied; run \'hm sync-status\'' "$result"
+  result=$(DOCTOR_HM_EXIT=127 DOCTOR_HM_STDERR='hm launcher: real hm not found at /x/hm; run dot update' \
+    _hm_records)
+  _assert_contains 'Hive Memory skips when the launcher finds no real hm' \
+    $'skip\tHive Memory\thm launcher: real hm not found at /x/hm; run dot update' "$result"
+  result=$(DOCTOR_HM_JSON='not json' _hm_records)
+  _assert_contains 'Hive Memory leaves the store unchecked on output that is not JSON' \
+    $'warn\tHive Memory unchecked\thm sync-status exited 0 without a report' "$result"
+  started=$SECONDS
+  result=$(DOCTOR_HM_SLEEP=30 _DR_HM_DEADLINE=1 _fresh_deadline _hm_records)
+  _assert_contains 'Hive Memory bounds a hung hm' \
+    $'warn\tHive Memory unchecked\thm sync-status gave no answer within 1s' "$result"
+  _assert_eq 'Hive Memory returns within its deadline' yes \
+    "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  result=$(HOME="$hm_home" PATH="$doctor_bin:/usr/bin:/bin" \
+    _doctor_records _hm_probe "$(_tmpdir)")
+  _assert_contains 'Hive Memory skips when hm is not installed' \
+    $'skip\tHive Memory\thm not installed' "$result"
+  mkdir -p "$hm_home/no-jq"
+  ln -s "$hm_bin/hm" "$hm_home/no-jq/hm"
+  ln -s "$(type -P bash)" "$hm_home/no-jq/bash"
+  result=$(HOME="$hm_home" PATH="$hm_home/no-jq" DOCTOR_HM_JSON=$hm_healthy \
+    _doctor_records _hm_probe "$(_tmpdir)")
+  _assert_contains 'Hive Memory skips without jq' \
+    $'skip\tHive Memory\tjq is required to read hm sync-status' "$result"
 
-  mkdir -p "$doctor_home/.config/shell/interactive.d"
-  cp "$HOME/.config/shell/interactive.d/80-dev-integrations.bash" \
-    "$doctor_home/.config/shell/interactive.d/80-dev-integrations.bash"
-  cp "$HOME/.config/shell/interactive.d/80-dev-integrations.zsh" \
-    "$doctor_home/.config/shell/interactive.d/80-dev-integrations.zsh"
-  result=$(HOME="$doctor_home" _doctor_records _dr_check_dev_integrations)
-  _assert_contains 'Doctor accepts complete Bash dev integration policy' \
-    $'ok\tbash dev integrations' "$result"
-  _assert_contains 'Doctor accepts complete Zsh dev integration policy' \
-    $'ok\tzsh dev integrations' "$result"
-  awk '!/_tool_init sley/' \
-    "$doctor_home/.config/shell/interactive.d/80-dev-integrations.bash" \
-    >"$doctor_home/.config/shell/interactive.d/80-dev-integrations.bash.new"
-  mv "$doctor_home/.config/shell/interactive.d/80-dev-integrations.bash.new" \
-    "$doctor_home/.config/shell/interactive.d/80-dev-integrations.bash"
-  result=$(HOME="$doctor_home" _doctor_records _dr_check_dev_integrations)
-  _assert_contains 'Doctor reports incomplete shell integration policy' \
-    'bash dev integrations incomplete' "$result"
+  # Development shell integrations: resolve each provider asset through the
+  # overlay's own adapter in a bare Bash, as a new interactive shell does.
+  # The base helper is stubbed: it resolves cgraf78/NAME to assets/NAME.sh
+  # unless DOCTOR_UNRESOLVED names it, and logs what it saw.
+  integ_home=$(_tmpdir)
+  integ_bin=$(_tmpdir)
+  mkdir -p "$integ_home/.config/shell/interactive.d" \
+    "$integ_home/.local/lib/dotfiles" "$integ_home/assets" "$integ_home/tmp"
+  cp "$owner_root/home/.config/shell/interactive.d/70-dev-tool-init.sh" \
+    "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
+  : >"$integ_home/assets/sley.sh"
+  : >"$integ_home/assets/git-tools.sh"
+  cat >"$integ_home/.local/lib/dotfiles/shdeps-assets.sh" <<'SH'
+dot_shdeps_dep_file() {
+  printf '%s|%s|%s|%s\n' "$1 $2" "${XDG_CACHE_HOME-unset}" "${BASH_ENV-unset}" \
+    "${ENV-unset}" >>"$HOME/resolutions"
+  [[ -z ${DOCTOR_RESOLVE_SLEEP:-} ]] || sleep "$DOCTOR_RESOLVE_SLEEP"
+  case " ${DOCTOR_UNRESOLVED:-} " in *" ${1#cgraf78/} "*) return 1 ;; esac
+  printf '%s\n' "$HOME/assets/${1#cgraf78/}.sh"
+}
+SH
+  printf '#!/bin/sh\nexit 0\n' >"$integ_bin/direnv"
+  chmod +x "$integ_bin/direnv"
+  : >"$integ_home/startup.sh"
+  _integ_records() {
+    HOME="$integ_home" PATH="$integ_bin:$doctor_bin:$PATH" \
+      XDG_CACHE_HOME="$integ_home/.cache" TMPDIR="$integ_home/tmp" \
+      _doctor_records _dr_check_dev_integrations
+  }
+  : >"$integ_home/resolutions"
+  result=$(BASH_ENV="$integ_home/startup.sh" ENV="$integ_home/startup.sh" _integ_records)
+  _assert_contains 'Dev shell integrations pass when every asset resolves' \
+    $'ok\tdev shell integrations\tsley, git-tools, direnv' "$result"
+  _assert_contains 'Dev shell integrations resolve the sley asset through shdeps' \
+    'cgraf78/sley share/sley/shell.sh|' "$(<"$integ_home/resolutions")"
+  _assert_contains 'Dev shell integrations resolve the git-tools asset through shdeps' \
+    'cgraf78/git-tools share/git-tools/shell.sh|' "$(<"$integ_home/resolutions")"
+  _assert_not_contains 'Dev shell integrations resolve with a private cache' \
+    "|$integ_home/.cache|" "$(<"$integ_home/resolutions")"
+  _assert_contains 'Dev shell integrations probe without startup files' \
+    '|unset|unset' "$(<"$integ_home/resolutions")"
+  _assert_eq 'Dev shell integrations remove their private cache' '' \
+    "$(
+      shopt -s dotglob nullglob
+      printf '%s' "$integ_home/tmp"/*
+    )"
+  result=$(DOCTOR_UNRESOLVED=git-tools _integ_records)
+  _assert_contains 'Dev shell integrations warn about an asset that does not resolve' \
+    $'warn\tgit-tools shell integration unavailable\tcgraf78/git-tools share/git-tools/shell.sh does not resolve, so new shells skip it; run \'dot update\'' \
+    "$result"
+  _assert_not_contains 'Dev shell integrations withhold the ok row on a problem' \
+    $'ok\tdev shell integrations' "$result"
+  rm "$integ_home/assets/sley.sh"
+  result=$(_integ_records)
+  _assert_contains 'Dev shell integrations warn about an asset path that is unreadable' \
+    $'warn\tsley shell integration unavailable' "$result"
+  : >"$integ_home/assets/sley.sh"
+  # direnv absent: a PATH with only what the probe itself needs.
+  mkdir -p "$integ_home/no-direnv"
+  for hook in cat env mkfifo mktemp rm; do
+    ln -s "$(type -P "$hook")" "$integ_home/no-direnv/$hook"
+  done
+  result=$(HOME="$integ_home" PATH="$integ_home/no-direnv" TMPDIR="$integ_home/tmp" \
+    _doctor_records _dr_check_dev_integrations)
+  _assert_contains 'Dev shell integrations warn when direnv is not on PATH' \
+    $'warn\tdirenv shell integration unavailable\tdirenv is not on PATH, so new shells skip its hook; run \'dot update\'' \
+    "$result"
+  _assert_not_contains 'Dev shell integrations still resolve assets without direnv' \
+    'sley shell integration' "$result"
+  printf 'return 1\n' >"$integ_home/broken-adapter"
+  mv "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh" "$integ_home/adapter"
+  cp "$integ_home/broken-adapter" "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
+  result=$(_integ_records)
+  _assert_contains 'Dev shell integrations report an adapter that does not load' \
+    $'warn\tsley shell integration unchecked\tthe asset probe exited 3' "$result"
+  rm "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
+  result=$(_integ_records)
+  _assert_contains 'Dev shell integrations warn when the adapter is missing' \
+    $'warn\tdev shell integration adapter missing\t~/.config/shell/interactive.d/70-dev-tool-init.sh; run \'dot update\'' \
+    "$result"
+  mv "$integ_home/adapter" "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
+  started=$SECONDS
+  result=$(DOCTOR_RESOLVE_SLEEP=30 _DR_DEV_SHELL_DEADLINE=1 _fresh_deadline _integ_records)
+  _assert_contains 'Dev shell integrations bound a hung asset resolution' \
+    $'warn\tdev shell integrations unchecked\tresolving their shell assets took longer than 1s' \
+    "$result"
+  _assert_eq 'Dev shell integrations return within their deadline' yes \
+    "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  : >"$result_file"
+  set +e
+  (
+    set -euo pipefail
+    DOCTOR_UNRESOLVED='sley git-tools' HOME="$integ_home" PATH="$integ_bin:$doctor_bin:$PATH" \
+      TMPDIR="$integ_home/tmp" _dr_check_dev_integrations
+  )
+  status=$?
+  set -e
+  _assert_eq 'Dev shell integrations run under the worker shell policy' 0 "$status"
+  # The probe's asset list must be what the interactive files load.
+  for path in 80-dev-integrations.bash 80-dev-integrations.zsh; do
+    expected=
+    while read -r integ_call integ_name integ_emitter integ_dep integ_asset _; do
+      [[ $integ_call == _tool_init && $integ_emitter == _tool_shdeps_source_emit ]] || continue
+      expected+=${expected:+ }"$integ_name $integ_dep $integ_asset"
+    done <"$owner_root/home/.config/shell/interactive.d/$path"
+    _assert_eq "Doctor probes every provider asset $path loads" \
+      "$expected" "${_DR_DEV_SHELL_ASSETS[*]}"
+  done
 
-  # The smoke-probe cases below run with the host PATH; keep host-installed
-  # agents out of them; the registration table is covered above.
-  registration_def=$(declare -f _dr_check_agentguard_registrations)
-  # shellcheck disable=SC2329  # _dr_check_agent_hooks invokes this.
-  _dr_check_agentguard_registrations() { :; }
+  # Smoke probes, one fresh result directory per run.
+  probe_root=$(_tmpdir)
+  _probe_records() {
+    _doctor_records _dr_check_agent_hook_probes "$(mktemp -d "$probe_root/run.XXXXXX")"
+  }
   agent_home=$(_tmpdir)
   mkdir -p "$agent_home/.local/bin" "$agent_home/.config/shell"
   : >"$agent_home/.config/shell/env-noninteractive.sh"
@@ -996,7 +1123,7 @@ SH
   chmod +x "$agent_home/.local/bin/agent-hook-pre-bash" \
     "$agent_home/.local/bin/agent-hook-stop"
   result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks)
+    _probe_records)
   _assert_contains 'Agent Hooks doctor accepts the allowed benign command' \
     $'ok\tagent pre-bash allows a benign command\tdot status' "$result"
   _assert_contains 'Agent Hooks doctor accepts the policy denial path' \
@@ -1017,7 +1144,7 @@ printf 'broken stop\n' >&2
 exit 9
 SH
   result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor reports pre-bash failures' \
     $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash' "$result"
   _assert_contains 'Agent Hooks doctor reports unexpected policy probe results' \
@@ -1041,7 +1168,7 @@ SH
   chmod +x "$permissive_home/.local/bin/agent-hook-pre-bash" \
     "$permissive_home/.local/bin/agent-hook-stop"
   result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor rejects raw Git outside a checkout' \
     $'fail\tagent pre-bash does not enforce policy' "$result"
   # test/run stubs _dr_is_dotfiles_checkout to always fail (the capability
@@ -1050,10 +1177,10 @@ SH
   # directly instead: the lib's inside/outside branching is what's under
   # test here, not real git discovery (base-owned, tested elsewhere).
   _checkout_def=$(declare -f _dr_is_dotfiles_checkout)
-  # shellcheck disable=SC2329  # _dr_check_agent_hooks invokes this predicate.
+  # shellcheck disable=SC2329  # _dr_check_agent_hook_probes invokes this predicate.
   _dr_is_dotfiles_checkout() { return 0; }
   result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor allows raw Git inside a checkout' \
     $'ok\tagent pre-bash enforces policy\traw git status is allowed: HOME is a Git checkout' \
     "$result"
@@ -1069,7 +1196,7 @@ case $input in
 esac
 SH
   result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor keys policy enforcement on exit 2, not stderr text' \
     $'ok\tagent pre-bash enforces policy' "$result"
   cat >"$permissive_home/.local/bin/agent-hook-pre-bash" <<'SH'
@@ -1081,9 +1208,9 @@ case $input in
 esac
 SH
   result=$(HOME="$permissive_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor does not take a bare exit 2 as a block' \
-    $'fail\tagent pre-bash policy probe failed\texit 2: ' "$result"
+    $'fail\tagent pre-bash policy probe failed\texited 2 without a message' "$result"
 
   no_pre_home=$(_tmpdir)
   mkdir -p "$no_pre_home/.local/bin" "$no_pre_home/.config/shell"
@@ -1096,7 +1223,7 @@ printf '{}\n'
 SH
   chmod +x "$no_pre_home/.local/bin/agent-hook-stop"
   result=$(HOME="$no_pre_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor warns when pre-bash is absent' \
     'agent pre-bash hook unavailable' "$result"
   _assert_not_contains 'Agent Hooks doctor skips every probe without pre-bash' \
@@ -1118,7 +1245,7 @@ esac
 SH
   chmod +x "$no_stop_home/.local/bin/agent-hook-pre-bash"
   result=$(HOME="$no_stop_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor warns when the stop hook is absent' \
     'agent stop hook unavailable' "$result"
 
@@ -1135,11 +1262,133 @@ esac
 SH
   chmod +x "$multiline_home/.local/bin/agent-hook-pre-bash"
   result=$(HOME="$multiline_home" PATH="$doctor_bin:$PATH" \
-    _doctor_records _dr_check_agent_hooks || true)
+    _probe_records || true)
   _assert_contains 'Agent Hooks doctor keeps only the first stderr line' \
     $'fail\tagent pre-bash rejects a benign command\tfirst' "$result"
   _assert_not_contains 'Agent Hooks doctor drops later stderr lines' \
     'second' "$result"
+
+  # Hook stderr is display text; a tab or carriage return in it must become
+  # record text instead of failing the worker.
+  cat >"$multiline_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'bad\tline\r\n' >&2
+exit 5
+SH
+  : >"$result_file"
+  set +e
+  (
+    set -euo pipefail
+    HOME="$multiline_home" PATH="$doctor_bin:$PATH" \
+      _dr_check_agent_hook_probes "$(mktemp -d "$probe_root/run.XXXXXX")"
+  )
+  status=$?
+  set -e
+  _assert_eq 'Agent hook probes survive control characters in hook stderr' 0 "$status"
+  _assert_contains 'Agent hook probes turn hook stderr into record text' \
+    $'fail\tagent pre-bash policy probe failed\texit 5: bad line' "$(<"$result_file")"
+  cat >"$multiline_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+exit 6
+SH
+  result=$(HOME="$multiline_home" PATH="$doctor_bin:$PATH" _probe_records || true)
+  _assert_contains 'Agent hook probes name the status of a silent failure' \
+    $'fail\tagent pre-bash rejects a benign command\texited 6 without a message' "$result"
+
+  # Probes run hooks the way agents do: every registered command starts with
+  # `env -u BASH_ENV -u ENV`, so a startup file must not reach the hook.
+  cat >"$multiline_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s|%s\n' "${BASH_ENV-unset}" "${ENV-unset}" >>"$HOME/hook-env"
+exit 0
+SH
+  : >"$multiline_home/startup.sh"
+  : >"$multiline_home/hook-env"
+  result=$(HOME="$multiline_home" PATH="$doctor_bin:$PATH" \
+    BASH_ENV="$multiline_home/startup.sh" ENV="$multiline_home/startup.sh" \
+    _probe_records || true)
+  _assert_eq 'Agent hook probes unset BASH_ENV and ENV like the registered commands' \
+    $'unset|unset\nunset|unset' "$(<"$multiline_home/hook-env")"
+  # Bounded: a hung hook costs the probe deadline, not the whole section.
+  cat >"$multiline_home/.local/bin/agent-hook-pre-bash" <<'SH'
+#!/usr/bin/env bash
+exec sleep 30
+SH
+  cat >"$multiline_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+exec sleep 30
+SH
+  chmod +x "$multiline_home/.local/bin/agent-hook-stop"
+  started=$SECONDS
+  result=$(HOME="$multiline_home" PATH="$doctor_bin:$PATH" _DR_AGENT_HOOK_DEADLINE=1 \
+    _fresh_deadline _probe_records || true)
+  _assert_contains 'Agent hook probes bound a hung pre-bash hook' \
+    $'fail\tagent pre-bash rejects a benign command\tno answer within 1s' "$result"
+  _assert_contains 'Agent hook probes bound a hung policy probe' \
+    $'fail\tagent pre-bash policy probe failed\tno answer within 1s' "$result"
+  _assert_contains 'Agent hook probes bound a hung stop hook' \
+    $'fail\tagent stop hook failed\tno answer within 1s' "$result"
+  _assert_eq 'Agent hook probes return within their deadline' yes \
+    "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+
+  # Agent tooling is one section: AgentGuard, Grok, Hive Memory, and the
+  # agent config folders handed to base's leftover-temporary check. The
+  # registration table is covered above; keep host-installed agents out.
+  registration_def=$(declare -f _dr_check_agentguard_registrations)
+  # shellcheck disable=SC2329  # _dr_check_agent_tooling invokes this.
+  _dr_check_agentguard_registrations() { :; }
+  tooling_home=$(_tmpdir)
+  mkdir -p "$tooling_home/.local/bin"
+  temps_lib=$DOT_EXTENSIONS_DIR/doctor.d/lib/config-temporaries.sh
+  temps_saved=
+  if [[ -e $temps_lib ]]; then
+    temps_saved=$(_tmpdir)/config-temporaries.sh
+    mv "$temps_lib" "$temps_saved"
+  fi
+  temps_def=$(declare -f _dr_check_config_temporaries || true)
+  unset -f _dr_check_config_temporaries
+  : >"$result_file"
+  set +e
+  (
+    set -euo pipefail
+    HOME="$tooling_home" PATH="$hm_bin:$doctor_bin:$PATH" DOCTOR_HM_JSON=$hm_healthy \
+      _dr_check_agent_tooling
+  )
+  status=$?
+  set -e
+  result=$(<"$result_file")
+  _assert_eq 'Agent tooling runs under the worker shell policy on a base without the temporaries module' \
+    0 "$status"
+  _assert_contains 'Agent tooling publishes one section' $'section\tAgent tooling' "$result"
+  _assert_eq 'Agent tooling replaces the separate Hive Memory section' 1 \
+    "$(awk -F '\t' '$1 == "section" { count++ } END { print count+0 }' "$result_file")"
+  _assert_contains 'Agent tooling reports Hive Memory' \
+    $'ok\tHive Memory store reachable' "$result"
+  _assert_contains 'Agent tooling still smoke-probes the hooks' \
+    'agent pre-bash hook unavailable' "$result"
+  temps_log=$(_tmpdir)/temporaries
+  cat >"$temps_lib" <<SH
+# shellcheck shell=bash
+_dr_check_config_temporaries() {
+  printf '%s\\n' "\$@" >"$temps_log"
+  _dr_warn 'leftover config temporaries stub'
+}
+SH
+  chmod 600 "$temps_lib"
+  result=$(HOME="$tooling_home" PATH="$hm_bin:$doctor_bin:$PATH" DOCTOR_HM_JSON=$hm_healthy \
+    _doctor_records _dr_check_agent_tooling)
+  _assert_eq 'Agent tooling passes every agent config folder its merge hooks write' \
+    $'.claude\n.codex\n.config/muse\n.gemini\n.grok/hooks\n.config/opencode/plugins\n.grok' \
+    "$(<"$temps_log")"
+  _assert_contains 'Agent tooling files the temporaries row in its own section' \
+    $'warn\tleftover config temporaries stub' "$result"
+  rm -f "$temps_lib"
+  unset -f _dr_check_config_temporaries
+  [[ -z $temps_saved ]] || mv "$temps_saved" "$temps_lib"
+  [[ -z $temps_def ]] || eval "$temps_def"
   eval "$registration_def"
 
   if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
@@ -1150,13 +1399,17 @@ SH
     installed_doctor_output=$(dot doctor 2>&1 || true)
     printf '%s\n' "$installed_config_before" >"$installed_config"
     for installed_section in \
-      'Development tools' \
       'Development shell integrations' \
       'Git hooks' \
-      'Agent hooks' \
-      'Hive Memory' \
+      'Agent tooling' \
       'Nvim development tooling'; do
       _assert_contains "Installed dot doctor discovers $installed_section" \
+        "$installed_section" "$installed_doctor_output"
+    done
+    # Hive Memory rows live on inside Agent tooling, so only these names are
+    # unique to retired sections.
+    for installed_section in 'Development tools' 'Agent hooks'; do
+      _assert_not_contains "Installed dot doctor no longer shows $installed_section" \
         "$installed_section" "$installed_doctor_output"
     done
   fi
