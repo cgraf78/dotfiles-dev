@@ -126,12 +126,14 @@ _dr_check_nvim_lsp_policy() {
     return 0
   fi
   probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/dot-nvim-lsp-policy.XXXXXX" 2>/dev/null) || {
-    _dr_warn "$label check failed" 'could not create temp directory'
+    _dr_dev_row warn "$label check failed" 'could not create temp directory' \
+      "$_DR_DEV_TMPDIR_HINT"
     return 0
   }
   if ! mkdir "$probe_dir/state" "$probe_dir/cache" "$probe_dir/tmp" 2>/dev/null; then
     rm -rf "$probe_dir" 2>/dev/null || true
-    _dr_warn "$label check failed" 'could not create temp directory'
+    _dr_dev_row warn "$label check failed" 'could not create temp directory' \
+      "$_DR_DEV_TMPDIR_HINT"
     return 0
   fi
 
@@ -186,7 +188,8 @@ vim.api.nvim_create_autocmd("VimEnter", {
 LUA
   then
     rm -rf "$probe_dir" 2>/dev/null || true
-    _dr_warn "$label check failed" 'could not write the probe script'
+    _dr_dev_row warn "$label check failed" 'could not write the probe script' \
+      "$_DR_DEV_TMPDIR_HINT"
     return 0
   fi
 
@@ -195,7 +198,8 @@ LUA
     complete) output=$(<"$probe_dir/result") ;;
     timeout)
       rm -rf "$probe_dir" 2>/dev/null || true
-      _dr_warn "$label check timed out" "no result within ${_DR_DEV_NVIM_PROBE_TIMEOUT}s"
+      _dr_dev_row warn "$label check timed out" "no result within ${_DR_DEV_NVIM_PROBE_TIMEOUT}s" \
+        "start nvim to see what holds up startup (a prompt or a stuck plugin), then rerun 'dot doctor'"
       return 0
       ;;
     *)
@@ -205,8 +209,9 @@ LUA
       stderr_line=${stderr_line:0:200}
       stderr_line=${stderr_line//[$'\t\r']/ }
       rm -rf "$probe_dir" 2>/dev/null || true
-      _dr_warn "$label check failed" \
-        "nvim exited with status $REPLY${stderr_line:+: $stderr_line}"
+      _dr_dev_row warn "$label check failed" \
+        "nvim exited with status $REPLY${stderr_line:+: $stderr_line}" \
+        "start nvim to see the error, then rerun 'dot doctor'"
       return 0
       ;;
   esac
@@ -219,8 +224,8 @@ LUA
       error=${output#*dot_doctor_error=}
       error=${error%%$'\n'*}
     fi
-    _dr_warn "$label check failed" \
-      "${error:-query did not complete; run nvim headless with Mason disabled to debug}"
+    _dr_dev_row warn "$label check failed" "${error:-the policy query did not complete}" \
+      "the probe runs nvim headless with Mason, plugin installs, and session restore off; start nvim to see the error (':Lazy' and ':checkhealth' show plugin problems), then rerun 'dot doctor'"
     return 0
   fi
   enabled=$(_dr_dev_value enabled "$output")
@@ -234,7 +239,8 @@ LUA
     local -a details=()
     [[ -z $missing ]] || details+=("missing fallback policy for enabled server(s): $missing")
     [[ -z $stale ]] || details+=("fallback policy for disabled server(s): $stale")
-    _dr_warn "$label drift" "$(_dr_dev_csv "${details[@]}")"
+    _dr_dev_row warn "$label drift" "$(_dr_dev_csv "${details[@]}")" \
+      "update the server packages in lua/config/mason-policy.lua (in the Neovim config) to match the enabled LSP servers"
   fi
 }
 
@@ -254,7 +260,7 @@ _dr_check_nvim_dev() {
     "$HOME/.config/nvim/lua/plugins/formatting.lua" \
     "$HOME/.config/nvim/lua/plugins/linting.lua"; do
     if [[ ! -r $module_path ]]; then
-      _dr_warn "${module_path##*/} missing" "$(_dr_tilde "$module_path"); run 'dot update'"
+      _dr_dev_row warn "${module_path##*/} missing" "$(_dr_tilde "$module_path")" "run 'dot update'"
       missing=$((missing + 1))
     fi
   done

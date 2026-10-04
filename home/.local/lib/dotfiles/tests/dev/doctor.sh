@@ -14,6 +14,7 @@ dot_dev_doctor_test() {
   local nvim_home nvim_calls started real_home real_bin real_tmp git_log
   local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
+  local base_hint_def
   local -a modules=(
     31-dev-shell-integrations.sh
     32-git-hooks.sh
@@ -56,6 +57,10 @@ dot_dev_doctor_test() {
     return
   }
   result_file=$DOT_DOCTOR_RESULT_FILE
+  # The hint helper is newer than some Dot releases (and _dr_hint_row newer
+  # than some bases) this suite runs against: default to the older API,
+  # where each next step joins its row's detail, and opt in per case.
+  unset -f dot_doctor_item dot_doctor_hint
 
   for current_module in "${modules[@]}"; do
     unset -f doctor 2>/dev/null || true
@@ -88,6 +93,38 @@ dot_dev_doctor_test() {
     printf '%s\n' "$(<"$result_file")"
     return "$status"
   }
+
+  # _dr_dev_row: base's _dr_hint_row when the base has it; otherwise the
+  # same rule here, for an older base. Asserts run in this shell so they
+  # count; the base helper is set aside and restored around the cases.
+  base_hint_def=$(declare -f _dr_hint_row 2>/dev/null || true)
+  unset -f _dr_hint_row
+  result=$(_doctor_records _dr_dev_row warn 'row' 'the cause' 'do this')
+  _assert_eq 'Dev row without base helper or hint API joins the step' \
+    $'warn\trow\tthe cause; do this' "$result"
+  result=$(_doctor_records _dr_dev_row fail 'row' '' 'do this')
+  _assert_eq 'Dev row with only a step makes it the detail' $'fail\trow\tdo this' "$result"
+  result=$(
+    # shellcheck disable=SC2329 # Probed by the helper under test.
+    dot_doctor_hint() { _dot_doctor_record hint "$1"; }
+    _doctor_records _dr_dev_row warn 'row' $'the\tcause' 'do this'
+  )
+  _assert_eq 'Dev row without base helper uses the hint API when present' \
+    "$(printf '%s\n' $'warn\trow\tthe cause' $'hint\tdo this\t')" "$result"
+  result=$(
+    # shellcheck disable=SC2329 # Probed by the helper under test.
+    _dr_hint_row() { printf 'base\t%s\n' "$*" >>"$result_file"; }
+    _doctor_records _dr_dev_row warn 'row' 'the cause' 'do this'
+  )
+  _assert_eq 'Dev row defers to base _dr_hint_row' \
+    $'base\twarn row the cause do this' "$result"
+  status=0
+  _dr_dev_row warn 'row' 'detail' 2>/dev/null || status=$?
+  _assert_eq 'Dev row refuses a missing hint argument, as base does' 2 "$status"
+  status=0
+  _dr_dev_row bogus 'row' '' '' 2>/dev/null || status=$?
+  _assert_eq 'Dev row refuses an unknown level, as base does' 2 "$status"
+  [[ -z $base_hint_def ]] || eval "$base_hint_def"
 
   doctor_home=$(_tmpdir)
   doctor_bin=$(_mock_bin)
@@ -845,6 +882,9 @@ LUA
   result=$(_hooks_records)
   _assert_contains 'Git hooks doctor names the scope of an overriding hooksPath' \
     $'warn\tcore.hooksPath points elsewhere\tgot /elsewhere (local)' "$result"
+  _assert_contains 'Git hooks doctor points at the override in the repository it checked' \
+    "find the override with 'git --git-dir ~/.dotfiles config --show-origin --get-all core.hooksPath' and remove it" \
+    "$result"
   # A base whose compat does not set DOTFILES still resolves the client.
   result=$(DOCTOR_DOTFILES='' DOT_CLIENT_GIT_DIR="$hooks_home/.dotfiles" _hooks_records)
   _assert_contains 'Git hooks doctor derives the client git dir without DOTFILES' \
@@ -918,7 +958,7 @@ HM
   result=$(DOCTOR_HM_JSON=${hm_healthy/'"unknown_config_keys":[]'/'"unknown_config_keys":["defaults.context_strategy","stores.work.extra"]'} \
     DOCTOR_HM_STDERR='warning: unknown config key: defaults.context_strategy' _hm_records)
   _assert_contains 'Hive Memory names unknown config keys from the structured field' \
-    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, stores.work.extra; update hive-memory (shdeps) or drop the key(s)' \
+    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, stores.work.extra; run \'dot update\' to update hive-memory, or drop the key(s) from Hive Memory\'s config' \
     "$result"
   _assert_not_contains 'Hive Memory withholds the ok row when a key is unknown' \
     'store reachable' "$result"
@@ -1063,7 +1103,8 @@ SH
   cp "$integ_home/broken-adapter" "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
   result=$(_integ_records)
   _assert_contains 'Dev shell integrations report an adapter that does not load' \
-    $'warn\tsley shell integration unchecked\tthe asset probe exited 3' "$result"
+    $'warn\tsley shell integration unchecked\tthe asset probe exited 3; source ~/.config/shell/interactive.d/70-dev-tool-init.sh in a new bash to see the error, then run \'dot update\'' \
+    "$result"
   rm "$integ_home/.config/shell/interactive.d/70-dev-tool-init.sh"
   result=$(_integ_records)
   _assert_contains 'Dev shell integrations warn when the adapter is missing' \
@@ -1073,7 +1114,7 @@ SH
   started=$SECONDS
   result=$(DOCTOR_RESOLVE_SLEEP=30 _DR_DEV_SHELL_DEADLINE=1 _fresh_deadline _integ_records)
   _assert_contains 'Dev shell integrations bound a hung asset resolution' \
-    $'warn\tdev shell integrations unchecked\tresolving their shell assets took longer than 1s' \
+    $'warn\tdev shell integrations unchecked\tresolving their shell assets took longer than 1s; run \'shdeps health\'' \
     "$result"
   _assert_eq 'Dev shell integrations return within their deadline' yes \
     "$( ((SECONDS - started < 10)) && printf yes || printf no)"
@@ -1151,6 +1192,26 @@ SH
     $'fail\tagent pre-bash policy probe failed\texit 7: broken pre-bash' "$result"
   _assert_contains 'Agent Hooks doctor reports stop-hook failures' \
     'agent stop hook failed' "$result"
+  # Every failing probe says how to rerun it by hand.
+  _assert_contains 'Agent Hooks doctor: a rejected benign command says how to reproduce it' \
+    $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash; reproduce with: cd ~ && echo \'{"tool_input":{"command":"dot status"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-pre-bash; \'dot update\' reinstalls AgentGuard' \
+    "$result"
+  _assert_contains 'Agent Hooks doctor: a failed policy probe says how to reproduce it' \
+    $'exit 7: broken pre-bash; reproduce with: cd ~ && echo \'{"tool_input":{"command":"git status -uall"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-pre-bash (a block exits 2 with a reason); \'dot update\' reinstalls AgentGuard' \
+    "$result"
+  _assert_contains 'Agent Hooks doctor: a failed stop hook says how to reproduce it' \
+    $'fail\tagent stop hook failed\tbroken stop; reproduce with: cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-stop; \'dot update\' reinstalls AgentGuard' \
+    "$result"
+  # A Dot with the hint helper gets the step as its own line.
+  result=$(
+    # shellcheck disable=SC2329 # Probed by the checks under test.
+    dot_doctor_hint() { _dot_doctor_record hint "$1"; }
+    HOME="$agent_home" PATH="$doctor_bin:$PATH" _probe_records || true
+  )
+  _assert_contains 'Agent Hooks doctor: a newer Dot gets the probe step as a hint' \
+    "$(printf '%s\n' $'fail\tagent stop hook failed\tbroken stop' \
+      $'hint\treproduce with: cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-stop; \'dot update\' reinstalls AgentGuard\t')" \
+    "$result"
 
   permissive_home=$(_tmpdir)
   mkdir -p "$permissive_home/.local/bin" "$permissive_home/.config/shell"
@@ -1390,6 +1451,17 @@ SH
   [[ -z $temps_saved ]] || mv "$temps_saved" "$temps_lib"
   [[ -z $temps_def ]] || eval "$temps_def"
   eval "$registration_def"
+
+  # No temporary directory for the probes: a warning with a next step, not a
+  # bare extension failure.
+  printf '#!/bin/sh\nexit 1\n' >"$tooling_home/.local/bin/mktemp"
+  chmod +x "$tooling_home/.local/bin/mktemp"
+  result=$(HOME="$tooling_home" PATH="$tooling_home/.local/bin:$hm_bin:$doctor_bin:$PATH" \
+    _doctor_records _dr_check_agent_tooling)
+  _assert_contains 'Agent tooling without a temporary directory warns with a next step' \
+    $'warn\tAgent tooling unchecked\tcould not create a temporary directory; check that the temporary directory (TMPDIR, else /tmp) exists' \
+    "$result"
+  rm -f "$tooling_home/.local/bin/mktemp"
 
   if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
     installed_config=$HOME/.config/dot/config

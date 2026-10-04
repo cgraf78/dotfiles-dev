@@ -71,8 +71,9 @@ _dr_hive_memory_finish() {
   [[ ! -f $dir/hm.err ]] || stderr=$(<"$dir/hm.err")
 
   if _dr_dev_deadline_status "$rc"; then
-    _dr_warn 'Hive Memory unchecked' \
-      "hm sync-status gave no answer within ${_DR_HM_DEADLINE}s, so its store may be on a hung mount; run 'hm sync-status'"
+    _dr_dev_row warn 'Hive Memory unchecked' \
+      "hm sync-status gave no answer within ${_DR_HM_DEADLINE}s, so its store may be on a hung mount" \
+      "check the store's mount, then run 'hm sync-status'"
     return 0
   fi
   if ! command -v jq >/dev/null 2>&1; then
@@ -116,8 +117,8 @@ _dr_hive_memory_finish() {
       _dr_skip 'Hive Memory' "${REPLY:-hm not installed}"
       return 0
     fi
-    _dr_warn 'Hive Memory unchecked' \
-      "${REPLY:-hm sync-status exited $rc without a report}; run 'hm sync-status'"
+    _dr_dev_row warn 'Hive Memory unchecked' \
+      "${REPLY:-hm sync-status exited $rc without a report}" "run 'hm sync-status' to see why"
     return 0
   fi
 
@@ -135,16 +136,16 @@ _dr_hive_memory_finish() {
 
   local problems=0
   if [[ -n $keys ]]; then
-    _dr_warn 'hm binary behind configured keys' \
-      "unknown key(s): $keys; update hive-memory (shdeps) or drop the key(s)"
+    _dr_dev_row warn 'hm binary behind configured keys' "unknown key(s): $keys" \
+      "run 'dot update' to update hive-memory, or drop the key(s) from Hive Memory's config"
     problems=1
   fi
   if [[ $reachable == false ]]; then
-    _dr_warn 'Hive Memory store unreachable' \
-      "${error:-$root}; check that the store's mount is up, then run 'hm sync-status'"
+    _dr_dev_row warn 'Hive Memory store unreachable' "${error:-$root}" \
+      "check that the store's mount is up, then run 'hm sync-status'"
     problems=1
   elif [[ $conflicts =~ ^[1-9][0-9]*$ ]]; then
-    _dr_warn "Hive Memory store has $conflicts cloud conflict file(s)" \
+    _dr_dev_row warn "Hive Memory store has $conflicts cloud conflict file(s)" "" \
       "run 'hm doctor --fix' to quarantine them"
     problems=1
   fi

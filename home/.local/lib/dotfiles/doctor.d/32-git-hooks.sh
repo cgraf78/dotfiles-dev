@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 dot_doctor_source doctor.d/lib/compat.sh || return
+dot_doctor_source doctor.d/lib/dev-common.sh || return
 dot_doctor_source doctor.d/lib/dev-integrations.sh || return
 
 doctor() {

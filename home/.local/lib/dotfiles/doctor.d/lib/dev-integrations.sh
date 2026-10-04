@@ -29,11 +29,12 @@ _dr_check_dev_integrations() {
   _dr_section 'Development shell integrations'
 
   if [[ ! -r $adapter ]]; then
-    _dr_warn 'dev shell integration adapter missing' \
-      "$(_dr_tilde "$adapter"); run 'dot update'"
+    _dr_dev_row warn 'dev shell integration adapter missing' \
+      "$(_dr_tilde "$adapter")" "run 'dot update'"
     issues=1
   elif ! cache=$(mktemp -d "${TMPDIR:-/tmp}/dot-doctor-dev-shell.XXXXXX" 2>/dev/null); then
-    _dr_warn 'dev shell integrations unchecked' 'could not create a temporary cache directory'
+    _dr_dev_row warn 'dev shell integrations unchecked' \
+      'could not create a temporary cache directory' "$_DR_DEV_TMPDIR_HINT"
     issues=1
   else
     # BASH_ENV and ENV would load the user's env.d into the probe, which
@@ -56,8 +57,9 @@ _dr_check_dev_integrations() {
       status=$?
     rm -rf "$cache" 2>/dev/null || true
     if _dr_dev_deadline_status "$status"; then
-      _dr_warn 'dev shell integrations unchecked' \
-        "resolving their shell assets took longer than ${_DR_DEV_SHELL_DEADLINE}s"
+      _dr_dev_row warn 'dev shell integrations unchecked' \
+        "resolving their shell assets took longer than ${_DR_DEV_SHELL_DEADLINE}s" \
+        "run 'shdeps health' to look for a stalled install or state file, then rerun 'dot doctor'"
       issues=1
     else
       for ((index = 0; index < ${#_DR_DEV_SHELL_ASSETS[@]}; index += 3)); do
@@ -68,13 +70,15 @@ _dr_check_dev_integrations() {
         case $'\n'$output$'\n' in
           *$'\n'"$name=1"$'\n'*) ;;
           *$'\n'"$name=0"$'\n'*)
-            _dr_warn "$name shell integration unavailable" \
-              "$dep $asset does not resolve, so new shells skip it; run 'dot update'"
+            _dr_dev_row warn "$name shell integration unavailable" \
+              "$dep $asset does not resolve, so new shells skip it" "run 'dot update'"
             issues=1
             ;;
           *)
             # No verdict at all: the adapter did not load or the shell died.
-            _dr_warn "$name shell integration unchecked" "the asset probe exited $status"
+            _dr_dev_row warn "$name shell integration unchecked" \
+              "the asset probe exited $status" \
+              "source $(_dr_tilde "$adapter") in a new bash to see the error, then run 'dot update'"
             issues=1
             ;;
         esac
@@ -84,8 +88,8 @@ _dr_check_dev_integrations() {
 
   names+=(direnv)
   if ! command -v direnv >/dev/null 2>&1; then
-    _dr_warn 'direnv shell integration unavailable' \
-      "direnv is not on PATH, so new shells skip its hook; run 'dot update'"
+    _dr_dev_row warn 'direnv shell integration unavailable' \
+      "direnv is not on PATH, so new shells skip its hook" "run 'dot update'"
     issues=1
   fi
   ((issues == 0)) || return 0
@@ -108,6 +112,17 @@ _dr_hooks_git() {
     git --git-dir="$git_dir" "$@"
   else
     git -C "$HOME" "$@"
+  fi
+}
+
+# Report via REPLY how a printed command runs the same Git as _dr_hooks_git.
+_dr_hooks_git_display() {
+  local git_dir=${DOTFILES:-${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}}
+  if [[ -d $git_dir ]]; then
+    # Separated, so the shell expands a leading `~` (it does not after `=`).
+    REPLY="git --git-dir $(_dr_tilde "$git_dir")"
+  else
+    REPLY='git -C ~'
   fi
 }
 
@@ -134,7 +149,9 @@ _dr_check_git_hooks() {
     0) IFS=$'\t' read -r scope actual_hooks <<<"$output" ;;
     1) ;; # Git's exit status for an unset key.
     *)
-      _dr_warn "core.hooksPath unchecked" "git config exited $status"
+      _dr_hooks_git_display
+      _dr_dev_row warn "core.hooksPath unchecked" "git config exited $status" \
+        "run '$REPLY config --show-origin --get core.hooksPath' to see the error"
       ;;
   esac
   # Git expands a leading ~ in pathname values; compare the expanded form.
@@ -143,11 +160,14 @@ _dr_check_git_hooks() {
   if [[ -n "$actual_hooks" && "${actual_hooks%/}" == "$want_hooks" ]]; then
     _dr_ok "core.hooksPath" "$(_dr_tilde "$want_hooks") ($scope)"
   elif [[ -n "$actual_hooks" ]]; then
-    _dr_warn "core.hooksPath points elsewhere" \
-      "got $actual_hooks ($scope), expected $(_dr_tilde "$want_hooks")"
+    _dr_hooks_git_display
+    _dr_dev_row warn "core.hooksPath points elsewhere" \
+      "got $actual_hooks ($scope), expected $(_dr_tilde "$want_hooks")" \
+      "find the override with '$REPLY config --show-origin --get-all core.hooksPath' and remove it; dotfiles set it in ~/.config/git/config"
   elif ((status <= 1)); then
-    _dr_warn "core.hooksPath not set" \
-      "dotfiles ship Git hooks in $(_dr_tilde "$want_hooks")"
+    _dr_dev_row warn "core.hooksPath not set" \
+      "dotfiles ship Git hooks in $(_dr_tilde "$want_hooks")" \
+      "restore the core.hooksPath line in ~/.config/git/config ('dot update' relinks the file if it is missing)"
   fi
 
   # Check every shipped hook rather than only pre-commit: Git silently skips a
@@ -162,17 +182,18 @@ _dr_check_git_hooks() {
     display=$(_dr_tilde "$hook")
     if [[ ! -e $hook ]]; then
       issue_count=$((issue_count + 1))
-      _dr_fail "$name hook link broken" "$display"
+      _dr_dev_row fail "$name hook link broken" "$display" "run 'dot update' to relink it"
     elif [[ ! -f $hook ]]; then
       issue_count=$((issue_count + 1))
-      _dr_fail "$name hook is not a file" "$display"
+      _dr_dev_row fail "$name hook is not a file" "$display" \
+        "move it aside, then run 'dot update' to relink it"
     elif [[ ! -x $hook ]]; then
       issue_count=$((issue_count + 1))
-      _dr_fail "$name hook not executable" "chmod +x $display"
+      _dr_dev_row fail "$name hook not executable" "$display" "run 'chmod +x $display'"
     fi
   done
   if ((hook_count == 0)); then
-    _dr_warn "Git hooks missing" "$(_dr_tilde "$want_hooks")"
+    _dr_dev_row warn "Git hooks missing" "$(_dr_tilde "$want_hooks")" "run 'dot update'"
   elif ((issue_count == 0)); then
     _dr_ok "Git hooks executable" "$hook_count hook(s)"
   fi
