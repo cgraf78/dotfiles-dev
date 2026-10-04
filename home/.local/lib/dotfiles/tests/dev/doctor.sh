@@ -14,7 +14,7 @@ dot_dev_doctor_test() {
   local nvim_home nvim_calls started real_home real_bin real_tmp git_log
   local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
-  local base_hint_def
+  local base_hint_def repro_cmd repro_out
   local -a modules=(
     31-dev-shell-integrations.sh
     32-git-hooks.sh
@@ -958,7 +958,7 @@ HM
   result=$(DOCTOR_HM_JSON=${hm_healthy/'"unknown_config_keys":[]'/'"unknown_config_keys":["defaults.context_strategy","stores.work.extra"]'} \
     DOCTOR_HM_STDERR='warning: unknown config key: defaults.context_strategy' _hm_records)
   _assert_contains 'Hive Memory names unknown config keys from the structured field' \
-    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, stores.work.extra; run \'dot update\' to update hive-memory, or drop the key(s) from Hive Memory\'s config' \
+    $'warn\thm binary behind configured keys\tunknown key(s): defaults.context_strategy, stores.work.extra; run \'dot update\' to update hive-memory, or drop the key(s) from ~/.config/hive-memory/config.toml' \
     "$result"
   _assert_not_contains 'Hive Memory withholds the ok row when a key is unknown' \
     'store reachable' "$result"
@@ -1192,26 +1192,40 @@ SH
     $'fail\tagent pre-bash policy probe failed\texit 7: broken pre-bash' "$result"
   _assert_contains 'Agent Hooks doctor reports stop-hook failures' \
     'agent stop hook failed' "$result"
-  # Every failing probe says how to rerun it by hand.
+  # Every failing probe says how to rerun it by hand: the reinstall first,
+  # then the command, last, so it can be pasted on its own.
   _assert_contains 'Agent Hooks doctor: a rejected benign command says how to reproduce it' \
-    $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash; reproduce with: cd ~ && echo \'{"tool_input":{"command":"dot status"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-pre-bash; \'dot update\' reinstalls AgentGuard' \
+    $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (cd ~ && t=$(mktemp -d) && echo \'{"tool_input":{"command":"dot status"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
   _assert_contains 'Agent Hooks doctor: a failed policy probe says how to reproduce it' \
-    $'exit 7: broken pre-bash; reproduce with: cd ~ && echo \'{"tool_input":{"command":"git status -uall"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-pre-bash (a block exits 2 with a reason); \'dot update\' reinstalls AgentGuard' \
+    $'exit 7: broken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run (a block exits 2 with a reason): (cd ~ && t=$(mktemp -d) && echo \'{"tool_input":{"command":"git status -uall"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
   _assert_contains 'Agent Hooks doctor: a failed stop hook says how to reproduce it' \
-    $'fail\tagent stop hook failed\tbroken stop; reproduce with: cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-stop; \'dot update\' reinstalls AgentGuard' \
+    $'fail\tagent stop hook failed\tbroken stop; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (cd ~ && t=$(mktemp -d) && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
+  # The printed command runs as printed: from any directory, without moving
+  # the caller's shell, under the throwaway session ID, with the hook's own
+  # output and exit status.
+  repro_cmd=$(sed -n 's/^fail\tagent stop hook failed\t.*, run: //p' <<<"$result")
+  cat >"$agent_home/.local/bin/agent-hook-stop" <<'SH'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'broken stop for %s in %s\n' "${AGENTGUARD_SESSION_ID:-}" "$PWD" >&2
+exit 9
+SH
+  repro_out=$(cd "$probe_root" && HOME="$agent_home" bash -c "$repro_cmd; echo \"rc=\$? pwd=\$PWD\"" 2>&1)
+  _assert_eq 'Agent Hooks doctor: the printed rerun command reproduces the probe' \
+    "broken stop for dot-doctor-repro in $agent_home"$'\n'"rc=9 pwd=$probe_root" "$repro_out"
   # A Dot with the hint helper gets the step as its own line.
   result=$(
     # shellcheck disable=SC2329 # Probed by the checks under test.
     dot_doctor_hint() { _dot_doctor_record hint "$1"; }
     HOME="$agent_home" PATH="$doctor_bin:$PATH" _probe_records || true
   )
+  _assert_contains 'Agent Hooks doctor: a newer Dot keeps the probe detail on the row' \
+    $'\nfail\tagent stop hook failed\tbroken stop for dot-doctor-' "$result"
   _assert_contains 'Agent Hooks doctor: a newer Dot gets the probe step as a hint' \
-    "$(printf '%s\n' $'fail\tagent stop hook failed\tbroken stop' \
-      $'hint\treproduce with: cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 ~/.local/bin/agent-hook-stop; \'dot update\' reinstalls AgentGuard\t')" \
-    "$result"
+    $'hint\treinstall AgentGuard with \'dot update\'; to see the failure first, run: (cd ~ && t=$(mktemp -d) && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)\t' "$result"
 
   permissive_home=$(_tmpdir)
   mkdir -p "$permissive_home/.local/bin" "$permissive_home/.config/shell"
@@ -1459,7 +1473,7 @@ SH
   result=$(HOME="$tooling_home" PATH="$tooling_home/.local/bin:$hm_bin:$doctor_bin:$PATH" \
     _doctor_records _dr_check_agent_tooling)
   _assert_contains 'Agent tooling without a temporary directory warns with a next step' \
-    $'warn\tAgent tooling unchecked\tcould not create a temporary directory; check that the temporary directory (TMPDIR, else /tmp) exists' \
+    $'warn\tAgent tooling unchecked\tcould not create a temporary directory; ' \
     "$result"
   rm -f "$tooling_home/.local/bin/mktemp"
 

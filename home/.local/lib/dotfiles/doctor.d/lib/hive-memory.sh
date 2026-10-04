@@ -137,7 +137,7 @@ _dr_hive_memory_finish() {
   local problems=0
   if [[ -n $keys ]]; then
     _dr_dev_row warn 'hm binary behind configured keys' "unknown key(s): $keys" \
-      "run 'dot update' to update hive-memory, or drop the key(s) from Hive Memory's config"
+      "run 'dot update' to update hive-memory, or drop the key(s) from $(_dr_tilde "${XDG_CONFIG_HOME:-$HOME/.config}/hive-memory/config.toml")"
     problems=1
   fi
   if [[ $reachable == false ]]; then

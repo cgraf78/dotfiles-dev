@@ -481,12 +481,26 @@ PY
   fi
 }
 
-# Report via REPLY the next step for a failed probe: the command that reruns
-# HOOK (a path) on PAYLOAD by hand the way the probe ran it, from ~ without
-# the shell's startup files, then NOTE, then the reinstall.
+# Report via REPLY the next step for a failed probe: the reinstall, then
+# (after NOTE, if any) the command that reruns HOOK (a path) on PAYLOAD by
+# hand the way the probe ran it. The command comes last, so it can be
+# pasted from "(" to the end; it runs in a subshell, from ~, without the
+# shell's startup files, under a throwaway session ID and a private TMPDIR
+# it removes. Without that session ID the hook would fall back to the
+# calling agent's own session and could, for one, use up that session's
+# completion bell. The hook path is quoted: under HOME as "$HOME/...",
+# elsewhere in single quotes.
 _dr_agent_repro_hint() {
-  local hook=$1 payload=$2 note=${3:-}
-  REPLY="reproduce with: cd ~ && echo '$payload' | env -u BASH_ENV -u ENV ${_DR_AGENT_HOOK_ENV[*]} $(_dr_tilde "$hook")${note:+ ($note)}; 'dot update' reinstalls AgentGuard"
+  local hook=$1 payload=$2 note=${3:-} shown
+  case $hook in
+    "$HOME"/*) shown="\"\$HOME/${hook#"$HOME"/}\"" ;;
+    *\'*) shown='<hook>' ;;
+    *) shown="'$hook'" ;;
+  esac
+  REPLY="reinstall AgentGuard with 'dot update'; to see the failure first, run${note:+ ($note)}:"
+  REPLY+=" (cd ~ && t=\$(mktemp -d) && echo '$payload' | env -u BASH_ENV -u ENV"
+  REPLY+=" ${_DR_AGENT_HOOK_ENV[*]} AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR=\"\$t\" $shown;"
+  REPLY+=" rc=\$?; rm -rf \"\$t\"; exit \$rc)"
 }
 
 # Smoke-probe the installed pre-bash and stop hooks; results go to DIR.
