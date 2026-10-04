@@ -945,7 +945,9 @@ HM
     _dr_hive_memory_finish "$1"
   }
   _hm_records() {
-    HOME="$hm_home" PATH="$hm_bin:$doctor_bin:$PATH" \
+    # Pin XDG_CONFIG_HOME too: CI exports one under the runner's HOME, and the
+    # config-path hint follows it rather than this fixture HOME.
+    HOME="$hm_home" XDG_CONFIG_HOME="$hm_home/.config" PATH="$hm_bin:$doctor_bin:$PATH" \
       _doctor_records _hm_probe "$(_tmpdir)"
   }
   hm_store=$hm_home/store
