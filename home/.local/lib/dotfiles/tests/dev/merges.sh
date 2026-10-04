@@ -1083,14 +1083,19 @@ PY
     _grok_config_seed_toml
     printf '{"hooks":{}}\n' >"$grok_config_native_hooks"
     printf '{"keep":true}\n' >"$grok_config_user_hooks"
-    grok_config_hooks_hash=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    # Snapshot exact bytes with POSIX od: capability CI runs this suite with an
+    # audited command allowlist that has no sha256sum, and a missing hasher
+    # turned both snapshots empty so the comparison below passed vacuously.
+    grok_config_hooks_bytes=$(od -An -tx1 -v "$grok_config_user_hooks")
+    _assert_contains "Grok config merge: sibling hooks snapshot holds the opening brace byte" \
+      "7b" "$grok_config_hooks_bytes"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
       "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
-    grok_config_hooks_after=$(sha256sum "$grok_config_user_hooks" | awk '{print $1}')
+    grok_config_hooks_bytes_after=$(od -An -tx1 -v "$grok_config_user_hooks")
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
-      "$grok_config_hooks_hash" "$grok_config_hooks_after"
+      "$grok_config_hooks_bytes" "$grok_config_hooks_bytes_after"
 
     grok_config_again_status=0
     _run_grok_config_merge >/dev/null || grok_config_again_status=$?
