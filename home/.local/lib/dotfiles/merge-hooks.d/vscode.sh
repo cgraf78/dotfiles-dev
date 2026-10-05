@@ -10,22 +10,6 @@ dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 # The no-op signature covers this hook's own code; resolve it while sourcing.
 _dot_vscode_hook_source="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/${BASH_SOURCE[0]##*/}" || return
 
-if ! declare -F dot_hook_family >/dev/null 2>&1; then
-  _dot_vscode_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return
-  # shellcheck source=../merge-hooks.sh disable=SC1091
-  . "$_dot_vscode_hook_dir/../merge-hooks.sh"
-fi
-if ! declare -F dot_wsl_windows_home >/dev/null 2>&1; then
-  _dot_vscode_hook_dir="${_dot_vscode_hook_dir:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}" || return
-  # shellcheck source=../windows.sh disable=SC1091
-  . "$_dot_vscode_hook_dir/../windows.sh"
-fi
-if ! declare -F dot_xdg_path >/dev/null 2>&1; then
-  _dot_vscode_hook_dir="${_dot_vscode_hook_dir:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}" || return
-  # shellcheck source=../xdg.sh disable=SC1091
-  . "$_dot_vscode_hook_dir/../xdg.sh"
-fi
-
 # Strip // line comments from JSONC so jq can parse it. Normalize transport
 # bytes first because Settings Sync can move CRLF/BOM files across platforms;
 # leaving a BOM attached to the first comment would make a valid source or
@@ -312,7 +296,7 @@ _merge_vscode_settings() {
   #
   # Both inputs stream straight from the comment stripper: this runs once per
   # settings layer, and normalizing each side into a temporary file first cost
-  # two jq starts and three temp-file operations per layer. Unparseable or
+  # two jq starts and three temp-file operations per layer. Unparsable or
   # empty input fails this jq, taking the same warn-and-skip path as before.
   dot_sibling_tmp_for "$dst" || return 1
   out="$REPLY"
@@ -520,10 +504,6 @@ _vscode_checkrun_settings() {
     printf '{}\n' >"$out"
   fi
   rm -f "$cap" "$schemas" "$tmp"
-}
-
-_vscode_sley_settings() {
-  _vscode_checkrun_settings "$1" 1
 }
 
 _remove_vscode_generated_checkrun_settings() {
@@ -1408,22 +1388,6 @@ _vscode_remote_settings_dirs() {
     [[ -d "$root" && -O "$root" && -x "$root" ]] || continue
     printf '%s/data/Machine\n' "$root"
   done
-}
-
-_merge_vscode_remote_window_titles() {
-  local remote_settings_dir
-
-  while IFS= read -r remote_settings_dir; do
-    _merge_vscode_window_title "$remote_settings_dir/settings.json"
-  done < <(_vscode_remote_settings_dirs)
-}
-
-_merge_vscode_remote_mcp_auth() {
-  local remote_settings_dir
-
-  while IFS= read -r remote_settings_dir; do
-    _merge_vscode_mcp_auth "$remote_settings_dir/settings.json"
-  done < <(_vscode_remote_settings_dirs)
 }
 
 _merge_vscode_remote_settings_tracked() {

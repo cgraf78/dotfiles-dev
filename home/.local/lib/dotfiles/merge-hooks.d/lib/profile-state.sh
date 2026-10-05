@@ -980,15 +980,6 @@ _dev_profile_state_recover_all_pending() {
   done
 }
 
-_dev_profile_state_remove_files() {
-  local file status=0
-  for file in "$@"; do
-    [[ -n $file ]] || continue
-    rm -f -- "$file" || status=1
-  done
-  return "$status"
-}
-
 _dev_profile_state_retirement_dir_clear() {
   local directory=$1 entry links
   local nullglob_was_set=0

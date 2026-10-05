@@ -455,51 +455,11 @@ _dr_warn() { dot_doctor_warn "$@"; }
 _dr_fail() { dot_doctor_fail "$@"; }
 _dr_skip() { dot_doctor_skip "$@"; }
 _dr_tilde() { dot_doctor_display_path "$@"; }
-_dr_physical_path() {
-  local path=$1 directory base
-  while [[ $path != / && $path == */ ]]; do path=${path%/}; done
-  case $path in
-    /) directory=/; base=/ ;;
-    */*)
-      directory=${path%/*}; base=${path##*/}
-      [[ -n $directory ]] || directory=/
-      ;;
-    *) directory=.; base=$path ;;
-  esac
-  [[ -d $directory ]] || return 1
-  directory=$(cd "$directory" && pwd -P) || return 1
-  printf '%s/%s\n' "$directory" "$base"
-}
-_dr_symlink_target_path() {
-  local link=$1 target link_directory
-  target=$(readlink "$link") || return 1
-  case $target in
-    /*) _dr_physical_path "$target" ;;
-    *)
-      case $link in
-        */*)
-          link_directory=${link%/*}
-          [[ -n $link_directory ]] || link_directory=/
-          ;;
-        *) link_directory=. ;;
-      esac
-      _dr_physical_path "$link_directory/$target"
-      ;;
-  esac
-}
-_dr_symlink_points_to() {
-  local link=$1 expected=$2 actual expected_physical
-  [[ -e $expected ]] || return 1
-  actual=$(_dr_symlink_target_path "$link") || return 1
-  expected_physical=$(_dr_physical_path "$expected") || return 1
-  [[ $actual == "$expected_physical" ]]
-}
 # Base returns this through REPLY; a stdout stub would hide callers that
 # use command substitution and silently get an empty directory.
 _dot_shdeps_conf_dir() { REPLY="$HOME/.config/shdeps"; }
 dot_agentguard_opencode_marker() { printf '%s\n' '// agentguard-managed:opencode-plugin'; }
 DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
-GIT="git --git-dir=$DOTFILES --work-tree=$HOME"
 _dr_is_dotfiles_checkout() { return 1; }
 EOF
 chmod 600 "$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh"
