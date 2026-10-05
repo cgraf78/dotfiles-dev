@@ -28,6 +28,8 @@ Options:
                         Include archived repositories.
       --no-scheduled    Skip scheduled workflow runs (saves one API call per
                         repository plus one per active workflow).
+      --color <mode>    Color auto (default), always, or never. NO_COLOR disables
+                        color; porcelain output is always plain.
       --porcelain       Print stable key=value summary fields followed by
                         tab-separated repo, sched, pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
@@ -65,6 +67,7 @@ _failing=0
 _forks=0
 _archived=0
 _porcelain=0
+_color=auto
 _watch=0
 _scheduled=1
 _interval=30
@@ -72,14 +75,19 @@ _timeout=1800
 
 while (($#)); do
   case "$1" in
-    -o | --owner | -i | --interval | -t | --timeout)
+    -o | --owner | -i | --interval | -t | --timeout | --color)
       (($# >= 2)) || _usage_error "$1 requires a value"
       case "$1" in
         -o | --owner) _owner=$2 _owner_given=1 ;;
         -i | --interval) _interval=$2 ;;
+        --color) _color=$2 ;;
         *) _timeout=$2 ;;
       esac
       shift 2
+      ;;
+    --color=*)
+      _color=${1#--color=}
+      shift
       ;;
     --owner=*)
       _owner=${1#--owner=} _owner_given=1
@@ -142,6 +150,19 @@ if ((_owner_given == 1)); then
   case "$_owner" in
     '' | *[!A-Za-z0-9-]*) _usage_error "invalid owner: '$_owner'" ;;
   esac
+fi
+
+case $_color in
+  auto | always | never) ;;
+  *) _usage_error "--color must be auto, always, or never" ;;
+esac
+# Match Dot's terminal convention: a nonempty NO_COLOR wins even over an
+# explicit override. Machine output must never depend on display settings.
+_colors=0
+if ((_porcelain == 0)) && [[ -z ${NO_COLOR:-} ]]; then
+  if [[ $_color == always ]] || [[ $_color == auto && -t 1 && ${TERM:-} != dumb ]]; then
+    _colors=1
+  fi
 fi
 
 command -v gh >/dev/null 2>&1 || _usage_error "gh is not installed or not on PATH"
@@ -548,6 +569,27 @@ _print_porcelain() {
   done
 }
 
+# Keep display vocabulary separate from the state used for counts/filtering.
+# Dot's palette and simple one-cell glyphs remain readable without Nerd Fonts.
+# Builtin printf avoids launching a Gum renderer for every dashboard row.
+_tone() {
+  case $1 in
+    pass) _glyph=✓ _shade=$'\e[38;2;63;185;80m' ;;
+    fail) _glyph=✗ _shade=$'\e[38;2;248;81;73m' ;;
+    pending) _glyph=◷ _shade=$'\e[38;2;210;153;34m' ;;
+    warning) _glyph='!' _shade=$'\e[38;2;210;153;34m' ;;
+    *) _glyph=○ _shade=$'\e[38;2;139;148;158m' ;;
+  esac
+  _reset=$'\e[0m'
+  if ((_colors == 0)); then _shade='' _reset=''; fi
+}
+
+# Pad the plain state before wrapping it in ANSI; escape bytes have no width.
+_badge() {
+  _tone "$1"
+  printf '%s%s %-8s%s' "$_shade" "$_glyph" "$1" "$_reset"
+}
+
 # Print the aligned human summary: one line per repository's default branch,
 # its pull requests indented beneath it (with links for problems), truncation
 # warnings, and a closing count line.
@@ -566,15 +608,18 @@ _print_human() {
         else
           label="$branch@${oid:0:7}"
         fi
-        printf '%-8s %-*s  %s\n' "$state" "$_width" "$repo" "$label"
+        _badge "$state"
+        printf ' %-*s  %s\n' "$_width" "$repo" "$label"
         ;;
       pr)
         IFS=$_sep read -r kind state repo number draft auto url title <<<"$row"
         label="#$number $title"
         [[ $draft != true ]] || label+=" [draft]"
         [[ $auto != true ]] || label+=" [auto-merge]"
-        printf '  %-8s %s\n' "$state" "$label"
-        ! _is_problem "$state" || printf '           %s\n' "$url"
+        printf '  '
+        _badge "$state"
+        printf ' %s\n' "$label"
+        ! _is_problem "$state" || printf '             %s\n' "$url"
         ;;
       sched)
         # Passing scheduled runs are counted but not listed, keeping the
@@ -582,23 +627,31 @@ _print_human() {
         _is_problem "$state" || continue
         IFS=$_sep read -r kind state repo name raw created url <<<"$row"
         created=${created/T/ }
-        printf '  %-8s scheduled %s: %s (%s)\n' "$state" "$name" "$raw" "${created%:*}Z"
-        printf '           %s\n' "$url"
+        printf '  '
+        _badge "$state"
+        printf ' scheduled %s: %s (%s)\n' "$name" "$raw" "${created%:*}Z"
+        printf '             %s\n' "$url"
         ;;
       schederror)
-        printf '  %-8s scheduled runs could not be read\n' 'warning'
+        printf '  '
+        _badge warning
+        printf ' scheduled runs could not be read\n'
         ;;
       truncated)
         IFS=$_sep read -r kind state repo total <<<"$row"
-        printf '  %-8s %s open pull requests; only the oldest 30 are checked\n' \
-          'warning' "$total"
+        printf '  '
+        _badge warning
+        printf ' %s open pull requests; only the oldest 30 are checked\n' "$total"
         ;;
     esac
   done
-  printf 'summary: %s pass, %s fail, %s pending, %s without checks' \
+  _overall
+  _tone "$REPLY"
+  printf '%s%s summary: %s pass, %s fail, %s pending, %s without checks' \
+    "$_shade" "$_glyph" \
     "$_pass" "$_fail" "$_pending" "$_none"
   ((_scheduled == 0)) || printf ' (%s scheduled runs checked)' "$_sched_count"
-  printf '\n'
+  printf '%s\n' "$_reset"
 
 }
 
