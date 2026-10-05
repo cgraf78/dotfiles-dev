@@ -330,6 +330,81 @@ opencode_adapter = config_root / "opencode/agentguard.js"
 if opencode_adapter.exists():
     errors.append(f"{opencode_adapter.relative_to(root)}: provider adapter remains in dotfiles")
 
+# dot's family file selection skips hidden names (the shell's `*` never matches
+# them), so editor and OS litter such as .DS_Store or swap files is not part of
+# any hook family. pathlib's glob does match them, hence the explicit filter.
+def visible(path):
+    return not path.name.startswith(".")
+
+
+# Grok's AgentGuard hooks and the Superpowers skill sync come whole from their
+# providers: grok.sh installs AgentGuard's generated fragment and
+# superpowers.sh runs superpowers-muse-sync. Their instance directories only
+# declare the hook. Any other visible entry there (file, directory, or
+# symlink) is a layer neither hook reads, or the start of a second, drifting
+# copy of provider behavior. The README must exist so a moved directory fails
+# instead of passing vacuously.
+for name in ("grok", "superpowers"):
+    directory = config_root / name
+    declaration = directory / "README.md"
+    if not declaration.is_file():
+        errors.append(f"{declaration.relative_to(root)}: missing merge-hook declaration")
+    entries = sorted(directory.iterdir()) if directory.is_dir() else []
+    for path in entries:
+        if visible(path) and path != declaration:
+            errors.append(f"{path.relative_to(root)}: local layer for a provider-owned integration")
+
+
+def family_layers(directory):
+    """Mirror grok-config.sh's `dot_hook_family_files_matching DIR '*.toml'
+    '*.replace/*.toml'`: visible direct layers plus the members of visible
+    `*.replace` groups, with symlinked files and groups followed as dot's
+    `[[ -f ]]`/`[[ -d ]]` checks do. Every group member is checked, not only
+    the lexical winner the hook selects, because any member wins once a later
+    sibling is removed."""
+    layers = {path for path in directory.glob("*.toml") if visible(path) and path.is_file()}
+    for group in directory.glob("*.replace"):
+        if visible(group) and group.is_dir():
+            layers.update(
+                path for path in group.glob("*.toml") if visible(path) and path.is_file()
+            )
+    return sorted(layers)
+
+
+def toml_strings(node):
+    """Yield every key and string value in a parsed TOML document."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield key
+            yield from toml_strings(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from toml_strings(item)
+    elif isinstance(node, str):
+        yield node
+
+
+# grok-config layers are local policy (Claude-compat switches, sandbox, status
+# line). Grok hooks belong in AgentGuard's own ~/.grok/hooks fragment, so no
+# layer may declare a hooks table or name AgentGuard commands. This reads the
+# parsed values rather than the text because the layer comments legitimately
+# explain the AgentGuard settings they turn off. A layer that does not parse
+# is reported by name and the remaining layers are still checked.
+grok_layers = family_layers(config_root / "grok-config/config.d")
+if not grok_layers:
+    errors.append("grok-config/config.d: no Grok config layers")
+for path in grok_layers:
+    try:
+        with path.open("rb") as f:
+            grok_data = tomllib.load(f)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        errors.append(f"{path.relative_to(root)}: {error}")
+        continue
+    if "hooks" in grok_data:
+        errors.append(f"{path.relative_to(root)}: contains provider-owned hook config")
+    if any("agent-hook-" in text or "AGENTGUARD_NAME=" in text for text in toml_strings(grok_data)):
+        errors.append(f"{path.relative_to(root)}: contains provider-owned integration code")
+
 if errors:
     raise SystemExit("\n".join(errors))
 PY
