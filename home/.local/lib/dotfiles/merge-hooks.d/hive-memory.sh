@@ -11,12 +11,6 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 # targets: adapter-specific include blocks would make the shared generated body
 # noisy and ambiguous. Hooks are the runtime context path.
 
-if ! declare -F dot_xdg_path >/dev/null 2>&1; then
-  _dot_hive_memory_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return
-  # shellcheck source=../xdg.sh disable=SC1091
-  . "$_dot_hive_memory_hook_dir/../xdg.sh"
-fi
-
 _hive_memory_config() {
   # Match Hive's public config precedence. An explicitly set override keeps its
   # existing semantics, including an empty or relative value; only XDG base
@@ -43,59 +37,6 @@ _hive_memory_core_path() {
 _hive_memory_core_installed() {
   _hive_memory_core_path || return 1
   [[ -x "$REPLY" && ! -d "$REPLY" ]]
-}
-
-_hive_memory_remove_legacy_core() {
-  _hive_memory_core_path || return 0
-
-  local legacy_dir="$HOME/.local/share/hive-memory/bin"
-  local legacy_core="$legacy_dir/hm-core"
-  local stable_core="$REPLY"
-  local launcher="$HOME/.local/bin/hm"
-  local launcher_marker
-  local expected_marker="# Dotfiles-owned front door for the generic \`hm\` binary."
-
-  # This migration must be a no-op forever after it succeeds. Returning before
-  # even probing the replacement also avoids removing an independently created
-  # empty namespace on every future `dot update`.
-  [[ -e "$legacy_core" || -L "$legacy_core" ]] || return 0
-
-  # A failed capability preflight skips dependency convergence but still runs
-  # merge hooks so unrelated configuration can repair itself. Keep the legacy
-  # core in that case: the stable payload may work now, but an older Shdeps is
-  # still capable of replacing the tracked launcher on a later run. The update
-  # orchestrator exports this proof only after probing the active binary.
-  [[ "${DOT_SHDEPS_RELEASE_LAUNCHER_PRESERVATION:-0}" == 1 ]] || return 0
-
-  # Older dotfiles copied every Hive release into a second private path so a
-  # generated ~/.local/bin/hm symlink could point at the launcher. The launcher
-  # is now tracked directly and delegates to Shdeps' fixed archive payload, so
-  # that copy becomes unreachable duplicate storage only after the replacement
-  # is demonstrably usable. Merge hooks still run when the earlier dependency
-  # phase fails, so deleting first could turn a transient network failure into
-  # a missing `hm` command. Exercise the tracked launcher's normal fixed-path
-  # delegation before removing only the old dotfiles-owned filename.
-  # Do not trust an old generated symlink, an unrelated user command, or a
-  # partially written replacement to authorize deletion. The new front door is
-  # a tracked regular file with a stable ownership marker; verify that shape
-  # before exercising its normal fixed-path delegation.
-  [[ -f "$launcher" && ! -L "$launcher" ]] || return 0
-  {
-    IFS= read -r _
-    IFS= read -r launcher_marker
-  } <"$launcher" || return 0
-  [[ "$launcher_marker" == "$expected_marker" ]] || return 0
-
-  if [[ ! -f "$stable_core" || -L "$stable_core" || ! -x "$stable_core" ||
-    ! -x "$launcher" ]] ||
-    ! "$launcher" --version >/dev/null 2>&1; then
-    return 0
-  fi
-  if ! rm -f -- "$legacy_core"; then
-    _hive_memory_warn "could not remove obsolete core copy: $legacy_core"
-    return 0
-  fi
-  rmdir "$legacy_dir" "${legacy_dir%/*}" 2>/dev/null || true
 }
 
 # Print the effective default store as one field per line. Returns 127 when
@@ -218,7 +159,6 @@ _hive_memory_check_config() {
 merge() {
   _dot_tool_present hive-memory || return 0
   local config spec spec_rc
-  _hive_memory_remove_legacy_core
   _hive_memory_config || return 0
   config="$REPLY"
 

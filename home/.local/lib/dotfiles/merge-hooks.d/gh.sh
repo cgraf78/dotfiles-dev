@@ -10,12 +10,6 @@ dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 # Policy: dotfiles keys overwrite matching local keys.
 # Local-only keys are preserved.
 
-if ! declare -F dot_xdg_path >/dev/null 2>&1; then
-  _dot_gh_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return
-  # shellcheck source=../xdg.sh disable=SC1091
-  . "$_dot_gh_hook_dir/../xdg.sh"
-fi
-
 _gh_config_sources() {
   _gh_sources=()
 

@@ -19,8 +19,7 @@ fi
 
 DOT_SOURCE_ROOT=$_dot_test_api_root
 DOT_EXTENSIONS_DIR=$_dot_test_api_source_home/.local/lib/dotfiles
-DOT_EXTENSION_API=1
-export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR DOT_EXTENSION_API
+export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR
 
 # shellcheck source=/dev/null
 . "$_dot_test_api_root/lib/dot/public/xdg.sh"
@@ -182,12 +181,6 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_st
 
   _dot_windows_cmd_exe() {
     local candidate converted
-
-    if [ -n "${DOT_TEST_WINDOWS_CMD_EXE:-}" ]; then
-      [ -x "$DOT_TEST_WINDOWS_CMD_EXE" ] || return 1
-      REPLY="$DOT_TEST_WINDOWS_CMD_EXE"
-      return 0
-    fi
 
     if command -v wslpath >/dev/null 2>&1; then
       converted="$(wslpath 'C:\Windows\System32\cmd.exe' 2>/dev/null)" || converted=""

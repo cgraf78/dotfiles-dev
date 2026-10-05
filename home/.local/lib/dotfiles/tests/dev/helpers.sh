@@ -217,8 +217,7 @@ _test_load_dot_merge_api() {
   dot_root=$(_test_dot_root) || return 1
   DOT_SOURCE_ROOT=$dot_root
   DOT_EXTENSIONS_DIR=$source_home/.local/lib/dotfiles
-  DOT_EXTENSION_API=1
-  export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR DOT_EXTENSION_API
+  export DOT_SOURCE_ROOT DOT_EXTENSIONS_DIR
 
   # shellcheck source=/dev/null
   . "$dot_root/lib/dot/public/xdg.sh"
@@ -251,9 +250,8 @@ _test_load_dot_doctor_api() {
 
   dot_root=$(_test_dot_root) || return 1
   DOT_SOURCE_ROOT=$dot_root
-  DOT_EXTENSION_API=1
   DOT_DOCTOR_RESULT_FILE=${DOT_DOCTOR_RESULT_FILE:-$HOME/.doctor-results.tsv}
-  export DOT_SOURCE_ROOT DOT_EXTENSION_API
+  export DOT_SOURCE_ROOT
   export DOT_DOCTOR_RESULT_FILE
   : >"$DOT_DOCTOR_RESULT_FILE"
 
