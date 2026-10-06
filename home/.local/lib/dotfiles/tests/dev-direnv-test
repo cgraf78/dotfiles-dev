@@ -67,6 +67,23 @@ fi
 
 echo '=== direnv hook gate: bash install ==='
 hook_log=$work/hook.log
+# A real executable spy also handles absolute, single-quoted and ANSI-C-quoted
+# hook commands. DIRENV_EXE_PATH is direnv's own hook-generation interface;
+# rewriting generated shell text made tests accidentally execute live exports.
+spy_dir="$work/export spy's"
+mkdir -p "$spy_dir"
+export DIRENV_GATE_LOG=$hook_log
+export DIRENV_GATE_SPY="$spy_dir/direnv"
+cat >"$DIRENV_GATE_SPY" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+[[ $# == 2 ]] || exit 1
+case "$*" in
+  'export bash' | 'export zsh') printf 'EXPORT-CALLED\n' >>"$DIRENV_GATE_LOG" ;;
+  *) printf 'unexpected spy invocation: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$DIRENV_GATE_SPY"
 : >"$hook_log"
 # Frozen direnv 2.37.1 hook shape; used when no binary is available, and the
 # installer shape-guard covers drift by falling back to the raw hook.
@@ -75,22 +92,17 @@ fallback_bash=$(
 _direnv_hook() {
   local previous_exit_status=$?;
   trap -- '' SIGINT;
-  eval "$("direnv" export bash)";
+  eval "$("$DIRENV_GATE_SPY" export bash)";
   trap - SIGINT;
   return $previous_exit_status;
 };
 EOF
 )
-if command -v direnv >/dev/null 2>&1 && canned_bash=$(direnv hook bash 2>/dev/null); then
-  :
+if command -v direnv >/dev/null 2>&1; then
+  canned_bash=$(DIRENV_EXE_PATH="$DIRENV_GATE_SPY" direnv hook bash)
 else
   canned_bash=$fallback_bash
 fi
-# Route hook exports through a spy instead of the direnv binary.
-canned_bash=$(printf '%s\n' "$canned_bash" | sed 's|"\([^"]*direnv\)" export|direnv_gate_stub export|')
-direnv_gate_stub() {
-  printf 'EXPORT-CALLED\n' >>"$hook_log"
-}
 # The stub defines the hook only for the direnv call, like the real cache
 # source (sley/git-tools inits define their own integrations instead).
 # shellcheck disable=SC2329 # invoked by the sourced 80-dev file below.
@@ -159,40 +171,46 @@ if command -v zsh >/dev/null 2>&1; then
     cat <<'EOF'
 _direnv_hook() {
   trap -- '' SIGINT;
-  eval "$("direnv" export zsh)";
+  eval "$("$DIRENV_GATE_SPY" export zsh)";
   trap - SIGINT;
 }
 EOF
   )
-  if command -v direnv >/dev/null 2>&1 && canned_zsh=$(direnv hook zsh 2>/dev/null); then
-    :
+  if command -v direnv >/dev/null 2>&1; then
+    canned_zsh=$(DIRENV_EXE_PATH="$DIRENV_GATE_SPY" direnv hook zsh)
   else
     canned_zsh=$fallback_zsh
   fi
-  canned_zsh=$(printf '%s\n' "$canned_zsh" | sed 's|"\([^"]*direnv\)" export|direnv_gate_stub export|')
-  zsh_gate_out=$(ZSH_CANNED="$canned_zsh" ZSH_WORK="$work" ZSH_HOME="$HOME" zsh -f -c '
+  # A script has toplevel context; `zsh -c` has cmdarg context, which the
+  # current upstream hook deliberately rejects even in an interactive shell.
+  cat >"$work/zsh-probe" <<'EOF'
     hook_log=$1
     . "$ZSH_HOME/.config/shell/interactive.d/70-dev-tool-init.sh"
-    direnv_gate_stub() { print -r -- EXPORT-CALLED >>"$hook_log"; }
     _tool_init() { if [[ $1 == direnv ]]; then eval "$ZSH_CANNED"; fi }
     . "$ZSH_HOME/.config/shell/interactive.d/80-dev-integrations.zsh"
     (( $+functions[_dot_direnv_hook_orig] )) && print "ORIG=yes" || print "ORIG=no"
+    # Current direnv deliberately skips noninteractive shells and subshells.
+    # Probe the interactive precmd path directly, without a subshell.
     # The hook also rides chpwd (as it does unmodified); clear it so each
     # probe below measures exactly one precmd-path call, then cover chpwd
     # itself separately.
     chpwd_functions=()
     : >"$hook_log"
-    ( cd "$ZSH_WORK/empty/a/b" && _direnv_hook )
+    cd "$ZSH_WORK/empty/a/b"
+    _direnv_hook
     [[ -s $hook_log ]] && print "IDLE=called" || print "IDLE=skipped"
-    ( cd "$ZSH_WORK/withrc/sub/deep" && _direnv_hook )
+    cd "$ZSH_WORK/withrc/sub/deep"
+    _direnv_hook
     [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "LOADED=called" || print "LOADED=miss"
     : >"$hook_log"
-    ( cd "$ZSH_WORK/empty/a/b" && DIRENV_DIFF=stale _direnv_hook )
+    cd "$ZSH_WORK/empty/a/b"
+    DIRENV_DIFF=stale _direnv_hook
     [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "UNLOAD=called" || print "UNLOAD=miss"
     . "$ZSH_HOME/.config/shell/interactive.d/80-dev-integrations.zsh"
     chpwd_functions=()
     : >"$hook_log"
-    ( cd "$ZSH_WORK/withrc/sub/deep" && _direnv_hook )
+    cd "$ZSH_WORK/withrc/sub/deep"
+    _direnv_hook
     [[ $(cat "$hook_log") == EXPORT-CALLED ]] && print "RESOURCE=once" || print "RESOURCE=wrong"
     print ${functions[_dot_direnv_hook_orig]} | grep -q upward && print "ORIGRAW=no" || print "ORIGRAW=yes"
     chpwd_functions=(_direnv_hook)
@@ -202,7 +220,9 @@ EOF
     : >"$hook_log"
     cd "$ZSH_WORK/empty/a/b"
     [[ -s $hook_log ]] && print "CHPWDIDLE=called" || print "CHPWDIDLE=skipped"
-  ' _ "$hook_log" 2>/dev/null)
+EOF
+  zsh_gate_out=$(ZSH_CANNED="$canned_zsh" ZSH_WORK="$work" ZSH_HOME="$HOME" \
+    zsh -f -i "$work/zsh-probe" "$hook_log" 2>/dev/null)
   _assert_contains 'gate (zsh): install keeps the raw hook as orig' 'ORIG=yes' "$zsh_gate_out"
   _assert_contains 'gate (zsh): idle directory skips the export fork' 'IDLE=skipped' "$zsh_gate_out"
   _assert_contains 'gate (zsh): directory with .envrc runs the export' 'LOADED=called' "$zsh_gate_out"
