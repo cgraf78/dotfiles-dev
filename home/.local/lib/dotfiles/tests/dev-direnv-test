@@ -8,6 +8,12 @@ echo '=== direnv hook gate: upward scan ==='
 . "$HOME/.config/shell/interactive.d/70-dev-tool-init.sh"
 
 work=$(_tmpdir)
+# Direnv stores approvals under XDG_DATA_HOME, not just its config directory.
+# Hook generation and live parity must never read or write host approvals.
+export DIRENV_CONFIG="$work/direnv-config"
+export XDG_DATA_HOME="$work/xdg-data"
+export XDG_CACHE_HOME="$work/xdg-cache"
+mkdir -p "$DIRENV_CONFIG" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 scan_rc() {
   if (cd "$1" && _dot_upward_envrc); then
     echo 0
