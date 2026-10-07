@@ -12,12 +12,28 @@
 # Not `hm doctor`: even `--quick` can take tens of seconds and has ignored
 # SIGTERM.
 
-# Deadline in seconds. A healthy store on a cloud mount answers in under one.
-_DR_HM_DEADLINE=3
+# Seconds past which an answer counts as slow, a warning rather than a
+# fault: a warm store on a cloud mount answers in under one, a cold one can
+# take several while the mount lists it.
+_DR_HM_SLOW=3
+
+# Seconds hm gets before it is stopped. Stopping it early buys nothing: hm
+# spends its time in filesystem requests (sync-status scans the whole
+# store), and once a FUSE mount's daemon holds a request, not even SIGKILL
+# cuts it short. The process stays in the kernel until the daemon answers,
+# and Dot, which owns every process the worker starts, fails the whole
+# extension when one outlives its teardown grace. So hm is waited out on a
+# store that is merely slow (a cloud mount listing a cold store has taken
+# ten seconds) and stopped only on one that looks hung. On a hung mount,
+# or with DOT_DOCTOR_TIMEOUT below this, the extension can still fail:
+# only Dot can let a process with SIGKILL pending go. Kept well under Dot's
+# default extension deadline (60s), which would otherwise stop it first.
+_DR_HM_DEADLINE=30
 
 # Start the probe in the background so it overlaps the section's other
-# probes: DIR receives hm.out (the JSON report), hm.err, and hm.rc. Sets
-# _DR_HM_PID, or leaves it empty when hm is not installed.
+# probes: DIR receives hm.out (the JSON report), hm.err, hm.rc, and
+# hm.secs (whole seconds it took). Sets _DR_HM_PID, or leaves it empty
+# when hm is not installed.
 _dr_hive_memory_start() {
   local dir=$1
   _DR_HM_PID=
@@ -25,9 +41,10 @@ _dr_hive_memory_start() {
   (
     # Plain assignment: this fork cannot leak into the worker, and the `||`
     # keeps `set -e` from ending it before the status is written.
-    rc=0
+    rc=0 started=$SECONDS
     _dr_dev_bounded "$_DR_HM_DEADLINE" hm sync-status --json \
       >"$dir/hm.out" 2>"$dir/hm.err" </dev/null || rc=$?
+    printf '%s' "$((SECONDS - started))" >"$dir/hm.secs"
     printf '%s' "$rc" >"$dir/hm.rc"
   ) &
   _DR_HM_PID=$!
@@ -56,7 +73,7 @@ _dr_hive_memory_error() {
 
 # Report what the probe in DIR found: wait for it, then file its rows.
 _dr_hive_memory_finish() {
-  local dir=$1 rc=1 parsed stderr='' line detail
+  local dir=$1 rc=1 parsed stderr='' line detail secs=''
   local reachable='' error='' root='' conflicts='' keys_known='' keys=''
 
   if [[ -z ${_DR_HM_PID:-} ]]; then
@@ -155,6 +172,15 @@ _dr_hive_memory_finish() {
   elif [[ $conflicts =~ ^[1-9][0-9]*$ ]]; then
     _dr_dev_row warn "Hive Memory store has $conflicts cloud conflict file(s)" "" \
       "run 'hm doctor --fix' to quarantine them"
+    problems=1
+  fi
+  # A slow store still answered, so the findings above stand; an
+  # unreachable one already has its row.
+  [[ ! -f $dir/hm.secs ]] || secs=$(<"$dir/hm.secs")
+  if [[ $reachable == true && $secs =~ ^[0-9]+$ ]] && ((secs > _DR_HM_SLOW)); then
+    _dr_dev_row warn 'Hive Memory store slow' \
+      "hm sync-status took ${secs}s to scan it (over ${_DR_HM_SLOW}s)" \
+      "check the store's mount, then time 'hm sync-status'"
     problems=1
   fi
   # `index_stale` gets no row: hm rebuilds its index on the next read, so a

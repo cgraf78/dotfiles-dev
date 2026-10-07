@@ -78,6 +78,7 @@ if [[ "$*" != 'sync-status --json' ]]; then
   exit 9
 fi
 [[ -z ${DOCTOR_HM_SLEEP:-} ]] || exec sleep "$DOCTOR_HM_SLEEP"
+[[ -z ${DOCTOR_HM_DELAY:-} ]] || sleep "$DOCTOR_HM_DELAY"
 [[ -z ${DOCTOR_HM_STDERR:-} ]] || printf '%s\n' "$DOCTOR_HM_STDERR" >&2
 [[ -z ${DOCTOR_HM_JSON:-} ]] || printf '%s\n' "$DOCTOR_HM_JSON"
 exit "${DOCTOR_HM_EXIT:-0}"
@@ -1061,8 +1062,32 @@ SH
   result=$(DOCTOR_HM_SLEEP=30 _DR_HM_DEADLINE=1 _fresh_deadline _hm_records)
   _assert_contains 'Hive Memory bounds a hung hm' \
     $'warn\tHive Memory unchecked\thm sync-status gave no answer within 1s' "$result"
+  _assert_not_contains 'Hive Memory calls a hung hm unchecked, not slow' 'store slow' "$result"
   _assert_eq 'Hive Memory returns within its deadline' yes \
     "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  # A slow store is waited out, not stopped at the slow mark: stopping hm
+  # mid-request cannot cut the request short and leaves Dot a process it
+  # cannot reap. Its answer still counts.
+  # A slow mark of 0 would read as no deadline at all, so this one is 1s.
+  result=$(DOCTOR_HM_DELAY=2 _DR_HM_SLOW=1 DOCTOR_HM_JSON=$hm_healthy _hm_records)
+  _assert_contains 'Hive Memory waits out a slow store and flags it' \
+    $'warn\tHive Memory store slow\thm sync-status took ' "$result"
+  _assert_contains 'Hive Memory names the slow mark it passed' '(over 1s)' "$result"
+  _assert_not_contains 'Hive Memory withholds the ok row from a slow store' \
+    'store reachable' "$result"
+  result=$(DOCTOR_HM_DELAY=1 _DR_HM_SLOW=0 \
+    DOCTOR_HM_JSON=${hm_healthy/'"unknown_config_keys":[]'/'"unknown_config_keys":["x.y"]'} \
+    _hm_records)
+  _assert_contains 'Hive Memory keeps the findings of a slow store' \
+    $'warn\thm binary behind configured keys\tunknown key(s): x.y' "$result"
+  result=$(DOCTOR_HM_DELAY=1 _DR_HM_SLOW=0 \
+    DOCTOR_HM_JSON='{"root":"'$hm_store'","reachable":false,"manifest_error":"store manifest missing","store_error":null,"unknown_config_keys":[]}' \
+    _hm_records)
+  _assert_not_contains 'Hive Memory calls an unreachable store unreachable, not slow' \
+    'store slow' "$result"
+  result=$(DOCTOR_HM_JSON=$hm_healthy _hm_records)
+  _assert_not_contains 'Hive Memory does not flag a store that answers at once' \
+    'store slow' "$result"
   result=$(HOME="$hm_home" PATH="$doctor_bin:/usr/bin:/bin" \
     _doctor_records _hm_probe "$(_tmpdir)")
   _assert_contains 'Hive Memory skips when hm is not installed' \
