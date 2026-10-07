@@ -1024,6 +1024,24 @@ SH
   _assert_contains 'Hive Memory warns about cloud conflict copies' \
     $'warn\tHive Memory store has 2 cloud conflict file(s)\trun \'hm doctor --fix\' to quarantine them' \
     "$result"
+  # A current hm counts conflict copies only when it walked the store
+  # (`--scan`), and says so in store_scanned; above, an hm before that field
+  # always walked it.
+  result=$(DOCTOR_HM_JSON=${hm_healthy/'"cloud_conflict_files":0'/'"store_scanned":true,"cloud_conflict_files":2'} \
+    _hm_records)
+  _assert_contains 'Hive Memory warns about conflict copies a scan counted' \
+    $'warn\tHive Memory store has 2 cloud conflict file(s)' "$result"
+  # The count is 0 without a scan; 2 here proves it is not read.
+  result=$(DOCTOR_HM_JSON=${hm_healthy/'"cloud_conflict_files":0'/'"store_scanned":false,"cloud_conflict_files":2'} \
+    _hm_records)
+  _assert_not_contains 'Hive Memory reads no conflict count from an unscanned store' \
+    'conflict' "$result"
+  _assert_contains 'Hive Memory reports an unscanned store reachable' \
+    $'ok\tHive Memory store reachable\t~/store; every config key understood' "$result"
+  result=$(DOCTOR_HM_JSON='{"root":"'$hm_store'","reachable":false,"manifest_error":null,"store_error":"read '$hm_store'/rules: Input/output error (os error 5)","store_scanned":false,"cloud_conflict_files":0,"unknown_config_keys":[]}' \
+    _hm_records)
+  _assert_contains 'Hive Memory warns when an unscanned store fails its probe' \
+    $'warn\tHive Memory store unreachable\tread '"$hm_store"$'/rules: Input/output error (os error 5); ' "$result"
   # An hm before the structured fields: no unknown_config_keys and no
   # store_error, and a conflict count that still included quarantined copies.
   hm_old='{"store":"personal","root":"'$hm_store'","reachable":true,"manifest_error":null,"index_stale":false,"cloud_conflict_files":4}'

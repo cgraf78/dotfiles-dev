@@ -18,16 +18,18 @@
 _DR_HM_SLOW=3
 
 # Seconds hm gets before it is stopped. Stopping it early buys nothing: hm
-# spends its time in filesystem requests (sync-status scans the whole
-# store), and once a FUSE mount's daemon holds a request, not even SIGKILL
-# cuts it short. The process stays in the kernel until the daemon answers,
-# and Dot, which owns every process the worker starts, fails the whole
-# extension when one outlives its teardown grace. So hm is waited out on a
-# store that is merely slow (a cloud mount listing a cold store has taken
-# ten seconds) and stopped only on one that looks hung. On a hung mount,
-# or with DOT_DOCTOR_TIMEOUT below this, the extension can still fail:
-# only Dot can let a process with SIGKILL pending go. Kept well under Dot's
-# default extension deadline (60s), which would otherwise stop it first.
+# spends its time in filesystem requests on the store (a current hm reads
+# the manifest and the top of each canonical tree; an older one walks the
+# whole store), and once a FUSE mount's daemon holds a request, not even
+# SIGKILL cuts it short. The process stays in the kernel until the daemon
+# answers, and Dot, which owns every process the worker starts, fails the
+# whole extension when one outlives its teardown grace. So hm is waited
+# out on a store that is merely slow (a cloud mount walking a cold store
+# has taken ten seconds) and stopped only on one that looks hung. On a hung
+# mount, or with DOT_DOCTOR_TIMEOUT below this, the extension can still
+# fail: only Dot can let a process with SIGKILL pending go. Kept well under
+# Dot's default extension deadline (60s), which would otherwise stop it
+# first.
 _DR_HM_DEADLINE=30
 
 # Start the probe in the background so it overlaps the section's other
@@ -104,13 +106,18 @@ _dr_hive_memory_finish() {
   # `unknown_config_keys` cannot say a key list is empty, and its
   # `cloud_conflict_files` also counted copies `hm doctor --fix` had already
   # quarantined, so the count is only read alongside `store_error`, which
-  # arrived with the corrected rule.
+  # arrived with the corrected rule. A current hm counts conflict copies only
+  # under `--scan`, too slow for doctor, and says whether it did in
+  # `store_scanned` (false holds the count at 0), so an unscanned report has
+  # no conflict row; `hm doctor` still counts them. jq's `//` would treat
+  # false as missing, hence the explicit test: an hm before `store_scanned`
+  # always walked the store.
   if [[ -s $dir/hm.out ]] && parsed=$(jq -r '
     def line: tostring | gsub("[\\t\\r\\n]"; " ");
     "reachable=\(.reachable)",
     "error=\((.store_error // .manifest_error // "") | line)",
     "root=\((.root // "") | line)",
-    "conflicts=\(if has("store_error") then (.cloud_conflict_files // 0) else "" end)",
+    "conflicts=\(if has("store_error") and (if has("store_scanned") then .store_scanned == true else true end) then (.cloud_conflict_files // 0) else "" end)",
     "keys_known=\(has("unknown_config_keys"))",
     "keys=\((.unknown_config_keys // []) | map(line) | join(", "))"
   ' "$dir/hm.out" 2>/dev/null); then
@@ -179,7 +186,7 @@ _dr_hive_memory_finish() {
   [[ ! -f $dir/hm.secs ]] || secs=$(<"$dir/hm.secs")
   if [[ $reachable == true && $secs =~ ^[0-9]+$ ]] && ((secs > _DR_HM_SLOW)); then
     _dr_dev_row warn 'Hive Memory store slow' \
-      "hm sync-status took ${secs}s to scan it (over ${_DR_HM_SLOW}s)" \
+      "hm sync-status took ${secs}s to answer (over ${_DR_HM_SLOW}s)" \
       "check the store's mount, then time 'hm sync-status'"
     problems=1
   fi
