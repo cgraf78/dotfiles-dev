@@ -14,7 +14,8 @@ dot_dev_doctor_test() {
   local nvim_home nvim_calls started real_home real_bin real_tmp git_log
   local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
-  local base_hint_def repro_cmd repro_out
+  local base_hint_def repro_cmd repro_out hm_trip wrapper_home wrapper_config
+  local wrapper_data
   local -a modules=(
     31-dev-shell-integrations.sh
     32-git-hooks.sh
@@ -62,6 +63,53 @@ dot_dev_doctor_test() {
   # where each next step joins its row's detail, and opt in per case.
   unset -f dot_doctor_item dot_doctor_hint
 
+  # The hm stub answers from DOCTOR_HM_*; every case that reaches the Hive
+  # Memory probe puts it first on PATH. Any other call that keeps the suite
+  # PATH finds the tripwire, which records it and fails instead of running
+  # the real hm: that
+  # one reads the live store, which usually sits on a cloud mount where a
+  # hung request leaves it unkillable and fails the whole `dot test` run.
+  hm_home=$(_tmpdir)
+  hm_bin=$(_tmpdir)
+  cat >"$hm_bin/hm" <<'HM'
+#!/usr/bin/env bash
+if [[ "$*" != 'sync-status --json' ]]; then
+  printf 'unexpected arguments: %s\n' "$*" >&2
+  exit 9
+fi
+[[ -z ${DOCTOR_HM_SLEEP:-} ]] || exec sleep "$DOCTOR_HM_SLEEP"
+[[ -z ${DOCTOR_HM_DELAY:-} ]] || sleep "$DOCTOR_HM_DELAY"
+[[ -z ${DOCTOR_HM_STDERR:-} ]] || printf '%s\n' "$DOCTOR_HM_STDERR" >&2
+[[ -z ${DOCTOR_HM_JSON:-} ]] || printf '%s\n' "$DOCTOR_HM_JSON"
+exit "${DOCTOR_HM_EXIT:-0}"
+HM
+  chmod +x "$hm_bin/hm"
+  hm_store=$hm_home/store
+  hm_healthy='{"store":"personal","root":"'$hm_store'","reachable":true,"manifest_error":null,"store_error":null,"index_stale":true,"cloud_conflict_files":0,"unknown_config_keys":[]}'
+  hm_trip=$(_tmpdir)
+  cat >"$hm_trip/hm" <<SH
+#!/bin/sh
+printf '%s\n' "hm \$*" >>"$hm_trip/calls"
+echo 'dev-doctor-test: unstubbed hm call' >&2
+exit 1
+SH
+  chmod +x "$hm_trip/hm"
+  export PATH="$hm_trip:$PATH"
+
+  # Run each wrapper as an installed doctor would. The CI fixture converged
+  # its own HOME for this; anywhere else HOME is the live one `dot test`
+  # hands suites, and the probes run real commands (the agent hooks, nvim,
+  # git) that must not read live state, so they get an empty HOME. Base's
+  # compat module fixed DOTFILES from the live HOME when it was sourced, so
+  # it follows too, or the Git hooks check reads the live client repo.
+  wrapper_home=$HOME
+  wrapper_config=${XDG_CONFIG_HOME:-$HOME/.config}
+  wrapper_data=${XDG_DATA_HOME:-$HOME/.local/share}
+  if ! $fixture_health; then
+    wrapper_home=$(_tmpdir)
+    wrapper_config=$wrapper_home/.config
+    wrapper_data=$wrapper_home/.local/share
+  fi
   for current_module in "${modules[@]}"; do
     unset -f doctor 2>/dev/null || true
     if ! dot_doctor_source "doctor.d/$current_module"; then
@@ -69,7 +117,9 @@ dot_dev_doctor_test() {
       continue
     fi
     if declare -F doctor >/dev/null; then
-      doctor
+      HOME=$wrapper_home XDG_CONFIG_HOME=$wrapper_config XDG_DATA_HOME=$wrapper_data \
+        DOTFILES=$wrapper_home/.dotfiles PATH="$hm_bin:$PATH" DOCTOR_HM_JSON=$hm_healthy \
+        doctor
       _pass "Doctor wrapper runs through the public API: $current_module"
     else
       _fail "Doctor wrapper exports its entry point: $current_module"
@@ -83,7 +133,13 @@ dot_dev_doctor_test() {
     $'section\tDevelopment tools' "$(<"$result_file")"
   if $fixture_health; then
     _assert_eq 'Dev doctor wrappers publish no failures in the fixture' 0 "$failures"
+  else
+    # A live home usually has the hooks installed; the empty one never does.
+    _assert_contains 'Dev doctor wrappers outside the CI fixture probe an empty HOME' \
+      'agent pre-bash hook unavailable' "$(<"$result_file")"
   fi
+  _assert_contains 'Dev doctor wrappers read Hive Memory from the stub' \
+    $'ok\tHive Memory store reachable\t' "$(<"$result_file")"
 
   _doctor_records() {
     local status=0
@@ -924,21 +980,7 @@ SH
     $'warn\tcore.hooksPath not set' "$result"
 
   # Hive Memory: one bounded `hm sync-status --json`; stdout is the JSON
-  # report and stderr stays apart. The stub answers from DOCTOR_HM_*.
-  hm_home=$(_tmpdir)
-  hm_bin=$(_tmpdir)
-  cat >"$hm_bin/hm" <<'HM'
-#!/usr/bin/env bash
-if [[ "$*" != 'sync-status --json' ]]; then
-  printf 'unexpected arguments: %s\n' "$*" >&2
-  exit 9
-fi
-[[ -z ${DOCTOR_HM_SLEEP:-} ]] || exec sleep "$DOCTOR_HM_SLEEP"
-[[ -z ${DOCTOR_HM_STDERR:-} ]] || printf '%s\n' "$DOCTOR_HM_STDERR" >&2
-[[ -z ${DOCTOR_HM_JSON:-} ]] || printf '%s\n' "$DOCTOR_HM_JSON"
-exit "${DOCTOR_HM_EXIT:-0}"
-HM
-  chmod +x "$hm_bin/hm"
+  # report and stderr stays apart. The stub (above) answers from DOCTOR_HM_*.
   # shellcheck disable=SC2329  # _doctor_records invokes this.
   _hm_probe() {
     _dr_hive_memory_start "$1"
@@ -950,8 +992,6 @@ HM
     HOME="$hm_home" XDG_CONFIG_HOME="$hm_home/.config" PATH="$hm_bin:$doctor_bin:$PATH" \
       HIVE_MEMORY_CONFIG=${HM_FIXTURE_CONFIG:-} _doctor_records _hm_probe "$(_tmpdir)"
   }
-  hm_store=$hm_home/store
-  hm_healthy='{"store":"personal","root":"'$hm_store'","reachable":true,"manifest_error":null,"store_error":null,"index_stale":true,"cloud_conflict_files":0,"unknown_config_keys":[]}'
   result=$(DOCTOR_HM_JSON=$hm_healthy _hm_records)
   _assert_contains 'Hive Memory reports a reachable store with every key understood' \
     $'ok\tHive Memory store reachable\t~/store; every config key understood' "$result"
@@ -1022,8 +1062,32 @@ HM
   result=$(DOCTOR_HM_SLEEP=30 _DR_HM_DEADLINE=1 _fresh_deadline _hm_records)
   _assert_contains 'Hive Memory bounds a hung hm' \
     $'warn\tHive Memory unchecked\thm sync-status gave no answer within 1s' "$result"
+  _assert_not_contains 'Hive Memory calls a hung hm unchecked, not slow' 'store slow' "$result"
   _assert_eq 'Hive Memory returns within its deadline' yes \
     "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+  # A slow store is waited out, not stopped at the slow mark: stopping hm
+  # mid-request cannot cut the request short and leaves Dot a process it
+  # cannot reap. Its answer still counts.
+  # A slow mark of 0 would read as no deadline at all, so this one is 1s.
+  result=$(DOCTOR_HM_DELAY=2 _DR_HM_SLOW=1 DOCTOR_HM_JSON=$hm_healthy _hm_records)
+  _assert_contains 'Hive Memory waits out a slow store and flags it' \
+    $'warn\tHive Memory store slow\thm sync-status took ' "$result"
+  _assert_contains 'Hive Memory names the slow mark it passed' '(over 1s)' "$result"
+  _assert_not_contains 'Hive Memory withholds the ok row from a slow store' \
+    'store reachable' "$result"
+  result=$(DOCTOR_HM_DELAY=1 _DR_HM_SLOW=0 \
+    DOCTOR_HM_JSON=${hm_healthy/'"unknown_config_keys":[]'/'"unknown_config_keys":["x.y"]'} \
+    _hm_records)
+  _assert_contains 'Hive Memory keeps the findings of a slow store' \
+    $'warn\thm binary behind configured keys\tunknown key(s): x.y' "$result"
+  result=$(DOCTOR_HM_DELAY=1 _DR_HM_SLOW=0 \
+    DOCTOR_HM_JSON='{"root":"'$hm_store'","reachable":false,"manifest_error":"store manifest missing","store_error":null,"unknown_config_keys":[]}' \
+    _hm_records)
+  _assert_not_contains 'Hive Memory calls an unreachable store unreachable, not slow' \
+    'store slow' "$result"
+  result=$(DOCTOR_HM_JSON=$hm_healthy _hm_records)
+  _assert_not_contains 'Hive Memory does not flag a store that answers at once' \
+    'store slow' "$result"
   result=$(HOME="$hm_home" PATH="$doctor_bin:/usr/bin:/bin" \
     _doctor_records _hm_probe "$(_tmpdir)")
   _assert_contains 'Hive Memory skips when hm is not installed' \
@@ -1494,6 +1558,11 @@ SH
     "$result"
   rm -f "$tooling_home/.local/bin/mktemp"
 
+  _assert_eq 'No dev doctor case reaches an hm it did not stub' '' \
+    "$([[ ! -f $hm_trip/calls ]] || printf '%s' "$(<"$hm_trip/calls")")"
+
+  # The installed doctor below finds the tripwire too, which is harmless:
+  # only its section names are asserted.
   if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
     installed_config=$HOME/.config/dot/config
     installed_config_before=$(<"$installed_config")
