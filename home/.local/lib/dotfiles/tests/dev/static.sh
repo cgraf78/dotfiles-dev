@@ -435,6 +435,91 @@ PY
     pass=$((pass + 1))
   fi
 
+  # Shdeps publishes commands as symlinks in ~/.local/bin and relinks a symlink
+  # it finds there, while dot links this overlay's .local/bin files as
+  # symlinks too, so a command published here that this overlay also tracks
+  # flips between the two owners on every update. The published names come
+  # from two places:
+  # - Config rows: package managers install outside ~/.local/bin, so `pkg`
+  #   rows are skipped. Custom rows count conservatively because their hooks
+  #   usually publish the cmd column. Filters are ignored because a collision
+  #   on any platform still clobbers that platform. A qualified cmd resolves
+  #   per runtime and falls back to the short name, so every spelling counts;
+  #   inline `#` comments and invalid basenames follow Shdeps' parser.
+  # - Hooks: literal targets under the bin directory, such as `ec` or
+  #   `clangd`, which hooks link with `ln -sf` and so replace even regular
+  #   files.
+  # Commands fanned out from a repo or archive bin/ directory are known only
+  # after install, so they stay out of scope here.
+  local published tracked_bins collisions unexpected stale
+  local -a allowed_collisions
+  published=$(
+    {
+      awk '
+        {
+          # Count fields up to an inline comment rather than shrinking NF,
+          # which not every awk supports.
+          fields = NF
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^#/) {
+              fields = i - 1
+              break
+            }
+          }
+          if (fields < 2 || $2 == "pkg") next
+          name = $1
+          if ($2 ~ /^github/ && name ~ /\//) sub(/\.git$/, "", name)
+          short = name
+          sub(/.*\//, "", short)
+          cmd = (fields < 3 || $3 == "-") ? short : $3
+          if (cmd ~ /[\/\\|]/ || cmd == "." || cmd == "..") cmd = short
+          if (cmd !~ /:/) {
+            print cmd
+            next
+          }
+          print short
+          count = split(cmd, pairs, ",")
+          for (i = 1; i <= count; i++) {
+            sub(/^[^:]*:/, "", pairs[i])
+            print pairs[i]
+          }
+        }
+      ' "$root"/.config/shdeps/*.conf
+      # The hook scan only adds names, so a hook set without literal bin
+      # targets must not empty the config-derived list.
+      # shellcheck disable=SC2016 # The pattern matches literal shell source.
+      find "$root/.config/shdeps/hooks.d" -name '*.sh' -exec grep -ohE \
+        '(\$\(shdeps_bin_dir\)|\$\{?bin_dir\}?|\$HOME/\.local/bin)/[A-Za-z0-9._+-]+' {} + ||
+        true
+    } | sed 's#.*/##' | sort -u
+  ) || published=''
+  tracked_bins=$(for bin in "$root"/.local/bin/*; do
+    if [[ -e $bin ]]; then printf '%s\n' "${bin##*/}"; fi
+  done | sort -u)
+  # The capability fixture runs with a minimal command set that lacks `comm`,
+  # so whole-line `grep -F` lists do the set arithmetic. Blank lines are
+  # dropped from pattern lists because some greps let an empty pattern match
+  # every line, and `|| true` keeps an empty selection from tripping errexit.
+  collisions=$(grep -Fx -f <(printf '%s\n' "$published" | sed '/^$/d') <<<"$tracked_bins" ||
+    true)
+  # The tracked hm launcher deliberately fronts the hive-memory release
+  # command, so Shdeps must leave that launcher in place instead of relinking
+  # it. Listing it keeps the exception explicit, and the stale check fails
+  # once the overlap is gone so the entry cannot outlive its reason.
+  allowed_collisions=(hm)
+  unexpected=$(grep -Fxv -f <(printf '%s\n' "${allowed_collisions[@]}") <<<"$collisions" |
+    sed '/^$/d' || true)
+  stale=$(grep -Fxv -f <(printf '%s\n' "$collisions" | sed '/^$/d') \
+    <(printf '%s\n' "${allowed_collisions[@]}") || true)
+  if [[ -n $published && -n $tracked_bins && -z $unexpected && -z $stale ]]; then
+    printf 'PASS: Shdeps commands do not clobber tracked launchers\n'
+    pass=$((pass + 1))
+  else
+    printf 'FAIL: Shdeps commands do not clobber tracked launchers (unexpected: %s; stale allowance: %s)\n' \
+      "${unexpected//$'\n'/ }" "${stale//$'\n'/ }" >&2
+    fail=$((fail + 1))
+  fi
+
   "${DOT_TEST_REPORTER:?}" complete "$pass" "$fail"
   ((fail == 0))
 }
