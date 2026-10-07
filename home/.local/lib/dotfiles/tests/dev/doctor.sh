@@ -1,5 +1,23 @@
 # shellcheck shell=bash
 
+# Whether HOME is a disposable fixture that a test may rewrite. test/run
+# builds its capability home with no base repository, under a fresh temp
+# directory; the account's real home, and any dotfiles checkout or worktree a
+# developer runs `dot test` from, fail these checks.
+_dev_doctor_home_is_fixture() {
+  local home_physical real_home
+
+  home_physical=$(cd -P -- "$HOME" 2>/dev/null && pwd) || return 1
+  real_home=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)') ||
+    return 1
+  real_home=$(cd -P -- "$real_home" 2>/dev/null && pwd) || real_home=
+  [[ $home_physical != "$real_home" ]] || return 1
+  [[ ! -e $HOME/.dotfiles ]] || return 1
+  # An inherited GIT_DIR (say, from a Git hook) would answer for HOME.
+  ! env -u GIT_DIR -u GIT_WORK_TREE \
+    git -C "$HOME" rev-parse --git-dir >/dev/null 2>&1
+}
+
 dot_dev_doctor_test() {
   local result_file current_module sections failures extension_home path
   local doctor_home doctor_bin result drift expected status
@@ -27,7 +45,16 @@ dot_dev_doctor_test() {
   source_doctor=$owner_root/home/.local/lib/dotfiles/doctor.d
   host_doctor=${DOT_TEST_HOST_HOME:-$HOME}/.local/lib/dotfiles/doctor.d
   extension_home=${DOT_TEST_DOCTOR_EXTENSION_HOME:-}
-  [[ -z $extension_home ]] || fixture_health=true
+  if [[ -n $extension_home ]]; then
+    # Fixture mode runs the doctor wrappers against HOME and rewrites its Dot
+    # config for the installed-doctor check, so it is safe only in the
+    # disposable home test/run provides.
+    if ! _dev_doctor_home_is_fixture; then
+      _fail "DOT_TEST_DOCTOR_EXTENSION_HOME requires the test/run fixture HOME; refusing to modify $HOME"
+      return
+    fi
+    fixture_health=true
+  fi
   DOT_DOCTOR_RESULT_FILE=$(_tmpdir)/doctor-results.tsv
   export DOT_DOCTOR_RESULT_FILE
   if [[ -z $extension_home ]]; then
@@ -1563,11 +1590,11 @@ SH
 
   # The installed doctor below finds the tripwire too, which is harmless:
   # only its section names are asserted.
-  if [[ -n ${DOT_TEST_DOCTOR_EXTENSION_HOME:-} ]]; then
+  if $fixture_health; then
     installed_config=$HOME/.config/dot/config
     installed_config_before=$(<"$installed_config")
     printf 'version=1\nextension_api=1\nextensions_dir=%s\ndependency_provider=none\n' \
-      "$DOT_TEST_DOCTOR_EXTENSION_HOME/.local/lib/dotfiles" >"$installed_config"
+      "$extension_home/.local/lib/dotfiles" >"$installed_config"
     installed_doctor_output=$(dot doctor 2>&1 || true)
     printf '%s\n' "$installed_config_before" >"$installed_config"
     for installed_section in \
