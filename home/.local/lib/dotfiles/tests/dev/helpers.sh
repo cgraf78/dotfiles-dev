@@ -245,12 +245,21 @@ _test_load_dot_merge_api() {
 # Production still runs each extension in a fresh worker; these tests use the
 # same public API and trusted source resolver without importing coordinator
 # internals.
+#
+# Args: $1 = extension home (required). There is deliberately no HOME
+# fallback: the default result file lives under this root and the loader
+# truncates it, so an implicit live or source HOME would be written to.
 _test_load_dot_doctor_api() {
-  local extension_home=${1:-${DOT_TEST_DOCTOR_EXTENSION_HOME:-${DOT_TEST_SOURCE_HOME:-$HOME}}} dot_root
+  local extension_home=${1:-} dot_root
+
+  if [[ -z $extension_home ]]; then
+    echo "test harness: _test_load_dot_doctor_api requires an extension home" >&2
+    return 2
+  fi
 
   dot_root=$(_test_dot_root) || return 1
   DOT_SOURCE_ROOT=$dot_root
-  DOT_DOCTOR_RESULT_FILE=${DOT_DOCTOR_RESULT_FILE:-$HOME/.doctor-results.tsv}
+  DOT_DOCTOR_RESULT_FILE=${DOT_DOCTOR_RESULT_FILE:-$extension_home/.doctor-results.tsv}
   export DOT_SOURCE_ROOT
   export DOT_DOCTOR_RESULT_FILE
   : >"$DOT_DOCTOR_RESULT_FILE"
