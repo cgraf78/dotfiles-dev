@@ -10,9 +10,11 @@ environment, and timeouts. Keeping that knowledge under
 `share/agentguard/integrations/muse/` makes the integration reusable and keeps
 dotfiles from becoming a second compatibility implementation.
 
-This directory retains only local permission policy in
-`settings.d/20-permissions.json`. The provider layer comes first so overlays can
-still extend normal Muse settings. AgentGuard's filter removes historical
-unsupported events and replaces changed commands without a Muse deletion list
-here. If either asset is temporarily unavailable, the hook reports a failed
-refresh and leaves the complete live target—including a legacy symlink—intact.
+This directory ships no local layers: Muse rejects any settings-level
+`permissions` object at startup, so the retired allow-list layer is gone and
+the hook strips the key from managed and live settings instead. The provider
+layer comes first so overlays can still extend normal Muse settings.
+AgentGuard's filter removes historical unsupported events and replaces
+changed commands without a Muse deletion list here. If either asset is
+temporarily unavailable, the hook reports a failed refresh and leaves the
+complete live target—including a legacy symlink—intact.
