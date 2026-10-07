@@ -12,39 +12,24 @@ dot_hook_source merge-hooks.d/lib/profile-state.sh || return
 # overlays can express personal/work mutual exclusivity without this hook knowing
 # those environment names.
 #
-# Array-valued keys under "permissions" (allow, additionalDirectories) are
-# concatenated and deduplicated instead of replaced. Hook arrays are merged
-# per event by identity (matcher + command), so a config change to an
-# existing hook replaces it instead of appending a duplicate.
+# Muse rejects any settings-level "permissions" object at startup, so no
+# layer may provide one and the merge strips the key from both the managed
+# and live documents. Hook arrays are merged per event by identity
+# (matcher + command), so a config change to an existing hook replaces it
+# instead of appending a duplicate.
 
 # Merge a Muse settings layer into an existing settings.json.
 # Policy: source wins on conflicts (same key, different value).
 # Existing scalar keys and non-conflicting object keys are preserved.
-# Permission arrays (allow, additionalDirectories) are concatenated and
-# deduplicated instead of replaced. Hook arrays are merged per event by
-# identity (matcher + command) so re-merging is idempotent.
+# Hook arrays are merged per event by identity (matcher + command) so
+# re-merging is idempotent.
 _merge_muse_settings() {
   local src="$1" dst="$2"
   local filter
 
   # Merge: existing settings * source settings (recursive merge, source wins).
-  # Permission arrays are concatenated + deduplicated instead of replaced.
-  # Exact Tool(*) rules mean "all uses of this tool", but the public schema
-  # wants that written as bare Tool; normalize stale live settings during merge.
   # shellcheck disable=SC2016 # jq owns $d/$s inside this filter.
   filter='
-    def normalize_permission:
-      if type == "string" and test("^(Agent|Bash|Edit|ExitPlanMode|Glob|Grep|KillShell|LSP|Monitor|NotebookEdit|PowerShell|Read|Skill|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|ToolSearch|WebFetch|WebSearch|Write)\\(\\*\\)$") then
-        sub("\\(\\*\\)$"; "")
-      else
-        .
-      end;
-
-    ([$d[0].permissions.allow? // [] | .[]]
-     + [$s[0].permissions.allow? // [] | .[]] | map(normalize_permission) | unique) as $all_allow |
-    ([$d[0].permissions.additionalDirectories? // [] | .[]]
-     + [$s[0].permissions.additionalDirectories? // [] | .[]] | unique) as $all_dirs |
-
     # A hook group'"'"'s identity is its matcher plus which commands it runs;
     # timeout/type are just that hook'"'"'s execution parameters, not part of
     # what makes it "the same hook". Existing (destination) groups sharing an
@@ -71,14 +56,23 @@ _merge_muse_settings() {
 
     $d[0] * $s[0] |
 
-    .permissions.allow = $all_allow |
-    (if ($merged_hooks | length) > 0 then .hooks = $merged_hooks else . end) |
-    if ($all_dirs | length) > 0
-      then .permissions.additionalDirectories = $all_dirs
-      else .
-    end
+    (if ($merged_hooks | length) > 0 then .hooks = $merged_hooks else . end)
   '
   dot_json_layer "Muse settings" "$src" "$dst" "$filter"
+}
+
+# Drop the settings-level `permissions` key from a Muse settings document.
+# Muse rejects any such object at startup ("Named permission profiles are
+# unavailable"), so neither layers, overlay additions, nor stale live
+# targets may leave it behind. Runs inside the active transaction: a
+# failure aborts and the live target keeps its pre-merge bytes.
+_strip_muse_permissions() {
+  local dst="$1" tmp
+  tmp=$(mktemp "${dst}.tmp.XXXXXX") || return 1
+  if ! jq 'del(.permissions)' "$dst" >"$tmp" || ! mv -f "$tmp" "$dst"; then
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 merge() {
@@ -109,6 +103,10 @@ merge() {
       return 1
     }
   done
+  _strip_muse_permissions "$managed" || {
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  }
 
   # The provider reconciler knows which historical Muse hooks it owns, so an
   # unsupported event can be retired without encoding Muse vocabulary here.
@@ -133,6 +131,10 @@ merge() {
       return 1
     fi
   done
+  if ! _strip_muse_permissions "$dst"; then
+    dev_profile_state_abort || true
+    return 1
+  fi
   dev_profile_state_commit || {
     dev_profile_state_abort || true
     return 1

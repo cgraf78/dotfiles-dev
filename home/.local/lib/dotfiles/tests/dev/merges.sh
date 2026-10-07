@@ -266,7 +266,7 @@ JQ
     "$json_agent_home/.config/dot/merge-hooks.d/muse/settings.d"
   printf '{"permissions":{"allow":["LocalClaudePolicy"]}}\n' \
     >"$json_agent_home/.config/dot/merge-hooks.d/claude/settings.d/20-policy.json"
-  printf '{"permissions":{"allow":["LocalMusePolicy"]}}\n' \
+  printf '{"model":"LocalMuseModel","permissions":{"allow":["LocalMusePolicy"]}}\n' \
     >"$json_agent_home/.config/dot/merge-hooks.d/muse/settings.d/20-policy.json"
 
   _run_agentguard_json_merge_for_test() (
@@ -329,9 +329,38 @@ JSON
   _assert_eq "claude consumer: layers local policy after provider config" \
     "LocalClaudePolicy" \
     "$(jq -r '.permissions.allow[0]' "$json_agent_home/.claude/settings.json")"
-  _assert_eq "muse consumer: layers local policy after provider config" \
-    "LocalMusePolicy" \
-    "$(jq -r '.permissions.allow[0]' "$json_agent_home/.config/muse/settings.json")"
+  _assert_eq "muse consumer: layers valid local policy after provider config" \
+    "LocalMuseModel" \
+    "$(jq -r '.model' "$json_agent_home/.config/muse/settings.json")"
+  _assert_eq "muse consumer: drops layer permissions the app rejects" \
+    "false" \
+    "$(jq -r '. | has("permissions")' "$json_agent_home/.config/muse/settings.json")"
+
+  # A live target that still carries a legacy permissions block (written by
+  # the retired allow-list layer) must converge to settings Muse accepts,
+  # even when no layer provides permissions anymore.
+  muse_stale_home="$TEST_HOME/muse-stale-home"
+  mkdir -p \
+    "$muse_stale_home/.config/dot/merge-hooks.d/muse/settings.d" \
+    "$muse_stale_home/.config/muse"
+  cat >"$muse_stale_home/.config/muse/settings.json" <<JSON
+{
+  "model": "stale-model",
+  "permissions": {"additionalDirectories": ["~"], "allow": ["StaleRule"]},
+  "schema_version": 1
+}
+JSON
+  HOME="$muse_stale_home" \
+    _run_agentguard_json_merge_for_test muse "$muse_stale_home" >/dev/null 2>&1
+  muse_stale_status=$?
+  _assert_exit "muse consumer: stale permissions converge succeeds" \
+    0 "$muse_stale_status"
+  _assert_eq "muse consumer: stale permissions block is removed" \
+    "false" \
+    "$(jq -r '. | has("permissions")' "$muse_stale_home/.config/muse/settings.json")"
+  _assert_eq "muse consumer: stale converge preserves other user settings" \
+    "stale-model" \
+    "$(jq -r '.model' "$muse_stale_home/.config/muse/settings.json")"
 
   rm -f \
     "$agentguard_fixture/claude/hooks.json" \

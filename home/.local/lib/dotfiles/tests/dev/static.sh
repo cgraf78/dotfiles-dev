@@ -288,6 +288,15 @@ for directory in owned_dirs:
 
 for agent in ("claude", "muse"):
     policy = config_root / agent / "settings.d/20-permissions.json"
+    if agent == "muse":
+        # Muse rejects any settings-level `permissions` object at startup
+        # ("Named permission profiles are unavailable"), so the overlay must
+        # not ship a permissions layer for it. The merge hook also strips
+        # the key; this absence guard keeps a future edit from silently
+        # re-breaking `muse` launches.
+        if policy.exists():
+            errors.append(f"{policy.relative_to(root)}: Muse rejects settings-level permissions policy")
+        continue
     if not policy.is_file():
         errors.append(f"{policy.relative_to(root)}: missing local permission policy")
         continue
