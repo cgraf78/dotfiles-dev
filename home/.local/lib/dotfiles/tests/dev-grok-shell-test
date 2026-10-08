@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# dev-grok-shell-test - the grok/agent wrappers in 72-dev-grok.sh.
+#
+# Base owns the thin loaders, the installer-block strip helper
+# (shell-grok-rc.sh), and Grok's PATH entry and completions; the wrapper cases
+# stand in a stub for that helper so they pin this overlay's side of the
+# contract: run the command, then strip.
+
+set -uo pipefail
+export NO_COLOR=1
+
+# shellcheck source=dev/helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+shell_dir=$(_dev_repo_root)/home/.config/shell
+work=$(_tmpdir)
+missing_home=$work/no-grok-home
+mkdir -p "$missing_home"
+
+echo "=== Grok wrappers ==="
+
+wrapper_home=$work/wrapper-home
+wrapper_bin=$work/wrapper-bin
+wrapper_log=$work/wrapper.log
+mkdir -p "$wrapper_home/.local/lib/dotfiles" "$wrapper_bin"
+# The stub records each strip so the cases can check ordering against the
+# command's own record.
+cat >"$wrapper_home/.local/lib/dotfiles/shell-grok-rc.sh" <<'EOF'
+dot_grok_strip_installer_rc() { printf 'strip\n' >>"$WRAPPER_LOG"; }
+EOF
+for cmd in grok agent; do
+  cat >"$wrapper_bin/$cmd" <<EOF
+#!/usr/bin/env bash
+printf '$cmd'
+[ \$# -eq 0 ] || printf ' [%s]' "\$@"
+printf '\n'
+exit \${WRAPPER_STATUS:-0}
+EOF
+  chmod +x "$wrapper_bin/$cmd"
+done
+
+_probe_wrapper() {
+  local shell=$1 home=$2 status=$3
+  shift 3
+  local shell_bin
+  shell_bin=$(command -v "$shell") || return 1
+  local -a rc_opts=(--norc --noprofile)
+  [[ $shell == zsh ]] && rc_opts=(-f)
+  : >"$wrapper_log"
+  # shellcheck disable=SC2016 # The inner shell expands its own arguments.
+  env -i HOME="$home" PATH="$wrapper_bin:/usr/bin:/bin" \
+    WRAPPER_LOG="$wrapper_log" WRAPPER_STATUS="$status" \
+    "$shell_bin" "${rc_opts[@]}" -c \
+    'source "$1"; shift; "$@" >>"$WRAPPER_LOG"; printf "status=%s\n" "$?" >>"$WRAPPER_LOG"' \
+    _ "$shell_dir/interactive.d/72-dev-grok.sh" "$@"
+  cat "$wrapper_log"
+}
+
+# Report whether the fragment left `grok` defined as a shell function.
+_probe_wrapper_kind() {
+  local shell=$1 home=$2 shell_bin
+  shell_bin=$(command -v "$shell") || return 1
+  local -a rc_opts=(--norc --noprofile)
+  [[ $shell == zsh ]] && rc_opts=(-f)
+  # shellcheck disable=SC2016 # The inner shell expands its own arguments.
+  env -i HOME="$home" PATH="$wrapper_bin:/usr/bin:/bin" \
+    "$shell_bin" "${rc_opts[@]}" -c \
+    'source "$1"; if typeset -f grok >/dev/null 2>&1; then echo function; else echo not-a-function; fi' \
+    _ "$shell_dir/interactive.d/72-dev-grok.sh"
+}
+
+for shell in bash zsh; do
+  command -v "$shell" >/dev/null 2>&1 || {
+    echo "  SKIP: $shell grok wrappers ($shell not installed)"
+    continue
+  }
+  _assert_eq "$shell grok wrapper: runs grok with its arguments, then strips" \
+    $'grok [chat] [two words]\nstrip\nstatus=0' \
+    "$(_probe_wrapper "$shell" "$wrapper_home" 0 grok chat 'two words')"
+  _assert_eq "$shell agent wrapper: strips after agent update" \
+    $'agent [update]\nstrip\nstatus=0' \
+    "$(_probe_wrapper "$shell" "$wrapper_home" 0 agent update)"
+  _assert_eq "$shell grok wrapper: keeps the command's exit status" \
+    $'grok\nstrip\nstatus=3' \
+    "$(_probe_wrapper "$shell" "$wrapper_home" 3 grok)"
+  # Without the base helper the fragment defines no wrapper, so the command
+  # runs straight from PATH and the shell resolves grok to the file.
+  _assert_eq "$shell grok wrapper: absent base helper leaves grok unwrapped" \
+    $'grok [x]\nstatus=0' \
+    "$(_probe_wrapper "$shell" "$missing_home" 0 grok x)"
+  _assert_eq "$shell grok wrapper: absent base helper defines no grok function" \
+    "not-a-function" "$(_probe_wrapper_kind "$shell" "$missing_home")"
+done
+
+_test_summary

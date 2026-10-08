@@ -17,6 +17,7 @@ program	home/.config/shell/env.d/80-dev-environment.sh
 program	home/.config/shell/interactive.d/57-git-tools.sh
 program	home/.config/shell/interactive.d/70-dev-aliases.sh
 program	home/.config/shell/interactive.d/70-dev-tool-init.sh
+program	home/.config/shell/interactive.d/72-dev-grok.sh
 program	home/.config/shell/interactive.d/80-dev-integrations.bash
 program	home/.local/bin/gh-ci-status
 program	home/.local/bin/hm
@@ -63,6 +64,7 @@ program	home/.local/lib/dotfiles/tests/dev-codex-merges-test
 program	home/.local/lib/dotfiles/tests/dev-codex-trust-test
 program	home/.local/lib/dotfiles/tests/dev-doctor-test
 program	home/.local/lib/dotfiles/tests/dev-direnv-test
+program	home/.local/lib/dotfiles/tests/dev-grok-shell-test
 program	home/.local/lib/dotfiles/tests/dev-launchers-test
 program	home/.local/lib/dotfiles/tests/dev-merges-test
 program	home/.local/lib/dotfiles/tests/dev-shdeps-hooks-test
