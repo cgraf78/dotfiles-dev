@@ -56,4 +56,40 @@ return {
       }
     end,
   },
+
+  -- The diffview keys above win over the DAP extra's `<leader>dc` (continue)
+  -- and `<leader>dr` (REPL). Two specs claiming one key leave it to whichever
+  -- plugin loads last, so the binding flipped when DAP or Diffview loaded;
+  -- dropping DAP's claim keeps the diffview binding from startup on.
+  -- `<leader>da` still runs/continues (prompting for args when it starts a
+  -- session) and `<leader>du` shows the REPL; once DAP has loaded,
+  -- `:DapContinue` and `:DapToggleRepl` work too. `optional` keeps this
+  -- fragment from adding nvim-dap when the extra is disabled.
+  {
+    "mfussenegger/nvim-dap",
+    optional = true,
+    keys = {
+      { "<leader>dc", false },
+      { "<leader>dr", false },
+    },
+  },
+
+  -- The Rust extra's rust-analyzer on_attach also maps a buffer-local
+  -- `<leader>dr` (Rust Debuggables), which shadowed the diffview key in Rust
+  -- buffers once the server attached. Drop it after the extra's on_attach;
+  -- `:RustLsp debuggables` remains.
+  {
+    "mrcjkb/rustaceanvim",
+    optional = true,
+    opts = function(_, opts)
+      local on_attach = vim.tbl_get(opts, "server", "on_attach")
+      if not on_attach then
+        return
+      end
+      opts.server.on_attach = function(client, bufnr)
+        on_attach(client, bufnr)
+        pcall(vim.keymap.del, "n", "<leader>dr", { buffer = bufnr })
+      end
+    end,
+  },
 }
