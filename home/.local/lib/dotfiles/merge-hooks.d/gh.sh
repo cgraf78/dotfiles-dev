@@ -159,7 +159,7 @@ _gh_seed_token_file() {
 }
 
 merge() {
-  _dot_tool_present gh || return 0
+  _dot_tool_any_command gh || return 0
   local dst="$HOME/.config/gh/config.yml"
   local yq_bin="" managed_dir managed
   local -a _gh_sources

@@ -88,12 +88,123 @@ dot_dev_merges_test() {
   done
   unset -f _run_agent_cli_gate_for_test merge 2>/dev/null
 
+  echo "=== VS Code presence probe ==="
+
+  # The hook owns its variant list; base compat supplies only the literal
+  # probes and the platform, which these cases replace with fixture answers.
+  _vscode_present_for_test() (
+    # Distinct names: the probe's own `local platform` would shadow a
+    # fixture variable of that name inside the stubs.
+    local fixture_platform=$1 fixture_commands=$2 fixture_paths=$3
+
+    unset -f merge 2>/dev/null
+    # shellcheck source=/dev/null
+    . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+    # shellcheck disable=SC2329 # Invoked by the probe under test.
+    _dot_tool_platform() { printf '%s\n' "$fixture_platform"; }
+    # shellcheck disable=SC2329 # Invoked by the probe under test.
+    _dot_tool_command_present() { [[ ":$fixture_commands:" == *":$1:"* ]]; }
+    # shellcheck disable=SC2329 # Invoked by the probe under test.
+    _dot_tool_path_exists() { [[ ":$fixture_paths:" == *":$1:"* ]]; }
+    _vscode_present
+  )
+
+  _assert_exit "vscode presence: any macOS editor variant enables VS Code" 0 \
+    "$(
+      _vscode_present_for_test Darwin '' '/Applications/Visual Studio Code - Insiders.app'
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: VS Code @ FB command enables VS Code" 0 \
+    "$(
+      _vscode_present_for_test Linux code-fb ''
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: VS Code @ FB app enables VS Code" 0 \
+    "$(
+      _vscode_present_for_test Darwin '' '/Applications/VS Code @ FB.app'
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: WSL accepts VSCodium Insiders executable" 0 \
+    "$(
+      _vscode_present_for_test WSL codium-insiders.exe ''
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: remote editor server enables VS Code merge" 0 \
+    "$(
+      _vscode_present_for_test Linux '' "$TEST_HOME/.cursor-server"
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: macOS app bundles count only on macOS" 1 \
+    "$(
+      _vscode_present_for_test Linux '' '/Applications/Visual Studio Code.app'
+      printf '%s' "$?"
+    )"
+  _assert_exit "vscode presence: no editor variant fails closed" 1 \
+    "$(
+      _vscode_present_for_test Darwin '' ''
+      printf '%s' "$?"
+    )"
+  unset -f _vscode_present_for_test
+
+  echo "=== Dev merge hook tool guards ==="
+
+  # Each hook probes its own application, so the command it names is the
+  # whole presence contract: a misspelled command would disable the hook on
+  # every host while the stubbed cases below still pass. Pin each guard, and
+  # require every top-level hook to appear here so a new one is classified.
+  local guard_table guard_hooks hook_file hook_name first_merge_statement
+  local expected_guard
+  guard_table=$(
+    cat <<'DEV_HOOK_GUARDS'
+claude|_dot_tool_any_command claude || return 0
+codex|_dot_tool_any_command codex || return 0
+gemini|_dot_tool_any_command gemini || return 0
+gh|_dot_tool_any_command gh || return 0
+git|_dot_tool_any_command git || return 0
+grok|_dot_tool_any_command grok || return 0
+grok-config|_dot_tool_any_command grok || return 0
+gstack|_dot_tool_any_command gstack-register || return 0
+hive-memory|_dot_tool_any_command hm || return 0
+mise|_dot_tool_any_command mise || return 0
+muse|_dot_tool_any_command muse || return 0
+opencode|_dot_tool_any_command opencode || return 0
+sapling|_dot_tool_any_command sl || return 0
+superpowers|_dot_tool_any_command muse || return 0
+vscode|_vscode_present || return 0
+zz-codex-trust-prune.serial|_dot_tool_any_command codex || return 0
+DEV_HOOK_GUARDS
+  )
+  guard_hooks=$(
+    for hook_file in "$REAL_HOME"/.local/lib/dotfiles/merge-hooks.d/*.sh; do
+      hook_name=${hook_file##*/}
+      printf '%s\n' "${hook_name%.sh}"
+    done | LC_ALL=C sort
+  )
+  _assert_eq "dev merge hook guards: every dev hook is classified" \
+    "$guard_hooks" "$(cut -d'|' -f1 <<<"$guard_table" | LC_ALL=C sort)"
+  while IFS='|' read -r hook_name expected_guard; do
+    first_merge_statement=$(
+      awk '
+        /^merge\(\)[[:space:]]*\{/ { in_merge = 1; next }
+        in_merge && /^[[:space:]]*$/ { next }
+        in_merge && /^[[:space:]]*#/ { next }
+        in_merge {
+          sub(/^[[:space:]]+/, "")
+          print
+          exit
+        }
+      ' "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/$hook_name.sh"
+    )
+    _assert_eq "$hook_name merge: tool guard is the first operation" \
+      "$expected_guard" "$first_merge_statement"
+  done <<<"$guard_table"
+
   # The remaining cases exercise each hook's merge behavior, not platform
   # discovery. Keep those fixtures deterministic even when they run in clean
   # child shells or on CI hosts without the corresponding desktop application.
   # shellcheck disable=SC2329 # Invoked indirectly by sourced hooks.
-  _dot_tool_present() { return 0; }
-  export -f _dot_tool_present
+  _dot_tool_any_command() { return 0; }
+  export -f _dot_tool_any_command
 
   echo "=== OpenCode AgentGuard merge hook ==="
 
@@ -1166,8 +1277,8 @@ PY
 
   grok_config_gate_output=$(
     # shellcheck disable=SC2329 # Invoked by the sourced merge hook.
-    _dot_tool_present() { return 1; }
-    export -f _dot_tool_present
+    _dot_tool_any_command() { return 1; }
+    export -f _dot_tool_any_command
     printf '{"keep":true}\n' >"$grok_config_user_hooks"
     printf 'theme="dark"\n' >"$grok_config_dst"
     _run_grok_config_merge 2>&1

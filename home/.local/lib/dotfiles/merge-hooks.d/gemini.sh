@@ -23,7 +23,7 @@ _merge_gemini_settings() {
 }
 
 merge() {
-  _dot_tool_present gemini || return 0
+  _dot_tool_any_command gemini || return 0
   dot_json_available || return 0
 
   local dst="$HOME/.gemini/settings.json" managed_dir managed

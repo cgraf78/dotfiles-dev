@@ -19,8 +19,8 @@ _test_load_dot_merge_api || {
 dot_hook_source() {
   [[ $1 == merge-hooks.d/lib/compat.sh ]]
 }
-_dot_tool_present() {
-  [[ $1 == gstack ]] && command -v gstack-register >/dev/null 2>&1
+_dot_tool_any_command() {
+  [[ $* == gstack-register ]] && command -v gstack-register >/dev/null 2>&1
 }
 
 dependency_order=$(

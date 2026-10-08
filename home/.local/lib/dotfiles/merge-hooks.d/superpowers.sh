@@ -16,7 +16,7 @@ _dot_superpowers_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || 
 _dot_superpowers_muse_sync="${SUPERPOWERS_MUSE_SYNC:-$_dot_superpowers_hook_dir/lib/superpowers-muse-sync}"
 
 merge() {
-  _dot_tool_present muse || return 0
+  _dot_tool_any_command muse || return 0
   [[ -x $_dot_superpowers_muse_sync ]] || return 0
 
   "$_dot_superpowers_muse_sync" sync

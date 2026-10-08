@@ -1484,9 +1484,9 @@ EOF
       RECONCILE_FILE="$vscode_extension_reconcile_log" bash -c '
       set -euo pipefail
       . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
-      _dot_tool_present() { return 0; }
       # shellcheck source=/dev/null
       . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+      _vscode_present() { return 0; }
       _vscode_install_declared_extensions() { :; }
       _vscode_variants() {
         printf "%s\t%s\t%s\n" \
@@ -2283,11 +2283,11 @@ JSON
       _warn() { printf "%s\n" "$*" >&2; }
       # shellcheck source=/dev/null
       . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
-      # The hook compatibility layer installs the real host capability
-      # predicate. This fixture deliberately has no editor marker because it
-      # exercises variant failure aggregation, so select the hook explicitly
-      # rather than depending on an ambient VS Code binary from the CI host.
-      _dot_tool_present() { [[ $1 == vscode ]]; }
+      # The hook installs the real host presence probe. This fixture
+      # deliberately has no editor marker because it exercises variant
+      # failure aggregation, so select the hook explicitly rather than
+      # depending on an ambient VS Code binary from the CI host.
+      _vscode_present() { return 0; }
       _vscode_local_extensions() { :; }
       _vscode_variants() {
         printf "%s\t%s\n" \
@@ -3129,7 +3129,7 @@ EOF
       # This synthetic profile uses a nonstandard extension directory so the
       # generic host detector cannot infer VS Code. Keep the cleanup test about
       # Termnav ownership instead of whichever editor happens to be installed.
-      _dot_tool_present() { [[ $1 == vscode ]]; }
+      _vscode_present() { return 0; }
       merge
     ' 2>&1)
     _assert_contains "vscode termnav: duplicate provider payloads warn" \
@@ -3249,7 +3249,7 @@ EOF
         _warn() { printf "%s\n" "$*" >&2; }
         # shellcheck source=/dev/null
         . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
-        _dot_tool_present() { [[ $1 == vscode ]]; }
+        _vscode_present() { return 0; }
         if [[ $VSCODE_TEST_FAIL_COMMIT == 1 ]]; then
           _vscode_commit_tracked() { return 1; }
         fi

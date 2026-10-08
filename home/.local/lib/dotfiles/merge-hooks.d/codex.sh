@@ -30,6 +30,6 @@ _dot_codex_trust_helper="${DOT_CODEX_TRUST_HELPER:-$_dot_codex_hook_dir/lib/code
 . "$_dot_codex_config_lib"
 
 merge() {
-  _dot_tool_present codex || return 0
+  _dot_tool_any_command codex || return 0
   dot_codex_config_merge
 }

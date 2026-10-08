@@ -15,7 +15,7 @@ _mise_interactive() {
 }
 
 merge() {
-  _dot_tool_present mise || return 0
+  _dot_tool_any_command mise || return 0
   # Mise's tracked global toolset targets Linux and macOS release assets.
   # Termux dependencies come from its native packages instead; asking Mise to
   # resolve them as Android assets produces deterministic unsupported-platform
