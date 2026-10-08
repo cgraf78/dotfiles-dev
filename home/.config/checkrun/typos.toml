@@ -8,6 +8,11 @@
 extend-ignore-re = [
   # IPv6 host segments can look like short misspellings.
   "c0ba",
+  # OpenSSH SHA256 key fingerprints: 43 unpadded base64 or base64url
+  # characters whose short runs, such as `Nd`, can look like misspellings.
+  # Both ends are bounded so glued prefixes and overlong runs stay checked;
+  # the literal string keeps `\b` a regex word boundary.
+  '\bSHA256:[A-Za-z0-9+/_-]{43}(?:[^A-Za-z0-9+/=_-]|$)',
 ]
 
 [default.extend-identifiers]

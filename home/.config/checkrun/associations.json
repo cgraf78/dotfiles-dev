@@ -62,6 +62,15 @@
       "note": "grafhome-ca owns the policy format and its schema as one public contract."
     },
     {
+      "name": "Grafhome CA SSH key revocations",
+      "format": "toml",
+      "dependency": "cgraf78/grafhome-ca",
+      "schema": "schemas/policy/revocations.schema.json",
+      "matches": [".config/grafhome-ca/policy/revocations.toml"],
+      "enforce": true,
+      "note": "grafhome-ca owns the policy format and its schema as one public contract."
+    },
+    {
       "name": "lazygit config",
       "format": "yaml",
       "schema": "lazygit.schema.json",
