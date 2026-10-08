@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.141.0 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.145.1 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.141.0",
+  "x-renovate-version": "44.145.1",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -2169,10 +2169,6 @@
           "type": "string",
           "description": "A constraint for the `java` Containerbase tool"
         },
-        "java-maven": {
-          "type": "string",
-          "description": "A constraint for the `java-maven` Containerbase tool"
-        },
         "jb": {
           "type": "string",
           "description": "A constraint for the `jb` Containerbase tool"
@@ -3382,8 +3378,8 @@
       "default": false
     },
     "enabled": {
-      "description": "Enable or disable corresponding functionality.\nSee also: https://docs.renovatebot.com/configuration-options/#packagerulesenabled",
-      "markdownDescription": "Enable or disable corresponding functionality.\n\nSee also: [enabled](https://docs.renovatebot.com/configuration-options/#packagerulesenabled)",
+      "description": "Enable or disable corresponding functionality.\nSee also: https://docs.renovatebot.com/configuration-options/#enabled",
+      "markdownDescription": "Enable or disable corresponding functionality.\n\nSee also: [enabled](https://docs.renovatebot.com/configuration-options/#enabled)",
       "type": "boolean",
       "default": true
     },
@@ -3480,8 +3476,8 @@
       "type": "string"
     },
     "fetchChangeLogs": {
-      "description": "Controls if and when changelogs/release notes are fetched.\nSee also: https://docs.renovatebot.com/configuration-options/#packagerulesfetchchangelogs",
-      "markdownDescription": "Controls if and when changelogs/release notes are fetched.\n\nSee also: [fetchChangeLogs](https://docs.renovatebot.com/configuration-options/#packagerulesfetchchangelogs)",
+      "description": "Controls if and when changelogs/release notes are fetched.\nSee also: https://docs.renovatebot.com/configuration-options/#fetchchangelogs",
+      "markdownDescription": "Controls if and when changelogs/release notes are fetched.\n\nSee also: [fetchChangeLogs](https://docs.renovatebot.com/configuration-options/#fetchchangelogs)",
       "type": "string",
       "enum": [
         "off",
@@ -5252,11 +5248,6 @@
           "description": "Install the `java` Containerbase tool",
           "additionalProperties": false
         },
-        "java-maven": {
-          "type": "object",
-          "description": "Install the `java-maven` Containerbase tool",
-          "additionalProperties": false
-        },
         "jb": {
           "type": "object",
           "description": "Install the `jb` Containerbase tool",
@@ -5929,8 +5920,8 @@
       }
     },
     "managerFilePatterns": {
-      "description": "RegEx (`re2`) and glob patterns for matching manager files.\nSee also: https://docs.renovatebot.com/configuration-options/#ansiblemanagerfilepatterns",
-      "markdownDescription": "RegEx (`re2`) and glob patterns for matching manager files.\n\nSee also: [managerFilePatterns](https://docs.renovatebot.com/configuration-options/#ansiblemanagerfilepatterns)",
+      "description": "RegEx (`re2`) and glob patterns for matching manager files.\nSee also: https://docs.renovatebot.com/configuration-options/#managerfilepatterns",
+      "markdownDescription": "RegEx (`re2`) and glob patterns for matching manager files.\n\nSee also: [managerFilePatterns](https://docs.renovatebot.com/configuration-options/#managerfilepatterns)",
       "oneOf": [
         {
           "type": "array",
