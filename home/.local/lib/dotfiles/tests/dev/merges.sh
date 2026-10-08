@@ -171,6 +171,7 @@ opencode|_dot_tool_any_command opencode || return 0
 sapling|_dot_tool_any_command sl || return 0
 superpowers|_dot_tool_any_command muse || return 0
 vscode|_vscode_present || return 0
+zz-codex-trust-prune.serial|_dot_tool_any_command codex || return 0
 DEV_HOOK_GUARDS
   )
   guard_hooks=$(
