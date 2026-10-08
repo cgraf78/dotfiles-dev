@@ -36,6 +36,9 @@ dot_dev_launchers_test() {
   mkdir -p "$HM_LAUNCHER_BIN" "$HM_LAUNCHER_HOME/.local/lib/dotfiles"
   cp "$BIN_DIR/hm" "$HM_LAUNCHER_BIN/hm"
   cat >"$HM_LAUNCHER_HOME/.local/lib/dotfiles/shdeps-assets.sh" <<'MOCK'
+dot_shdeps_dep_file() {
+  shdeps dep-file "$1" "$2"
+}
 dot_shdeps_dep_source() {
   local provider
   provider=$(shdeps dep-file "$1" "$2") || return
@@ -43,7 +46,9 @@ dot_shdeps_dep_source() {
   . "$provider"
 }
 MOCK
-  HM_LAUNCHER_REAL="$HM_LAUNCHER_HOME/.local/share/cgraf78/hive-memory/hm"
+  # Deliberately not shdeps' default install layout: the launcher must find
+  # the core only through the dependency resolver, wherever shdeps puts it.
+  HM_LAUNCHER_REAL="$HM_LAUNCHER_HOME/provider/hive-memory-20261003/hm"
   mkdir -p "${HM_LAUNCHER_REAL%/*}"
   cat >"$HM_LAUNCHER_REAL" <<'MOCK'
 #!/usr/bin/env bash
@@ -77,8 +82,14 @@ agentguard_session_id() {
 }
 MOCK
   HM_AGENTGUARD_BIN=$(_mock_bin)
+  # Model dep-file: print the asset only while it is a regular file.
   cat >"$HM_AGENTGUARD_BIN/shdeps" <<'MOCK'
 #!/usr/bin/env bash
+if [[ "$1" == dep-file && "$2" == cgraf78/hive-memory && "$3" == hm &&
+  -f $HM_LAUNCHER_REAL ]]; then
+  printf '%s\n' "$HM_LAUNCHER_REAL"
+  exit 0
+fi
 if [[ "$1" == dep-file && "$2" == cgraf78/agentguard && \
   "$3" == lib/agentguard/agentguard.sh ]]; then
   printf '%s\n' "$HM_AGENTGUARD_API"
@@ -96,6 +107,7 @@ MOCK
     GEMINI_PROJECT_DIR=
     GROK_WORKSPACE_ROOT=
     HM_AGENTGUARD_API="$HM_AGENTGUARD_API"
+    HM_LAUNCHER_REAL="$HM_LAUNCHER_REAL"
     HM_TEST_AGENT=unknown
     HM_TEST_SESSION=
     HIVE_MEMORY_AGENT_ID=
@@ -107,8 +119,10 @@ MOCK
 
   result=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" HOME="$HM_LAUNCHER_HOME" \
     "$HM_LAUNCHER_BIN/hm" recall --limit 2)
-  _assert_eq "hm launcher: delegates to stable Shdeps archive path" \
+  _assert_eq "hm launcher: delegates to the core shdeps resolves" \
     "real:recall --limit 2" "$result"
+  _assert_file_missing "hm launcher: fixture has no core at the default layout" \
+    "$HM_LAUNCHER_HOME/.local/share/cgraf78/hive-memory/hm"
 
   _hm_plain_probe=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
     HOME="$HM_LAUNCHER_HOME" "$HM_LAUNCHER_BIN/hm" env-probe)
@@ -225,12 +239,40 @@ MOCK
   mv "$HM_LAUNCHER_REAL.saved" "$HM_LAUNCHER_REAL"
   _assert_eq "hm launcher: missing core exits like a missing command" \
     "127" "$_hm_missing_rc"
-  _assert_contains "hm launcher: missing core names the rejected path" \
-    "$HM_LAUNCHER_REAL" "$_hm_missing_output"
+  _assert_contains "hm launcher: missing core names the dependency" \
+    "(shdeps cgraf78/hive-memory hm)" "$_hm_missing_output"
+  _assert_contains "hm launcher: missing core suggests repair" \
+    "run dot update" "$_hm_missing_output"
 
+  # A resolved path that is not executable is still a broken install.
+  chmod -x "$HM_LAUNCHER_REAL"
+  _hm_noexec_rc=0
+  env "${HM_LAUNCHER_SCRUB_ENV[@]}" HOME="$HM_LAUNCHER_HOME" \
+    "$HM_LAUNCHER_BIN/hm" --version >/dev/null 2>&1 || _hm_noexec_rc=$?
+  chmod +x "$HM_LAUNCHER_REAL"
+  _assert_eq "hm launcher: non-executable core exits like a missing command" \
+    "127" "$_hm_noexec_rc"
+
+  # The launcher resolves the core through the base helper, which it loads
+  # from HOME; a HOME without it is a broken install, not a crash.
+  _hm_no_helper_rc=0
+  _hm_no_helper_output=$(env "${HM_LAUNCHER_SCRUB_ENV[@]}" \
+    HOME="$(_tmpdir)" HIVE_MEMORY_AGENT_ID=hook-agent \
+    HIVE_MEMORY_SESSION_ID=hook-session \
+    "$HM_LAUNCHER_BIN/hm" --version 2>&1) || _hm_no_helper_rc=$?
+  _assert_eq "hm launcher: missing helper exits like a missing command" \
+    "127" "$_hm_no_helper_rc"
+  _assert_contains "hm launcher: missing helper suggests repair" \
+    "shdeps asset helper unavailable; run dot update" "$_hm_no_helper_output"
+
+  # Only AgentGuard is missing here; the core still resolves.
   HM_MISSING_PROVIDER_BIN=$(_mock_bin)
   cat >"$HM_MISSING_PROVIDER_BIN/shdeps" <<'MOCK'
 #!/usr/bin/env bash
+if [[ "$1" == dep-file && "$2" == cgraf78/hive-memory && "$3" == hm ]]; then
+  printf '%s\n' "$HM_LAUNCHER_REAL"
+  exit 0
+fi
 exit 1
 MOCK
   chmod +x "$HM_MISSING_PROVIDER_BIN/shdeps"

@@ -19,8 +19,29 @@ esac
 # are reusable by every Sley installation instead of being copied here.
 #
 # DOT_SLEY_ROOT is an integration-test/development escape hatch. Normal fleet
-# installs use Shdeps' stable checkout path, which `dot update` keeps current.
-sley_root=${DOT_SLEY_ROOT:-${HOME:?}/.local/share/cgraf78/sley}
+# installs ask shdeps, which owns the dependency's location (install root,
+# development-clone precedence, host filters) and which `dot update` keeps
+# current. Resolving the CLI selects the root for both artifacts; the base
+# helper caches that answer, so a commit pays no shdeps process once warm.
+if [ -n "${DOT_SLEY_ROOT:-}" ]; then
+  sley_root=$DOT_SLEY_ROOT
+else
+  shdeps_assets=${HOME:?}/.local/lib/dotfiles/shdeps-assets.sh
+  sley_cli=
+  if [ -r "$shdeps_assets" ]; then
+    # shellcheck source=/dev/null # base-owned helper, absent from this overlay.
+    . "$shdeps_assets"
+    sley_cli=$(dot_shdeps_dep_file cgraf78/sley bin/sley 2>/dev/null) || sley_cli=
+  fi
+  if [ -z "$sley_cli" ]; then
+    {
+      echo "sley-provider-hook: shdeps cannot resolve the Sley CLI (cgraf78/sley bin/sley)"
+      echo "sley-provider-hook: run dot update, or set DOT_SLEY_ROOT to a Sley checkout while developing."
+    } >&2
+    exit 1
+  fi
+  sley_root=${sley_cli%/bin/sley}
+fi
 provider_hook=$sley_root/share/sley/hooks/git/$hook_name
 sley_cli=$sley_root/bin/sley
 if [ ! -x "$provider_hook" ]; then

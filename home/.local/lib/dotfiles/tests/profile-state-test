@@ -793,6 +793,46 @@ fi
 dev_profile_state_abort
 
 cat >"$invalid_links" <<EOF
+[{"path":"$extension_link","target":"relative/tool-1.0.0"}]
+EOF
+dev_profile_state_begin \
+  vscode-extensions json "$extensions_destination" "$extensions_managed"
+if dev_profile_state_commit "$invalid_links" 2>/dev/null; then
+  _fail 'profile state rejects a relative extension link target'
+else
+  _pass 'profile state rejects a relative extension link target'
+fi
+dev_profile_state_abort
+
+# Shdeps reports canonical provider paths, which leave HOME when a provider
+# root is reached through a symlink, so an absolute outside target is valid
+# and retirement still removes the recorded link. The caller scopes HOME and
+# XDG_STATE_HOME to this check so the receipt stays out of the cases below.
+_check_outside_link_receipt() {
+  local destination=$HOME/.vscode/extensions/extensions.json
+  local link=$HOME/.vscode/extensions/tool-1.0.0
+  local target=$fixture/outside-provider/tool-1.0.0
+  local links=$fixture/outside-extension-links.json
+  mkdir -p "${destination%/*}" "$target"
+  cat >"$links" <<EOF
+[{"path":"$link","target":"$target"}]
+EOF
+  dev_profile_state_begin \
+    vscode-extensions json "$destination" "$extensions_managed" || return 1
+  cp "$extensions_managed" "$destination" &&
+    ln -s "$target" "$link" &&
+    dev_profile_state_commit "$links" || return 1
+  printf 'committed\n'
+  dev_profile_state_retire_all || return 1
+  [[ ! -e $link && ! -L $link && -d $target ]] && printf 'retired\n'
+}
+outside_link_result=$(HOME=$fixture/outside-link-user \
+  XDG_STATE_HOME=$fixture/outside-link-state \
+  _check_outside_link_receipt 2>/dev/null) || true
+_assert_eq 'profile state records and retires a link target outside HOME' \
+  $'committed\nretired' "$outside_link_result"
+
+cat >"$invalid_links" <<EOF
 [
   {"path":"$extension_link","target":"$extension_target"},
   {"path":"$extension_link","target":"$extension_target"}

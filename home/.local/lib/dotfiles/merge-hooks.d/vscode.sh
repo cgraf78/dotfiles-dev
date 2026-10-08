@@ -1112,8 +1112,20 @@ _prune_vscode_extension_versions() {
     _vscode_dirname "$target"
     target_dir=$REPLY
     target_name="${target##*/}"
-    [[ "$target_dir" == "$managed_parent" ]] || continue
+    # Shdeps may spell one provider root two ways (its managed checkout link
+    # and the development clone it points at), so accept the same directory
+    # under either spelling while it still exists.
+    [[ "$target_dir" == "$managed_parent" || "$target_dir" -ef "$managed_parent" ]] ||
+      continue
     [[ "$candidate_dir" == "$target_name" ]] || continue
+    # A live generation proves or disproves ownership through its manifest, so
+    # any folder name the provider chose is recognized and a sibling extension
+    # is never claimed by name.
+    if [[ -f "$candidate/package.json" ]]; then
+      _vscode_extension_dir_is "$ext_id" "$candidate" || continue
+      rm -f "$candidate" || return 1
+      continue
+    fi
     # Broken managed generations no longer have package metadata, so the name
     # is the remaining ownership proof. Require the complete suffix to be a
     # dotted semver (with optional prerelease/build tails); a first-digit check
@@ -1513,19 +1525,94 @@ _vscode_opts_intersect() {
   return 1
 }
 
+# Succeed when DIR holds the VS Code extension EXT_ID. VS Code identifies an
+# extension by its manifest's `<publisher>.<name>`, case-insensitively; the
+# folder name is only the provider's packaging choice and usually embeds the
+# manifest version, which moves independently of the provider's own release
+# version. A manifest without a publisher matches on name alone.
+_vscode_extension_dir_is() {
+  local ext_id=$1 dir=$2
+  [[ -f $dir/package.json ]] || return 1
+  jq -e --arg id "$ext_id" '
+    ($id | ascii_downcase) as $id
+    | (.name | ascii_downcase) as $name
+    | (.publisher // "" | ascii_downcase) as $publisher
+    | $name != ""
+      and if $publisher == "" then ($id | sub("^[^.]*[.]"; "")) == $name
+          else $publisher + "." + $name == $id end
+  ' "$dir/package.json" >/dev/null 2>&1
+}
+
+# Resolve the directory holding EXT_ID inside a provider dependency, through
+# REPLY.
+#
+# Providers publish editor adapters under `share/<repo>/vscode/`, next to their
+# other `share/<repo>/` assets. Where the dependency itself lives is shdeps'
+# contract (install roots, development-clone precedence, host filters), so ask
+# it instead of spelling an install layout here, then select the one folder
+# whose manifest identifies EXT_ID, whatever its name.
+#
+# Returns 1 without output when the dependency is inactive, not installed, or
+# unknown on this host: shdeps reports all three the same way, and provider
+# absence is a supported state. Returns 2 after warning when the dependency is
+# not an `owner/repo` name shdeps accepts, or an installed provider publishes
+# no unique match. For the last case REPLY names a nonexistent path under the
+# provider's extension directory (or is empty when none is safe), so opt-out
+# variants can still unregister the extension and prune its managed
+# generations from that directory.
+_vscode_resolve_local_extension() {
+  local ext_id=$1 dependency=$2 vscode_dir candidate match="" count=0 rc=0
+  REPLY=""
+  if [[ ! $dependency =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+    dot_hook_warn "    warning: VS Code local extension $ext_id names an invalid dependency: $dependency"
+    return 2
+  fi
+  command -v shdeps >/dev/null 2>&1 || return 1
+  # Read the same tracked configuration as the base dep-file helper does.
+  vscode_dir=$(SHDEPS_CONF_DIR="$HOME/.config/shdeps" \
+    shdeps dep-path "$dependency" "share/${dependency##*/}/vscode" 2>/dev/null) ||
+    rc=$?
+  if ((rc == 2)); then
+    dot_hook_warn "    warning: shdeps rejects dependency $dependency for VS Code local extension $ext_id"
+    return 2
+  fi
+  ((rc == 0)) && [[ -n $vscode_dir ]] || return 1
+
+  for candidate in "$vscode_dir"/*/; do
+    candidate=${candidate%/}
+    _vscode_extension_dir_is "$ext_id" "$candidate" || continue
+    match=$candidate
+    count=$((count + 1))
+  done
+  if ((count == 1)); then
+    REPLY=$match
+    return 0
+  fi
+
+  if ((count == 0)); then
+    dot_hook_warn "    warning: $dependency publishes no VS Code extension $ext_id under $vscode_dir"
+  else
+    dot_hook_warn "    warning: $dependency publishes $count copies of VS Code extension $ext_id under $vscode_dir — skipping"
+  fi
+  candidate=$vscode_dir/${ext_id#*.}
+  [[ -e $candidate || -L $candidate ]] || REPLY=$candidate
+  return 2
+}
+
+# Emit one `extension_id<TAB>source_dir<TAB>disabled_options` record per
+# declared local extension whose provider is present on this host.
 _vscode_local_extensions() {
-  local file ext_id source_dir disabled_opts _rest
+  local file ext_id dependency disabled_opts _rest
   while IFS= read -r file; do
-    while IFS=$'\t' read -r ext_id source_dir disabled_opts _rest || [[ -n "${ext_id:-}" ]]; do
+    while IFS=$'\t' read -r ext_id dependency disabled_opts _rest || [[ -n "${ext_id:-}" ]]; do
       [[ -n "${ext_id:-}" ]] || continue
       [[ "$ext_id" == \#* ]] && continue
-      if [[ -z "${source_dir:-}" || -n "${_rest:-}" ]]; then
+      if [[ -z "${dependency:-}" || -n "${_rest:-}" ]]; then
         dot_hook_warn "    warning: malformed VS Code local extension row in $file"
         continue
       fi
-      source_dir="$(_vscode_expand_path "$source_dir")"
-      [[ -n "$source_dir" ]] || continue
-      printf '%s\t%s\t%s\n' "$ext_id" "$source_dir" "${disabled_opts:-}"
+      _vscode_resolve_local_extension "$ext_id" "$dependency" || [[ -n $REPLY ]] || continue
+      printf '%s\t%s\t%s\n' "$ext_id" "$REPLY" "${disabled_opts:-}"
     done <"$file"
   done < <(_vscode_local_extension_sources)
 }
@@ -1713,7 +1800,12 @@ _vscode_merge_extensions_tracked() {
     legacy_ext_src=$HOME/.local/share/dot-vscode-extensions/$ext_name
     if [[ -L $ext_link && -e $ext_link ]] && ext_target=$(readlink "$ext_link"); then
       [[ $ext_target == /* ]] || ext_target=$ext_dir/$ext_target
-      if [[ $ext_target == "$legacy_ext_src" && $ext_target != "$ext_src" ]]; then
+      # Besides the legacy dotfiles-owned payload, respell a link that already
+      # reaches the resolved source through another path (shdeps' managed
+      # checkout link versus the development clone it points at) so the
+      # ownership receipt below records it.
+      if [[ $ext_target != "$ext_src" &&
+        ($ext_target == "$legacy_ext_src" || $ext_target -ef $ext_src) ]]; then
         changed_paths+=("$ext_link")
         changed_kinds+=(symlink)
         old_targets+=("$(readlink "$ext_link")")

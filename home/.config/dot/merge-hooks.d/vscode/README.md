@@ -18,22 +18,28 @@ source families and private helpers live in this directory.
   precedence.
 - `variants.d/` declares VS Code, VS Code Insiders, Cursor, and remote variant
   targets.
-- `local-extensions.d/` declares local extension directories that should be
-  symlinked into active variants. Its third TSV column names comma-separated
-  variant options that disable that extension. The Sley adapter is loaded from
-  shdeps' stable `$HOME/.local/share/cgraf78/sley` dependency root. Sley owns
-  the extension implementation and its detailed behavioral suite; this merge
-  hook owns only activation, the `no-sley` opt-out, and a compatibility smoke
-  test. Keeping that boundary explicit prevents editor behavior from drifting
-  into a second consumer-owned copy while preserving local deployment policy.
-  The Termnav adapter uses
-  `no-termnav`; opting out unregisters it and prunes identifiable older
-  dot-managed symlinked generations even when the configured current payload
-  is unavailable. Otherwise the adapter is loaded from shdeps' stable
-  `$HOME/.local/share/cgraf78/termnav` dependency root so local, remote, and WSL
-  extension hosts share the same window-scoped tab bridge. Its versioned source
-  directory must stay aligned with the adapter manifest. The same alignment
-  requirement applies to Sley's versioned source directory.
+- `local-extensions.d/` declares provider-owned local extensions that should
+  be symlinked into active variants. Each TSV row names the extension ID, the
+  shdeps dependency that publishes it, and comma-separated variant options that
+  disable it. The hook asks `shdeps dep-path` for the dependency's
+  `share/<repo>/vscode/` directory, so shdeps keeps owning install roots,
+  development-clone precedence, and host filters, then selects the one folder
+  whose `package.json` `publisher.name` matches the ID. Folder names are the
+  provider's packaging choice (usually the manifest version, which moves
+  independently of the provider's release version) and are never configured
+  here. A dependency that is inactive, uninstalled, or unknown on the host
+  silently skips the extension (shdeps reports those alike); a name shdeps
+  rejects, or an installed provider with no matching folder or several,
+  warns and skips it.
+  Sley owns the extension implementation and its detailed behavioral suite;
+  this merge hook owns only activation, the `no-sley` opt-out, and a
+  compatibility smoke test. Keeping that boundary explicit prevents editor
+  behavior from drifting into a second consumer-owned copy while preserving
+  local deployment policy. The Termnav adapter uses `no-termnav`; opting out
+  unregisters it and prunes identifiable older dot-managed symlinked
+  generations even when the provider publishes no usable current payload.
+  Otherwise local, remote, and WSL extension hosts load the same
+  provider-owned adapter so they share one window-scoped tab bridge.
   After first registration, reload or restart each editor window, then relaunch
   its existing terminal or tmux clients so they receive the adapter socket.
   Relaunch those clients again after a later editor or extension-host restart.

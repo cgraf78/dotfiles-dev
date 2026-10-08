@@ -8,52 +8,46 @@ set -euo pipefail
 
 echo "=== VS Code Sley integration ==="
 
-asset_rel=share/sley/vscode/sley-tools-0.0.1
-expected_source="\$HOME/.local/share/cgraf78/sley/$asset_rel"
-declared_id=$(
-  awk -F '\t' '$1 == "cgraf.sley-tools" { print $1; exit }' \
-    "$HOME/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv"
-)
-declared_source=$(
-  awk -F '\t' '$1 == "cgraf.sley-tools" { print $2; exit }' \
-    "$HOME/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv"
-)
+# Read the checkout under test, whether it is linked into HOME or not.
+tsv="$(_dev_repo_root)/home/.config/dot/merge-hooks.d/vscode/local-extensions.d/10-extensions.tsv"
+declared_id=$(awk -F '\t' '$1 == "cgraf.sley-tools" { print $1; exit }' "$tsv")
+declared_dependency=$(awk -F '\t' '$1 == "cgraf.sley-tools" { print $2; exit }' "$tsv")
 
-# The literal stable-link path is intentional. `dot update` refreshes shdeps
-# before merge hooks run, so activation follows the currently installed Sley
-# checkout without copying provider bytes back into this repository.
-_assert_eq "vscode sley: declaration uses Sley dependency asset" \
-  "$expected_source" "$declared_source"
+# The declaration names only the shdeps dependency. `dot update` refreshes
+# shdeps before merge hooks run, and the hook resolves the provider's current
+# payload through it, so activation follows the installed Sley without
+# copying provider bytes or install-layout knowledge into this repository.
+_assert_eq "vscode sley: declaration names the Sley dependency" \
+  "cgraf78/sley" "$declared_dependency"
+_assert_not_contains "vscode sley: declarations spell no install layout" \
+  ".local/share" "$(<"$tsv")"
 _assert_file_missing "vscode sley: dotfiles carries no extension manifest" \
   "$HOME/.local/share/dot-vscode-extensions/sley-tools-0.0.1/package.json"
 _assert_file_missing "vscode sley: dotfiles carries no extension entry point" \
   "$HOME/.local/share/dot-vscode-extensions/sley-tools-0.0.1/extension.js"
 
 # Cross-repository PRs set DOT_TEST_SLEY_ROOT to the exact provider commit.
-# Normal fleet and post-merge test runs resolve the same contract through the
-# host's stable shdeps link. Failing when neither has the published asset keeps
-# an incomplete provider/consumer update visible instead of silently reducing
-# this smoke test to a static TSV assertion.
+# Without it, a hermetic provider stands in under a folder name that is not
+# a version, because the hook must not depend on the folder name.
 provider_root=${DOT_TEST_SLEY_ROOT:-}
 if [[ -z $provider_root ]]; then
   provider_root=$(_tmpdir)
-  mkdir -p "$provider_root/$asset_rel"
-  printf '%s\n' '{"name":"sley-tools","publisher":"cgraf"}' >"$provider_root/$asset_rel/package.json"
+  mkdir -p "$provider_root/share/sley/vscode/current"
+  printf '%s\n' '{"name":"sley-tools","publisher":"cgraf"}' \
+    >"$provider_root/share/sley/vscode/current/package.json"
 fi
-extension_dir="$provider_root/$asset_rel"
-manifest="$extension_dir/package.json"
 
-_assert_file_exists "vscode sley: provider publishes manifest" "$manifest"
-
-# Sley owns its versioned directory and entry-point packaging invariants. The
-# useful consumer contract is narrower: the extension ID that dotfiles
-# activates must match the package published at the configured dependency path.
-if [[ -r "$manifest" ]]; then
-  package_name=$(jq -r '.name // ""' "$manifest")
-  package_publisher=$(jq -r '.publisher // ""' "$manifest")
-
-  _assert_eq "vscode sley: declared ID matches provider package" \
-    "$declared_id" "$package_publisher.$package_name"
-fi
+# Sley owns its folder naming and entry-point packaging invariants. The
+# useful consumer contract is narrower: the provider's VS Code directory
+# publishes exactly one package whose identity is the declared extension ID,
+# which is how the hook selects it.
+matches=0
+for extension_dir in "$provider_root"/share/sley/vscode/*/; do
+  [[ -r $extension_dir/package.json ]] || continue
+  package_id=$(jq -r '"\(.publisher // "").\(.name // "")"' "$extension_dir/package.json")
+  [[ $package_id == "$declared_id" ]] && matches=$((matches + 1))
+done
+_assert_eq "vscode sley: provider publishes the declared extension once" \
+  "1" "$matches"
 
 _test_summary

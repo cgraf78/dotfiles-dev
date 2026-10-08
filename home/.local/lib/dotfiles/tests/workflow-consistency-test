@@ -159,7 +159,8 @@ _assert_file_exists 'Checkrun schema association policy is dev-owned' "$associat
 _assert_contains 'Git activates the dev-owned hook directory' '.local/lib/dotfiles/git-hooks' "$(<"$git_config")"
 _assert_contains 'Sley provider is installed by dev' 'cgraf78/sley' "$(<"$deps")"
 _assert_contains 'Checkrun provider is installed by dev' 'cgraf78/checkrun' "$(<"$deps")"
-_assert_contains 'VS Code activates the provider-owned Sley extension' 'share/sley/vscode' "$(<"$vscode_extensions")"
+_assert_contains 'VS Code activates the provider-owned Sley extension' \
+  $'cgraf.sley-tools\tcgraf78/sley\t' "$(<"$vscode_extensions")"
 _assert_contains 'Nvim resolves Checkrun through the dependency boundary' 'cgraf78/checkrun' "$(<"$checkrun_adapter")"
 _assert_contains 'Nvim derives formatter policy from Checkrun capabilities' 'sley_formatters_by_ft' "$(<"$language_policy")"
 _assert_contains 'Nvim derives linter policy from Checkrun capabilities' 'sley_linters_by_ft' "$(<"$language_policy")"
@@ -255,7 +256,13 @@ if [[ -n ${DOT_TEST_CHECKRUN_ROOT:-} || -n ${DOT_TEST_SLEY_ROOT:-} ||
   provider_scope=current
   checkrun_command=$DOT_TEST_CHECKRUN_ROOT/bin/checkrun
   checkrun_nvim_fixture=$DOT_TEST_CHECKRUN_ROOT/lib/checkrun/nvim.lua
-  sley_extension=$DOT_TEST_SLEY_ROOT/share/sley/vscode/sley-tools-0.0.1/extension.js
+  # Select Sley's payload by manifest identity, as the VS Code hook does;
+  # its folder name is the provider's packaging choice.
+  for provider_asset in "$DOT_TEST_SLEY_ROOT"/share/sley/vscode/*/; do
+    if [[ $(jq -r '"\(.publisher).\(.name)"' "$provider_asset/package.json" 2>/dev/null) == cgraf.sley-tools ]]; then
+      sley_extension=${provider_asset%/}/extension.js
+    fi
+  done
   agentguard_classifier=$DOT_TEST_AGENTGUARD_ROOT/bin/agentguard-classify-command
   for provider_asset in "$checkrun_command" "$checkrun_nvim_fixture" \
     "$sley_extension" "$agentguard_classifier"; do

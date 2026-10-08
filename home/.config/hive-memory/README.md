@@ -20,6 +20,7 @@ file when an override is durable across their machines.
   [`.local/bin/hm`](../../.local/bin/hm).
 
 The `cgraf78/hive-memory` entry in
-[`30-dev.conf`](../shdeps/30-dev.conf) installs the upstream binary at
-`~/.local/share/cgraf78/hive-memory/hm`. The tracked launcher is the
-PATH-visible `hm` command and delegates to that fixed path.
+[`30-dev.conf`](../shdeps/30-dev.conf) installs the upstream binary behind the
+tracked launcher, which is the PATH-visible `hm` command. The launcher asks
+shdeps for that dependency's `hm` file through the base `dot_shdeps_dep_file`
+helper and delegates to it, so the install location stays shdeps' contract.

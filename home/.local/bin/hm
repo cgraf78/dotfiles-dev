@@ -8,11 +8,21 @@
 set -euo pipefail
 
 # Shdeps deliberately installs the real binary behind the tracked public
-# launcher. The fixed path is the installation contract; PATH searches and old
-# layout fallbacks would only hide a failed convergence.
-_hm_core="${HOME:?}/.local/share/cgraf78/hive-memory/hm"
-if [[ ! -x "$_hm_core" || -d "$_hm_core" ]]; then
-  printf 'hm launcher: real hm not found at %s; run dot update\n' "$_hm_core" >&2
+# launcher, and its dependency resolution is the installation contract: it
+# owns the install layout, so ask it instead of spelling that layout here.
+# PATH searches and old layout fallbacks would only hide a failed convergence.
+# The base helper answers warm lookups from its cache without forking shdeps.
+# `dot update` installs this launcher and the base-owned helper as one
+# converged unit. Load the helper from HOME rather than beside this script so
+# running the overlay file by its real path finds it too.
+# shellcheck source=/dev/null
+if ! . "${HOME:?}/.local/lib/dotfiles/shdeps-assets.sh"; then
+  printf 'hm launcher: shdeps asset helper unavailable; run dot update\n' >&2
+  exit 127
+fi
+_hm_core=$(dot_shdeps_dep_file cgraf78/hive-memory hm 2>/dev/null) || _hm_core=""
+if [[ -z "$_hm_core" || ! -x "$_hm_core" || -d "$_hm_core" ]]; then
+  printf 'hm launcher: real hm not found (shdeps cgraf78/hive-memory hm); run dot update\n' >&2
   exit 127
 fi
 
@@ -23,15 +33,13 @@ _hm_agent="$_hm_explicit_agent"
 # only re-discover the given value — including a full process-table scan when
 # no ambient environment identifies the runtime. Source AgentGuard lazily and
 # detect only what the caller left unknown; with fully explicit identity this
-# launcher is a pure exec with no helper sourcing and no subprocesses.
+# launcher only resolves the core binary (a cached lookup) and execs it.
 if [[ -z "$_hm_agent" || -z "${HIVE_MEMORY_SESSION_ID:-}" ]]; then
   # `dot update` installs the tracked adapter and its declared dependencies as
-  # one converged unit. A missing helper or provider is therefore a broken
-  # install to repair, not an alternate runtime mode for this launcher to
-  # emulate. Fully explicit callers never reach this branch, so they also
-  # survive a broken provider install instead of failing at the front door.
-  # shellcheck source=../lib/dotfiles/shdeps-assets.sh disable=SC1091
-  . "${BASH_SOURCE[0]%/*}/../lib/dotfiles/shdeps-assets.sh"
+  # one converged unit. A missing provider is therefore a broken install to
+  # repair, not an alternate runtime mode for this launcher to emulate. Fully
+  # explicit callers never reach this branch, so they also survive a broken
+  # AgentGuard install instead of failing at the front door.
   if ! dot_shdeps_dep_source cgraf78/agentguard lib/agentguard/agentguard.sh; then
     printf 'hm launcher: AgentGuard unavailable; run dot update\n' >&2
     exit 127
@@ -59,7 +67,7 @@ if [[ -n "$_hm_agent" ]]; then
     # already-resolved agent so a foreign vendor env cannot steal another
     # runtime's Hive project. Do not treat CLAUDE_PROJECT_DIR as a Grok hint:
     # AgentGuard already classifies Grok before Claude, and a Claude-compat
-    # alias could mis-scope a Claude session.
+    # alias could scope a Claude session to the wrong project.
     case "$_hm_agent" in
       grok)
         export HIVE_MEMORY_PROJECT="${GROK_WORKSPACE_ROOT:-$PWD}"
