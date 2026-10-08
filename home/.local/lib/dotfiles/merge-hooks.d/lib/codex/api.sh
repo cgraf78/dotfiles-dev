@@ -11,7 +11,9 @@ _DOT_CODEX_CONFIG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || retu
 
 # This module is client policy loaded by the validated extension worker. Keep
 # it intentionally dependent on that public API rather than recreating a
-# fallback into the retired embedded runtime.
+# fallback into the retired embedded runtime. The AgentGuard resolver comes
+# from this overlay's merge-hooks.d/lib/agentguard.sh, which the hook sources
+# first.
 declare -F dot_hook_family >/dev/null 2>&1 || return 1
 declare -F dot_agentguard_integration_file >/dev/null 2>&1 || return 1
 
