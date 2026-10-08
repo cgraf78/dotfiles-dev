@@ -32,12 +32,14 @@ layout and the supported legacy bare layout, so an untracked-file walk would be
 both expensive and unrelated to the staged commit scope. Sley does not need to
 know that personal repository layout.
 
-Normal activation resolves Sley at
-`~/.local/share/cgraf78/sley/`, using both its `share/sley/hooks/git/` hooks and
-its `bin/sley` CLI. `DOT_SLEY_ROOT` may point at a complete Sley checkout for
-cross-repository development and integration tests; selecting both artifacts
-from one root prevents hook/CLI version skew. The override is not required on
-fleet machines because `dot update` keeps the stable Shdeps checkout current.
+Normal activation asks shdeps for the `cgraf78/sley` dependency through the
+base `dot_shdeps_dep_file` helper, so shdeps keeps owning the install root,
+development-clone precedence, and host filters. The resolved `bin/sley` CLI
+selects the root that also supplies the `share/sley/hooks/git/` hooks.
+`DOT_SLEY_ROOT` may point at a complete Sley checkout for cross-repository
+development and integration tests; selecting both artifacts from one root
+prevents hook/CLI version skew. The override is not required on fleet machines
+because `dot update` keeps the Shdeps dependency current.
 
 ## Policy
 

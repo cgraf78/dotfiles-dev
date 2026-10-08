@@ -368,9 +368,15 @@ _dev_profile_state_document_empty() {
   esac
 }
 
+# Validate one recorded extension link. The link itself must sit directly in
+# an `extensions` directory; its target only has to be absolute. Retirement
+# removes the link solely when it still reads back that exact target and never
+# touches the target, while shdeps reports provider roots canonically, so a
+# provider reached through a symlink (a moved ~/git or ~/.local) can resolve
+# outside HOME.
 _dev_profile_state_link_allowed() {
   local path=$1 target=$2 parent name
-  [[ $path == /* && $target == "$HOME/"* ]] || return 1
+  [[ $path == /* && $target == /* ]] || return 1
   [[ $path != *$'\n'* && $path != *$'\r'* && $path != *$'\t'* ]] || return 1
   [[ $target != *$'\n'* && $target != *$'\r'* && $target != *$'\t'* ]] || return 1
   parent=${path%/*}

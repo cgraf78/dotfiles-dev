@@ -26,11 +26,14 @@ _hive_memory_warn() {
   dot_hook_warn "    warning: Hive Memory $1"
 }
 
-# The fixed path where Shdeps installs the real hm, through REPLY. The tracked
-# launcher delegates to this same installation contract.
+# The real hm that Shdeps installs, through REPLY. The tracked launcher
+# resolves the same dependency file, so both share one installation contract.
 _hive_memory_core_path() {
+  # The resolver reads HOME-relative shdeps config; without HOME (an absolute
+  # XDG config under nounset) there is no installation to find.
   [[ -n "${HOME:-}" ]] || return 1
-  REPLY="$HOME/.local/share/cgraf78/hive-memory/hm"
+  REPLY=$(dot_shdeps_dep_file cgraf78/hive-memory hm 2>/dev/null) || return 1
+  [[ -n "$REPLY" ]]
 }
 
 # Succeed when the real hm is installed, by the launcher's own test.

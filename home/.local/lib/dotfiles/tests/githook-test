@@ -11,10 +11,12 @@
 set -o pipefail
 export NO_COLOR=1
 
-SOURCE_HOME="${DOT_TEST_SOURCE_HOME:-$HOME}"
+# shellcheck source=dev/helpers.sh
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
 
-# shellcheck source=helpers.sh
-. "$SOURCE_HOME/.local/lib/dotfiles/tests/dev/helpers.sh"
+# Read the hooks from the checkout under test, whether or not it is linked
+# into HOME; every file this suite activates is owned by this overlay.
+SOURCE_HOME="$(_dev_repo_root)/home"
 
 # The hooks call Git only to recognize the base client layout. Use an
 # ordinary Git binary so that test fixtures do not recurse through the
@@ -147,6 +149,54 @@ _assert_file_content "provider activation: ambient CLI is not mixed in" \
   "" "$shadow_log"
 _assert_contains "provider activation: injects the dotfiles policy gate" \
   "gate=$HOOK_DIR_REAL/sley-commit-gate" "$(cat "$provider_log")"
+
+# Without the override the hook must find Sley only through shdeps (via the
+# base dep-file helper), never through a spelled install path. The fixture
+# HOME models that helper over a stub resolver that serves the provider from
+# a root outside shdeps' default layout.
+resolver_home="$test_root/resolver-home"
+resolver_bin="$test_root/resolver-bin"
+mkdir -p "$resolver_home/.local/lib/dotfiles" "$resolver_bin"
+cat >"$resolver_home/.local/lib/dotfiles/shdeps-assets.sh" <<'EOF'
+dot_shdeps_dep_file() {
+  shdeps dep-file "$@"
+}
+EOF
+cat >"$resolver_bin/shdeps" <<'EOF'
+#!/usr/bin/env bash
+[[ $1 == dep-file && $2 == cgraf78/sley && -f $SLEY_TEST_DEP_ROOT/$3 ]] || exit 1
+printf '%s/%s\n' "$SLEY_TEST_DEP_ROOT" "$3"
+EOF
+chmod +x "$resolver_bin/shdeps"
+
+: >"$provider_log"
+: >"$cli_log"
+env -u DOT_SLEY_ROOT HOME="$resolver_home" SLEY_TEST_DEP_ROOT="$provider_root" \
+  PATH="$resolver_bin:$shadow_bin:$PATH" \
+  "$HOOK_DIR/sley-provider-hook" pre-commit
+activation_rc=$?
+_assert_exit "provider activation: shdeps-resolved checkout succeeds" 0 "$activation_rc"
+_assert_file_content "provider activation: resolved root supplies the CLI" \
+  "cli <from-pre-commit>" "$cli_log"
+_assert_contains "provider activation: resolved root supplies the hook" \
+  "hook=pre-commit" "$(cat "$provider_log")"
+
+env -u DOT_SLEY_ROOT HOME="$resolver_home" SLEY_TEST_DEP_ROOT="$missing_root" \
+  PATH="$resolver_bin:$PATH" \
+  "$HOOK_DIR/sley-provider-hook" pre-commit >"$activation_output" 2>&1
+activation_rc=$?
+_assert_exit "provider activation: unresolvable Sley fails closed" 1 "$activation_rc"
+_assert_contains "provider activation: unresolvable Sley names the dependency" \
+  "shdeps cannot resolve the Sley CLI (cgraf78/sley bin/sley)" "$(cat "$activation_output")"
+_assert_contains "provider activation: unresolvable Sley explains recovery" \
+  "run dot update" "$(cat "$activation_output")"
+
+env -u DOT_SLEY_ROOT HOME="$test_root/no-helper-home" \
+  "$HOOK_DIR/sley-provider-hook" pre-commit >"$activation_output" 2>&1
+activation_rc=$?
+_assert_exit "provider activation: missing resolver helper fails closed" 1 "$activation_rc"
+_assert_contains "provider activation: missing resolver helper explains recovery" \
+  "shdeps cannot resolve the Sley CLI" "$(cat "$activation_output")"
 
 echo
 echo "=== Git hook activation shims ==="

@@ -675,9 +675,10 @@ YAML
   echo ""
   echo "=== Sapling hook merge ==="
 
-  # Sley owns the executable and its behavior. This suite only needs an
-  # executable at the public installation path to exercise dot's activation
-  # and merge policy; Sley's own suite covers the gate itself.
+  # Sley owns the executable and its behavior. These synthetic fragments
+  # spell an arbitrary HOME-relative gate to exercise dot's generic `$HOME`
+  # expansion, readiness, and block policy; the tracked fragment's shdeps
+  # resolution is covered below, and Sley's own suite covers the gate.
   _install_sapling_gate_fixture() {
     local fixture_home="$1"
     local gate="$fixture_home/.local/share/cgraf78/sley/share/sley/hooks/sapling/sley-commit-gate"
@@ -809,6 +810,96 @@ EOF
     "# source: .config/dot/merge-hooks.d/sapling/hgrc.d" "$sl_hook_hgrc"
   _assert_not_contains "sapling hook merge: legacy hook absent" \
     "/old/legacy/hook" "$sl_hook_hgrc"
+  # The tracked fragment names Sley only by its shdeps coordinates. Serve the
+  # gate from a provider root outside shdeps' default layout so only the
+  # resolver, never a spelled install path, can produce the hgrc entries.
+  sl_dep_home=$(_tmpdir)
+  sl_dep_root=$(_tmpdir)/sley-dev-clone
+  sl_dep_gate=$sl_dep_root/share/sley/hooks/sapling/sley-commit-gate
+  mkdir -p "$sl_dep_home/.config/dot/merge-hooks.d/sapling/hgrc.d" "${sl_dep_gate%/*}"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$sl_dep_gate"
+  chmod +x "$sl_dep_gate"
+  cp "$REAL_HOME/.config/dot/merge-hooks.d/sapling/hgrc.d/10-sley.ini" \
+    "$sl_dep_home/.config/dot/merge-hooks.d/sapling/hgrc.d/10-sley.ini"
+  sl_dep_bin=$(_tmpdir)/bin
+  mkdir -p "$sl_dep_bin"
+  cat >"$sl_dep_bin/shdeps" <<'SHDEPS'
+#!/usr/bin/env bash
+[[ $1 == dep-file && $2 == cgraf78/sley && -f $SL_DEP_ROOT/$3 ]] || exit 1
+printf '%s/%s\n' "$SL_DEP_ROOT" "$3"
+SHDEPS
+  chmod +x "$sl_dep_bin/shdeps"
+  _run_sapling_dep_merge() {
+    # shellcheck disable=SC2016 # The inner shell expands REAL_HOME from env.
+    env HOME="$sl_dep_home" REAL_HOME="$REAL_HOME" SL_DEP_ROOT="$1" \
+      PATH="$sl_dep_bin:$sl_gate_bin:$PATH" bash -c '
+      set -euo pipefail
+      . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      _log() { :; }
+      # shellcheck source=/dev/null
+      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/sapling.sh"
+      merge
+    '
+  }
+
+  cat >"$sl_dep_home/.hgrc" <<'HGRC'
+# dot-managed:hgrc:sley begin
+# DO NOT EDIT: changes will be overwritten by dot update
+# source: .config/dot/merge-hooks.d/sapling/hgrc.d
+[hooks]
+precommit.sley = /previous/sley/gate
+# dot-managed:hgrc:sley end
+HGRC
+  _run_sapling_dep_merge "$sl_dep_root/absent"
+  sl_dep_hgrc=$(cat "$sl_dep_home/.hgrc")
+  _assert_contains "sapling hook merge: absent provider keeps the previous block" \
+    "precommit.sley = /previous/sley/gate" "$sl_dep_hgrc"
+  # shellcheck disable=SC2016 # Literal token text, not an expansion.
+  _assert_not_contains "sapling hook merge: absent provider writes no unresolved token" \
+    '${shdeps:' "$sl_dep_hgrc"
+
+  _run_sapling_dep_merge "$sl_dep_root"
+  sl_dep_hgrc=$(cat "$sl_dep_home/.hgrc")
+  # shellcheck disable=SC2016 # Literal token text, not an expansion.
+  _assert_eq "sapling hook merge: every tracked hook resolves through shdeps" \
+    "$(grep -cF '${shdeps:' "$REAL_HOME/.config/dot/merge-hooks.d/sapling/hgrc.d/10-sley.ini")" \
+    "$(grep -cF ".sley = $sl_dep_gate" <<<"$sl_dep_hgrc")"
+  # shellcheck disable=SC2016 # Literal token text, not an expansion.
+  _assert_not_contains "sapling hook merge: resolved block keeps no token" \
+    '${shdeps:' "$sl_dep_hgrc"
+  _assert_not_contains "sapling hook merge: resolved block replaces the old gate" \
+    "/previous/sley/gate" "$sl_dep_hgrc"
+  # shellcheck disable=SC2016 # Literal token text, not an expansion.
+  _assert_contains "sapling hook merge: tracked fragment names Sley by shdeps reference" \
+    '${shdeps:cgraf78/sley/share/sley/hooks/sapling/sley-commit-gate}' \
+    "$(cat "$REAL_HOME/.config/dot/merge-hooks.d/sapling/hgrc.d/10-sley.ini")"
+  _assert_not_contains "sapling hook merge: tracked fragment spells no install layout" \
+    ".local/share/cgraf78" \
+    "$(cat "$REAL_HOME/.config/dot/merge-hooks.d/sapling/hgrc.d/10-sley.ini")"
+
+  # Token expansion handles several tokens per line, keeps surrounding text,
+  # and rejects a token without a relative path or a closing brace instead of
+  # guessing or writing it through literally.
+  # shellcheck disable=SC2016 # The inner shell expands REAL_HOME from env.
+  sl_dep_expand=$(env HOME="$sl_dep_home" REAL_HOME="$REAL_HOME" \
+    SL_DEP_ROOT="$sl_dep_root" PATH="$sl_dep_bin:$PATH" bash -c '
+    set -euo pipefail
+    . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+    # shellcheck source=/dev/null
+    . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/sapling.sh"
+    rel=share/sley/hooks/sapling/sley-commit-gate
+    _sapling_expand_deps "a \${shdeps:cgraf78/sley/$rel} b \${shdeps:cgraf78/sley/$rel} c"
+    printf "%s\n" "$REPLY"
+    for malformed in "x \${shdeps:cgraf78/sley} y" "x \${shdeps:cgraf78/sley/$rel y"; do
+      if _sapling_expand_deps "$malformed"; then
+        printf "accepted\n"
+      else
+        printf "rejected\n"
+      fi
+    done
+  ')
+  _assert_eq "sapling hook merge: expands every token in a line" \
+    "a $sl_dep_gate b $sl_dep_gate c"$'\n'"rejected"$'\n'"rejected" "$sl_dep_expand"
 
   echo ""
   unset -f jq
@@ -1210,6 +1301,19 @@ PY
   _HIVE_HOOK="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh"
   _HIVE_BIN=$(_mock_bin)
   _HIVE_LOG=$(_tmpdir)/hm.log
+  # The hook finds the real hm only through shdeps. Model dep-file at a
+  # location outside shdeps' default layout so no fixed path can satisfy it.
+  _HIVE_CORE=$(_tmpdir)/provider/hive-memory/hm
+  export _HIVE_CORE
+  cat >"$_HIVE_BIN/shdeps" <<'SHDEPS'
+#!/usr/bin/env bash
+if [[ "$*" == "dep-file cgraf78/hive-memory hm" && -f $_HIVE_CORE ]]; then
+  printf '%s\n' "$_HIVE_CORE"
+  exit 0
+fi
+exit 1
+SHDEPS
+  chmod +x "$_HIVE_BIN/shdeps"
 
   cat >"$_HIVE_BIN/hm" <<'HM'
 #!/usr/bin/env bash
@@ -1465,13 +1569,12 @@ TOML
 
   # The launcher also exits 127 for an unavailable AgentGuard. With the core
   # installed, that is a broken install, not an absent tool.
-  _hive_core="$TEST_HOME/.local/share/cgraf78/hive-memory/hm"
-  mkdir -p "${_hive_core%/*}"
-  printf '#!/bin/sh\nexit 0\n' >"$_hive_core"
-  chmod +x "$_hive_core"
+  mkdir -p "${_HIVE_CORE%/*}"
+  printf '#!/bin/sh\nexit 0\n' >"$_HIVE_CORE"
+  chmod +x "$_HIVE_CORE"
   : >"$_HIVE_LOG"
   _hive_broken_launcher_output=$(_run_hive_merge 2>&1)
-  rm -f "$_hive_core"
+  rm -f "$_HIVE_CORE"
   unset HIVE_MEMORY_STORES_SHOW_RC HIVE_MEMORY_STORES_LIST_RC
   _assert_contains "hive hook: 127 with an installed core still warns" \
     "effective config unavailable" "$_hive_broken_launcher_output"

@@ -284,11 +284,21 @@ _add_vscode_pre_focus_keybindings() {
 _dev_vscode_merges_fixture() {
   vscode_home=$(_tmpdir)
   vscode_bin=$(_tmpdir)/bin
-  # Use the actual Sley-owned payload in this consumer integration fixture.
-  # A repository-local copy would make local-extension reconciliation pass
-  # even if dotfiles and the provider published incompatible contracts.
-  vscode_sley_root="${DOT_TEST_SLEY_ROOT:-${DOT_TEST_HOST_HOME:-$REAL_HOME}/.local/share/cgraf78/sley}"
-  vscode_sley_source="$vscode_sley_root/share/sley/vscode/sley-tools-0.0.1"
+  # Copy the Sley payload _dev_merges_setup provides into this fixture's
+  # provider root rather than writing another consumer-owned copy. Pick it by
+  # manifest identity, as the hook does, so a folder rename or version bump on
+  # the provider side cannot strand the fixture.
+  local candidate
+  vscode_sley_source=""
+  for candidate in "${DOT_TEST_SLEY_ROOT:?_dev_merges_setup provides Sley}"/share/sley/vscode/*/; do
+    if [[ $(jq -r '"\(.publisher).\(.name)"' "$candidate/package.json" 2>/dev/null) == cgraf.sley-tools ]]; then
+      vscode_sley_source=${candidate%/}
+    fi
+  done
+  if [[ -z $vscode_sley_source ]]; then
+    _fail "vscode fixture: Sley provider publishes cgraf.sley-tools"
+    return 1
+  fi
   export DOT_VSCODE_EXTENSIONS_SKIP=1
   mkdir -p \
     "$vscode_bin" \
@@ -439,8 +449,7 @@ JSON
     "$vscode_home/.vscode-nosley/extensions" \
     "$vscode_home/.vscode-no-termnav/extensions" \
     "$vscode_home/.config/NoSley/User" \
-    "$vscode_home/.config/NoTermnav/User" \
-    "$vscode_home/.local/share/cgraf78/termnav/share/termnav/vscode/termnav-0.2.0"
+    "$vscode_home/.config/NoTermnav/User"
   ln -s "$vscode_home/.local/share/cgraf78/sley/share/sley/vscode/sley-tools-0.0.1" \
     "$vscode_home/.vscode-nosley/extensions/sley-tools-0.0.1"
   cat >"$vscode_home/.vscode-nosley/extensions/extensions.json" <<'JSON'
@@ -453,13 +462,9 @@ JSON
   }
 ]
 JSON
-  cat >"$vscode_home/.local/share/cgraf78/termnav/share/termnav/vscode/termnav-0.2.0/package.json" <<'JSON'
-{
-  "name": "termnav",
-  "publisher": "cgraf",
-  "version": "0.2.0"
-}
-JSON
+  # Model a provider upgrade: the release replaced its 0.2.0 folder with the
+  # current one, leaving the older generation links dangling. A provider dir
+  # holding both would be ambiguous, which the hook refuses to guess about.
   ln -s \
     "$vscode_home/.local/share/cgraf78/termnav/share/termnav/vscode/termnav-0.2.0" \
     "$vscode_home/.vscode/extensions/termnav-0.2.0"
@@ -741,10 +746,25 @@ json.dump(
     separators=(",", ":"),
 )
 EOF
+  # Model `shdeps dep-path` for the local-extension providers: a dependency
+  # resolves only while its root exists (shdeps answers absent, filtered, and
+  # unknown names with status 1 and invalid names with status 2), under
+  # VSCODE_TEST_DEP_ROOT or, by default, the fixture's own install root.
   cat >"$vscode_bin/shdeps" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$*" == "dep-file cgraf78/checkrun lib/checkrun/schemas/schema_policy.py" ]]; then
   printf '%s\n' "$HOME/checkrun-schema-policy.py"
+  exit 0
+fi
+if [[ $# == 3 && $1 == dep-path ]]; then
+  case $2 in
+    cgraf78/sley | cgraf78/termnav) ;;
+    */. | */.. | ./* | ../*) exit 2 ;;
+    *) exit 1 ;;
+  esac
+  root=${VSCODE_TEST_DEP_ROOT:-$HOME/.local/share}/$2
+  [[ -d $root ]] || exit 1
+  printf '%s/%s\n' "$root" "$3"
   exit 0
 fi
 exit 2
