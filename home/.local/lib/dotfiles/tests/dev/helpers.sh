@@ -417,27 +417,6 @@ _test_prepare_shdeps_snapshot() {
   export DOT_TEST_SHDEPS_SNAPSHOT SHDEPS_LIB SHDEPS_RUST_CLI
 }
 
-_test_realpath_lines() {
-  local line
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ -e "$line" || -L "$line" ]]; then
-      _test_realpath "$line"
-    else
-      printf '%s\n' "$line"
-    fi
-  done
-}
-
-# Use this only when path spelling is not part of the behavior under test. Tests
-# that intentionally distinguish visible HOME aliases from canonical paths should
-# keep using _assert_eq with explicit _test_realpath calls at the relevant lines.
-_assert_eq_realpath_lines() {
-  local desc="$1" expected="$2" actual="$3"
-  _assert_eq "$desc" \
-    "$(_test_realpath_lines <<<"$expected")" \
-    "$(_test_realpath_lines <<<"$actual")"
-}
-
 _assert_contains() {
   local desc="$1" expected="$2" actual="$3"
   if [[ "$actual" == *"$expected"* ]]; then
