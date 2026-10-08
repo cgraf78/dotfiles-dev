@@ -322,6 +322,36 @@ output=$(_nvim_lua '
 _assert_eq 'Diffview preserves file diff, layout cycling, and local hunk mappings' \
   'diffview-behavior-ok' "$output"
 
+echo '=== Debug keys ==='
+# The VS Code debug keys are spec keys, so lazy.nvim describes them and loads
+# nvim-dap on first press. Stub dap to check each key reaches its action; the
+# shifted keys share an action with their legacy F17/F23 encodings.
+output=$(_nvim_lua '
+  local calls = {}
+  local function record(name) return function() calls[#calls + 1] = name end end
+  package.loaded["dap"] = {
+    continue = record("continue"),
+    terminate = record("terminate"),
+    toggle_breakpoint = record("toggle_breakpoint"),
+    step_over = record("step_over"),
+    step_into = record("step_into"),
+    step_out = record("step_out"),
+    repl = { toggle = record("repl.toggle") },
+  }
+  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/plugins/debug.lua"))[1]
+  assert(spec[1] == "mfussenegger/nvim-dap" and spec.optional == true)
+  local lines = {}
+  for _, key in ipairs(spec.keys) do
+    calls = {}
+    key[2]()
+    lines[#lines + 1] = key[1] .. "=" .. key.desc .. ":" .. table.concat(calls, ",")
+  end
+  print(table.concat(lines, "|"))
+')
+_assert_eq 'Debug keys mirror VS Code and describe their DAP actions' \
+  '<F5>=Run/Continue:continue|<S-F5>=Terminate:terminate|<F17>=Terminate:terminate|<F9>=Toggle Breakpoint:toggle_breakpoint|<F10>=Step Over:step_over|<F11>=Step Into:step_into|<S-F11>=Step Out:step_out|<F23>=Step Out:step_out|<leader>dR=Toggle REPL:repl.toggle' \
+  "$output"
+
 echo '=== Sley command refusal paths ==='
 output=$(_nvim_lua '
   local callback

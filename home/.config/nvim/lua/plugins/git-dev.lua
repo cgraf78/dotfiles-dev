@@ -61,10 +61,9 @@ return {
   -- and `<leader>dr` (REPL). Two specs claiming one key leave it to whichever
   -- plugin loads last, so the binding flipped when DAP or Diffview loaded;
   -- dropping DAP's claim keeps the diffview binding from startup on.
-  -- `<leader>da` still runs/continues (prompting for args when it starts a
-  -- session) and `<leader>du` shows the REPL; once DAP has loaded,
-  -- `:DapContinue` and `:DapToggleRepl` work too. `optional` keeps this
-  -- fragment from adding nvim-dap when the extra is disabled.
+  -- Continue moves to `<F5>` and the REPL moves to `<leader>dR` (debug.lua).
+  -- `optional` keeps this fragment from adding nvim-dap when the extra is
+  -- disabled.
   {
     "mfussenegger/nvim-dap",
     optional = true,
