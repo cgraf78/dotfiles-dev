@@ -160,7 +160,7 @@ _hive_memory_check_config() {
 }
 
 merge() {
-  _dot_tool_present hive-memory || return 0
+  _dot_tool_any_command hm || return 0
   local config spec spec_rc
   _hive_memory_config || return 0
   config="$REPLY"

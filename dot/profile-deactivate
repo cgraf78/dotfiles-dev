@@ -41,7 +41,7 @@ _dev_deactivate_agentguard_file() {
 }
 
 _dev_deactivate_git_include() {
-  _dot_tool_present git || return 0
+  _dot_tool_any_command git || return 0
   # shellcheck disable=SC2088 # Git stores this portable include literally.
   local managed='~/.config/git/config' value found=0
   while IFS= read -r value; do

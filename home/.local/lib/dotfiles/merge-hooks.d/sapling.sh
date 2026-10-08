@@ -83,7 +83,7 @@ _sapling_hook_commands_ready() {
 }
 
 merge() {
-  _dot_tool_present sapling || return 0
+  _dot_tool_any_command sl || return 0
 
   local dst="$HOME/.hgrc"
 

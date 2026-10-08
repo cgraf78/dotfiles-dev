@@ -24,7 +24,7 @@ _dot_opencode_managed_target() {
 }
 
 merge() {
-  _dot_tool_present opencode || return 0
+  _dot_tool_any_command opencode || return 0
   local src=""
   # Retain the historical target filename so an update replaces the existing
   # managed plugin in place instead of briefly loading two copies. The filename

@@ -5,7 +5,7 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 # Keep the tracked XDG Git config in the effective global configuration stack.
 
 merge() {
-  _dot_tool_present git || return 0
+  _dot_tool_any_command git || return 0
   local managed="$HOME/.config/git/config"
   [[ -f "$managed" ]] || return 0
 

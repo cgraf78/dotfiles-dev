@@ -14,7 +14,7 @@ dot_hook_source merge-hooks.d/lib/agentguard.sh || return
 # Grok settings layers.
 
 merge() {
-  _dot_tool_present grok || return 0
+  _dot_tool_any_command grok || return 0
   dot_json_available || return 0
 
   local dst="$HOME/.grok/hooks/agentguard.json"

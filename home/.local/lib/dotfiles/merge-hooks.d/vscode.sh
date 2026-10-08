@@ -2141,9 +2141,38 @@ _vscode_write_signature() {
   rm -f -- "$tmp" 2>/dev/null || true
 }
 
+# Succeed when any VS Code variant this hook configures is installed: a
+# desktop or Windows-side CLI, a remote server directory, or a macOS app
+# bundle. The variant list belongs here beside the per-variant config paths,
+# not in base compat.sh, which only supplies the literal probes and platform.
+_vscode_present() {
+  local platform
+
+  _dot_tool_any_command \
+    code code-insiders code-fb code-fb-insiders cursor codium codium-insiders \
+    code.exe code-insiders.exe cursor.exe codium.exe \
+    codium-insiders.exe && return 0
+  _dot_tool_any_path \
+    "$HOME/.vscode-server" "$HOME/.vscode-server-insiders" \
+    "$HOME/.vscode-remote" "$HOME/.cursor-server" && return 0
+  platform=$(_dot_tool_platform)
+  [[ $platform == Darwin ]] || return 1
+  _dot_tool_any_path \
+    '/Applications/Visual Studio Code.app' \
+    "$HOME/Applications/Visual Studio Code.app" \
+    '/Applications/Visual Studio Code - Insiders.app' \
+    "$HOME/Applications/Visual Studio Code - Insiders.app" \
+    '/Applications/VS Code @ FB.app' \
+    "$HOME/Applications/VS Code @ FB.app" \
+    '/Applications/VS Code @ FB - Insiders.app' \
+    "$HOME/Applications/VS Code @ FB - Insiders.app" \
+    /Applications/Cursor.app "$HOME/Applications/Cursor.app" \
+    /Applications/VSCodium.app "$HOME/Applications/VSCodium.app"
+}
+
 # Main: deploy extensions, settings, and keybindings to all VS Code variants.
 merge() {
-  _dot_tool_present vscode || return 0
+  _vscode_present || return 0
 
   # Scope the Checkrun projection memo to this one merge; dynamic scoping
   # exposes it to every helper below, and it disappears on return.

@@ -83,7 +83,7 @@ _merge_claude_settings() {
 }
 
 merge() {
-  _dot_tool_present claude || return 0
+  _dot_tool_any_command claude || return 0
   dot_json_available || return 0
 
   local dst="$HOME/.claude/settings.json" managed_dir managed

@@ -77,7 +77,7 @@ _strip_muse_permissions() {
 }
 
 merge() {
-  _dot_tool_present muse || return 0
+  _dot_tool_any_command muse || return 0
   dot_json_available || return 0
 
   local dst="$HOME/.config/muse/settings.json" managed_dir managed

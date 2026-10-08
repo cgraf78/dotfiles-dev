@@ -9,7 +9,7 @@ dot_hook_source merge-hooks.d/lib/compat.sh || return
 # behavior belongs to the provider, leaving this consumer intentionally thin.
 
 merge() {
-  _dot_tool_present gstack || return 0
+  _dot_tool_any_command gstack-register || return 0
   local provider
   provider=$(command -v gstack-register) || return 0
 

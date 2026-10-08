@@ -404,7 +404,7 @@ _dr_check_agentguard_registrations() {
 
 _dr_check_grok_compat() {
   # The same presence gate as the registration table and the grok merge
-  # hooks (`_dot_tool_present grok`).
+  # hooks (`_dot_tool_any_command grok`).
   command -v grok >/dev/null 2>&1 || return 0
 
   local cfg="$HOME/.grok/config.toml"
