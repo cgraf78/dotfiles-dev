@@ -62,51 +62,6 @@
       "note": "grafhome-ca owns the policy format and its schema as one public contract."
     },
     {
-      "name": "Grafhome CA legacy endpoints policy",
-      "format": "toml",
-      "dependency": "cgraf78/grafhome-ca",
-      "schema": "schemas/policy/legacy/endpoints.schema.json",
-      "matches": [".config/grafhome-ca/policy/endpoints.toml"],
-      "enforce": true,
-      "note": "grafhome-ca owns the policy format and its schema as one public contract."
-    },
-    {
-      "name": "Grafhome CA legacy hosts policy",
-      "format": "toml",
-      "dependency": "cgraf78/grafhome-ca",
-      "schema": "schemas/policy/legacy/hosts.schema.json",
-      "matches": [".config/grafhome-ca/policy/hosts.toml"],
-      "enforce": true,
-      "note": "grafhome-ca owns the policy format and its schema as one public contract."
-    },
-    {
-      "name": "Grafhome CA legacy provisioners policy",
-      "format": "toml",
-      "dependency": "cgraf78/grafhome-ca",
-      "schema": "schemas/policy/legacy/provisioners.schema.json",
-      "matches": [".config/grafhome-ca/policy/provisioners.toml"],
-      "enforce": true,
-      "note": "grafhome-ca owns the policy format and its schema as one public contract."
-    },
-    {
-      "name": "Grafhome CA legacy user clients policy",
-      "format": "toml",
-      "dependency": "cgraf78/grafhome-ca",
-      "schema": "schemas/policy/legacy/user-clients.schema.json",
-      "matches": [".config/grafhome-ca/policy/user-clients.toml"],
-      "enforce": true,
-      "note": "grafhome-ca owns the policy format and its schema as one public contract."
-    },
-    {
-      "name": "Grafhome CA legacy user remotes policy",
-      "format": "toml",
-      "dependency": "cgraf78/grafhome-ca",
-      "schema": "schemas/policy/legacy/user-remotes.schema.json",
-      "matches": [".config/grafhome-ca/policy/user-remotes.toml"],
-      "enforce": true,
-      "note": "grafhome-ca owns the policy format and its schema as one public contract."
-    },
-    {
       "name": "lazygit config",
       "format": "yaml",
       "schema": "lazygit.schema.json",
