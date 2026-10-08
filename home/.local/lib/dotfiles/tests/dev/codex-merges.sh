@@ -102,6 +102,33 @@ matcher = "ProviderEdit"
 type = "command"
 command = "provider-post-edit"
 timeout = 60
+
+# Events whose trust identity differs from the tool events: subagent events
+# carry their matcher, Interrupt never does, and SessionEnd/Interrupt use a
+# 1 s default timeout capped at 3 s instead of the 600 s default.
+[[hooks.SubagentStart]]
+matcher = "ProviderAgent"
+[[hooks.SubagentStart.hooks]]
+type = "command"
+command = "provider-subagent-start"
+timeout = 10
+
+[[hooks.SubagentStop]]
+[[hooks.SubagentStop.hooks]]
+type = "command"
+command = "provider-subagent-stop"
+timeout = 10
+
+[[hooks.Interrupt]]
+[[hooks.Interrupt.hooks]]
+type = "command"
+command = "provider-interrupt"
+timeout = 2
+
+[[hooks.SessionEnd]]
+[[hooks.SessionEnd.hooks]]
+type = "command"
+command = "provider-session-end"
 TOML
 
     cat >"$TEST_HOME/.config/dot/merge-hooks.d/codex/config.d/10-settings.toml" <<'TOML'
@@ -204,50 +231,23 @@ TOML
     codex_content=$(cat "$CODEX_CONFIG")
     _assert_contains "codex hook: emits hook array tables" "[[hooks.PreToolUse]]" "$codex_content"
 
-    if python3 - "$CODEX_CONFIG" <<'PY'
-import hashlib
-import json
+    if python3 - "$CODEX_CONFIG" "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/lib/codex/refresh-trust.py" <<'PY'
+import importlib.util
 import pathlib
 import sys
 import tomllib
 
-EVENT_LABELS = {
-    "PreToolUse": "pre_tool_use",
-    "PermissionRequest": "permission_request",
-    "PostToolUse": "post_tool_use",
-    "PreCompact": "pre_compact",
-    "PostCompact": "post_compact",
-    "SessionStart": "session_start",
-    "UserPromptSubmit": "user_prompt_submit",
-    "Stop": "stop",
-}
-MATCHER_EVENTS = {
-    "PreToolUse",
-    "PermissionRequest",
-    "PostToolUse",
-    "PreCompact",
-    "PostCompact",
-    "SessionStart",
-}
+# Hash with the refresh helper itself so this suite never carries a second
+# copy of Codex's event tables; the installed-Codex check below is the
+# independent oracle for the hash rules.
+spec = importlib.util.spec_from_file_location("refresh_trust", sys.argv[2])
+refresh_trust = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(refresh_trust)
 
 
 def current_hash(event_name, group, hook):
-    normalized_hook = {
-        "type": "command",
-        "command": hook["command"],
-        "timeout": max(int(hook.get("timeout", 600)), 1),
-        "async": bool(hook.get("async", False)),
-    }
-    if hook.get("statusMessage") is not None:
-        normalized_hook["statusMessage"] = hook["statusMessage"]
-    identity = {
-        "event_name": EVENT_LABELS[event_name],
-        "hooks": [normalized_hook],
-    }
-    if event_name in MATCHER_EVENTS and group.get("matcher") is not None:
-        identity["matcher"] = group["matcher"]
-    payload = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
-    return "sha256:" + hashlib.sha256(payload).hexdigest()
+    matcher = group.get("matcher") if event_name in refresh_trust.MATCHER_EVENTS else None
+    return refresh_trust.command_hook_hash(event_name, matcher, hook)
 
 
 with open(sys.argv[1], "rb") as f:
@@ -290,6 +290,63 @@ assert state[post_edit_key]["trusted_hash"] == current_hash(
     data["hooks"]["PostToolUse"][0],
     data["hooks"]["PostToolUse"][0]["hooks"][0],
 )
+# Every event Codex accepts gets a trust entry; a missing label would leave
+# that handler untrusted, and Codex skips untrusted handlers silently.
+for event_name, label in (
+    ("SubagentStart", "subagent_start"),
+    ("SubagentStop", "subagent_stop"),
+    ("Interrupt", "interrupt"),
+    ("SessionEnd", "session_end"),
+):
+    key = f"{config_path}:{label}:0:0"
+    assert key in state, key
+    assert state[key]["trusted_hash"] == current_hash(
+        event_name, data["hooks"][event_name][0], data["hooks"][event_name][0]["hooks"][0]
+    ), key
+
+# Codex hashes normalized identities: SessionEnd and Interrupt default to 1 s
+# and clamp to 3 s, other events default to 600 s; Interrupt, Stop, and
+# UserPromptSubmit ignore matchers while subagent and SessionEnd events keep them.
+h = refresh_trust.command_hook_hash
+cmd = {"type": "command", "command": "x"}
+assert h("SessionEnd", None, {**cmd, "timeout": 10}) == h("SessionEnd", None, {**cmd, "timeout": 3})
+assert h("Interrupt", None, cmd) == h("Interrupt", None, {**cmd, "timeout": 1})
+assert h("SubagentStop", None, cmd) == h("SubagentStop", None, {**cmd, "timeout": 600})
+assert h("SessionEnd", None, {**cmd, "timeout": 10}) != h("SubagentStop", None, {**cmd, "timeout": 10})
+assert "Interrupt" not in refresh_trust.MATCHER_EVENTS
+assert {"SessionEnd", "SubagentStart", "SubagentStop"} <= refresh_trust.MATCHER_EVENTS
+
+# Pinned hashes reported by Codex 0.159.3 (hooks/list currentHash), so the
+# default run, which cannot launch Codex, still checks the hash rules
+# against Codex rather than against this helper. Hashes do not include the
+# config path.
+codex_vectors = [
+    ("SessionEnd", {"matcher": "clear"},
+     {"type": "command", "command": "se-async", "async": True, "timeout": 10},
+     "477abbfb64df4ddb7121a7654d3615ccd255fb1b4da9067d494e28dcad34ff21"),
+    ("Interrupt", {"matcher": "ignored"},
+     {"type": "command", "command": "int", "timeout": 0},
+     "d0a548ce24020215b3b64edbc8a01e422f98ba783bac3538a4870d9cf3b4bf4c"),
+    ("PostToolUse", {},
+     # "echo café" (split so the spellchecker does not read it as a word).
+     {"type": "command", "command": "echo ca" "f\u00e9", "statusMessage": "L\u00e4uft\u2026"},
+     "2dedaf96decd4c76d7cb4d77f1f7189ea494fce2080bfa2bc9b1592e189c57d2"),
+    ("SubagentStart", {"matcher": "A"},
+     {"type": "command", "command": "sa-limit", "additionalContextLimit": 100},
+     "15c12a1a24407358dc3f49ce2443139281a7ca2d085243313c9d0badf7413b2a"),
+    ("PreToolUse", {"matcher": "Bash"},
+     {"type": "command", "command": "pre-limit", "additionalContextLimit": 100},
+     "0b33bceafd9ea93a2ad640d86b795dd1eb3ed660a15e014b5e364f52274730e8"),
+    ("Stop", {},
+     {"type": "command", "command": "stop-limit-ignored", "additionalContextLimit": 100},
+     "4ea0c01796b6f852a3578ff5a9e18fae46aa30d4c0380a6e17572a73f398cda0"),
+    ("UserPromptSubmit", {},
+     {"type": "command", "command": "ups-default-limit", "additionalContextLimit": 2500},
+     "07957cf6d990ee6af80d643e0ba997fa26b4633c4852bf5ea5337c4c5f8c06e2"),
+]
+for event_name, group, hook, expected in codex_vectors:
+    actual = current_hash(event_name, group, hook)
+    assert actual == "sha256:" + expected, (event_name, hook, actual)
 PY
     then
       _pass "codex hook: merges common/work, preserves local state, and trusts managed hooks"
@@ -485,7 +542,9 @@ for message in [
 
 result = None
 stderr = []
-deadline = time.time() + 8
+# The vendor Codex wrapper can install plugins on first launch, which has
+# taken longer than 8 s; the bound only guards against a hung app-server.
+deadline = time.time() + 30
 while time.time() < deadline:
     ready, _, _ = select.select([proc.stdout, proc.stderr], [], [], 0.2)
     for stream in ready:
