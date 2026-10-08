@@ -21,6 +21,9 @@ import tomllib
 
 BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
+# Mirrors codex-rs `hook_event_key_label`. An event missing here is skipped,
+# and Codex silently never runs an untrusted handler, so every event Codex
+# accepts must be listed.
 EVENT_LABELS = {
     "PreToolUse": "pre_tool_use",
     "PermissionRequest": "permission_request",
@@ -30,9 +33,14 @@ EVENT_LABELS = {
     "SessionStart": "session_start",
     "SessionEnd": "session_end",
     "UserPromptSubmit": "user_prompt_submit",
+    "SubagentStart": "subagent_start",
+    "SubagentStop": "subagent_stop",
     "Stop": "stop",
+    "Interrupt": "interrupt",
 }
 
+# Events whose matcher is part of the trust identity (codex-rs
+# `matcher_pattern_for_event`); UserPromptSubmit, Stop, and Interrupt ignore it.
 MATCHER_EVENTS = {
     "PreToolUse",
     "PermissionRequest",
@@ -40,7 +48,29 @@ MATCHER_EVENTS = {
     "PreCompact",
     "PostCompact",
     "SessionStart",
+    "SessionEnd",
+    "SubagentStart",
+    "SubagentStop",
 }
+
+# Shutdown-path events get a short default and cap (codex-rs
+# `normalize_command_hook`); the hash uses the normalized timeout.
+SHORT_TIMEOUT_EVENTS = {"SessionEnd", "Interrupt"}
+SHORT_TIMEOUT_DEFAULT = 1
+SHORT_TIMEOUT_MAX = 3
+DEFAULT_TIMEOUT = 600
+
+# Only events that can emit additionalContext keep a spill limit in their
+# identity, and the default limit is dropped (codex-rs discovery, mirroring
+# DEFAULT_HOOK_OUTPUT_TOKEN_LIMIT).
+CONTEXT_LIMIT_EVENTS = {
+    "PreToolUse",
+    "PostToolUse",
+    "SessionStart",
+    "UserPromptSubmit",
+    "SubagentStart",
+}
+DEFAULT_CONTEXT_LIMIT = 2500
 
 
 def toml_key(name: str) -> str:
@@ -103,16 +133,33 @@ def emit_body(table: Mapping[str, Any], prefix: tuple[str, ...], lines: list[str
             emit_body(item, (*prefix, name), lines)
 
 
+def normalized_timeout(event_name: str, timeout: Any) -> int:
+    """Return the timeout Codex hashes for ``event_name``."""
+    if event_name in SHORT_TIMEOUT_EVENTS:
+        value = SHORT_TIMEOUT_DEFAULT if timeout is None else int(timeout)
+        return min(max(value, 1), SHORT_TIMEOUT_MAX)
+    return max(DEFAULT_TIMEOUT if timeout is None else int(timeout), 1)
+
+
 def command_hook_hash(event_name: str, matcher: str | None, hook: Mapping[str, Any]) -> str:
     """Return Codex's trusted hash for one command hook."""
     normalized_hook = {
         "type": "command",
         "command": hook["command"],
-        "timeout": max(int(hook.get("timeout", 600)), 1),
+        "timeout": normalized_timeout(event_name, hook.get("timeout")),
         "async": bool(hook.get("async", False)),
     }
+    # Codex hashes the platform-selected command with commandWindows cleared,
+    # so that field never enters the identity.
     if hook.get("statusMessage") is not None:
         normalized_hook["statusMessage"] = hook["statusMessage"]
+    limit = hook.get("additionalContextLimit")
+    if (
+        event_name in CONTEXT_LIMIT_EVENTS
+        and limit is not None
+        and int(limit) != DEFAULT_CONTEXT_LIMIT
+    ):
+        normalized_hook["additionalContextLimit"] = int(limit)
 
     identity: dict[str, Any] = {
         "event_name": EVENT_LABELS[event_name],
@@ -121,7 +168,11 @@ def command_hook_hash(event_name: str, matcher: str | None, hook: Mapping[str, A
     if matcher is not None:
         identity["matcher"] = matcher
 
-    payload = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    # serde_json writes raw UTF-8; Python's default \uXXXX escapes would hash
+    # any non-ASCII command, matcher, or status message differently.
+    payload = json.dumps(
+        identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
