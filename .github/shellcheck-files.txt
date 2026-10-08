@@ -45,6 +45,7 @@ program	home/.local/lib/dotfiles/merge-hooks.d/grok-config.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/grok.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gstack.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/codex/api.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/superpowers-muse-sync

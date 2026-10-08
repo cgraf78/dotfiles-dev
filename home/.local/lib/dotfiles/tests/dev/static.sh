@@ -275,9 +275,10 @@ root = pathlib.Path(sys.argv[1])
 errors = []
 
 config_root = root / ".config/dot/merge-hooks.d"
-# The base repository's profile-ownership-policy.tsv owns which merge-hook
-# namespaces belong to this overlay; keep this list in step with its rows.
-owned_dirs = [config_root / name for name in ("claude", "codex", "gemini", "muse", "opencode")]
+# The runtimes whose hook wiring AgentGuard ships. This is deliberately not the
+# base ownership policy's full dev merge-hook list: grok-config, for example,
+# legitimately names AGENTGUARD_NAME in a comment about Claude-compat hooks.
+owned_dirs = [config_root / name for name in ("claude", "codex", "gemini", "grok", "muse", "opencode")]
 for directory in owned_dirs:
     for path in directory.rglob("*"):
         if not path.is_file() or path.name == "README.md":

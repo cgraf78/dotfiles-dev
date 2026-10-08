@@ -458,11 +458,18 @@ _dr_tilde() { dot_doctor_display_path "$@"; }
 # Base returns this through REPLY; a stdout stub would hide callers that
 # use command substitution and silently get an empty directory.
 _dot_shdeps_conf_dir() { REPLY="$HOME/.config/shdeps"; }
-dot_agentguard_opencode_marker() { printf '%s\n' '// agentguard-managed:opencode-plugin'; }
 DOTFILES=${DOT_CLIENT_GIT_DIR:-$HOME/.dotfiles}
 _dr_is_dotfiles_checkout() { return 1; }
 EOF
 chmod 600 "$doctor_fixture_home/.local/lib/dotfiles/doctor.d/lib/compat.sh"
+# The agent-hook doctor loads the overlay's AgentGuard adapter from the merge
+# hook library, so the extension root needs that one shared module as well.
+mkdir -p "$doctor_fixture_home/.local/lib/dotfiles/merge-hooks.d/lib"
+chmod 700 "$doctor_fixture_home/.local/lib/dotfiles/merge-hooks.d" \
+  "$doctor_fixture_home/.local/lib/dotfiles/merge-hooks.d/lib"
+cp "$repo_root/home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh" \
+  "$doctor_fixture_home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh"
+chmod 600 "$doctor_fixture_home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh"
 export DOT_TEST_DOCTOR_EXTENSION_HOME=$doctor_fixture_home
 
 if git -C "$HOME" rev-parse --show-toplevel >/dev/null 2>&1; then

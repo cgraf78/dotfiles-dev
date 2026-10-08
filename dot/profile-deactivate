@@ -12,8 +12,16 @@ _DEV_PROFILE_STATE_ENGINE=$REPLY
 dot_retiring_overlay_file \
   home/.local/lib/dotfiles/merge-hooks.d/lib/codex/toml-render.py || return
 _DEV_PROFILE_STATE_TOML_RENDERER=$REPLY
+dot_retiring_overlay_file \
+  home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh || return
+_DEV_DEACTIVATE_AGENTGUARD_LIBRARY=$REPLY
 # shellcheck source=/dev/null
 . "$_DEV_DEACTIVATE_PROFILE_STATE_LIBRARY" ||
+  return
+# The OpenCode ownership marker lives with the rest of the dev-owned
+# AgentGuard adapter, which is no longer linked once the profile retires.
+# shellcheck source=/dev/null
+. "$_DEV_DEACTIVATE_AGENTGUARD_LIBRARY" ||
   return
 
 # Resolve provider assets against the retiring overlay's declaration set. By

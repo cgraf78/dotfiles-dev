@@ -97,6 +97,29 @@ dot_dev_merges_test() {
 
   echo "=== OpenCode AgentGuard merge hook ==="
 
+  echo "=== AgentGuard adapter ==="
+
+  # Every merge-hook test replaces the resolver after sourcing its hook, so
+  # pin the provider coordinates here against the real module.
+  agentguard_lib="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh"
+  agentguard_resolved=$(
+    # shellcheck source=/dev/null
+    . "$agentguard_lib"
+    # shellcheck disable=SC2329 # Invoked by the resolver under test.
+    dot_shdeps_dep_file() { printf '%s|%s|%s\n' "$#" "$1" "$2"; }
+    dot_agentguard_integration_file claude hooks.json
+  )
+  _assert_eq "AgentGuard resolver: maps agent and asset to dep coordinates" \
+    "2|cgraf78/agentguard|share/agentguard/integrations/claude/hooks.json" \
+    "$agentguard_resolved"
+  _assert_eq "AgentGuard marker: prints the cross-repository identity" \
+    "// agentguard-managed:opencode-plugin" \
+    "$(
+      # shellcheck source=/dev/null
+      . "$agentguard_lib"
+      dot_agentguard_opencode_marker
+    )"
+
   opencode_hook="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/opencode.sh"
   if [[ ! -r "$opencode_hook" ]]; then
     _fail "OpenCode merge: hook exists"

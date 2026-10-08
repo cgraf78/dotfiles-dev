@@ -98,9 +98,6 @@ dot_retiring_overlay_file() {
 }
 dot_hook_warn() { printf '%s\n' "$*" >&2; }
 _dot_tool_present() { command -v "$1" >/dev/null 2>&1; }
-dot_agentguard_opencode_marker() {
-  printf '%s\n' '// agentguard-managed:opencode-plugin'
-}
 dot_sibling_tmp_for() { REPLY=$(mktemp "$1.tmp.XXXXXX"); }
 dot_commit_tmp() { mv "$1" "$2"; }
 # shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.

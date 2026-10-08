@@ -145,31 +145,6 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_st
     . "$asset"
   }
 
-  # Resolve one of AgentGuard's native agent-integration assets.
-  #
-  # Keep the repository and provider layout behind this single boundary. Merge
-  # hooks should know only which runtime they activate and which native file type
-  # that runtime consumes; AgentGuard owns the event vocabulary, matchers,
-  # commands, and adapter implementation under the resolved directory. Besides
-  # keeping dotfiles thin, this makes normal shdeps rules (development-clone
-  # precedence, install roots, filters, and fleet updates) apply uniformly to
-  # every supported agent.
-  #
-  # Args: $1 = agent directory name, $2 = asset filename
-  # Prints: resolved dependency path on stdout
-  dot_agentguard_integration_file() {
-    local agent="$1" asset="$2"
-    dot_shdeps_dep_file \
-      cgraf78/agentguard \
-      "share/agentguard/integrations/$agent/$asset"
-  }
-
-  # Print the provider-owned first-line marker for AgentGuard's OpenCode adapter.
-  # The installer and doctor share this cross-repository identity rather than
-  # duplicating its literal at each consumer boundary.
-  dot_agentguard_opencode_marker() {
-    printf '%s\n' '// agentguard-managed:opencode-plugin'
-  }
   # shellcheck shell=bash
   # Shared Windows/WSL path discovery helpers.
   #
@@ -557,61 +532,16 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_st
     return 1
   }
 
-  _merge_hook_agentguard_json_layer() {
-    local label=$1 agent=$2 destination=$3
-    local source='' reconciler='' live=/dev/null temporary=''
-
-    source=$(dot_agentguard_integration_file "$agent" hooks.json 2>/dev/null) || source=''
-    reconciler=$(dot_agentguard_integration_file _shared reconcile-hooks.jq 2>/dev/null) ||
-      reconciler=''
-    if [[ ! -r $source || ! -r $reconciler ]]; then
-      dot_hook_warn "    warning: AgentGuard $agent integration unavailable — preserving $destination"
-      return 1
-    fi
-    if ! jq empty "$source" 2>/dev/null; then
-      dot_hook_warn "    warning: invalid AgentGuard $agent integration — preserving $destination"
-      return 1
-    fi
-    if [[ (-e $destination || -L $destination) && -s $destination ]] &&
-      jq empty "$destination" 2>/dev/null; then
-      live=$destination
-    elif [[ -e $destination || -L $destination ]]; then
-      dot_hook_warn "    warning: corrupt $destination — rebuilding"
-    fi
-
-    mkdir -p "${destination%/*}"
-    dot_sibling_tmp_for "$destination" || return 1
-    temporary=$REPLY
-    if ! jq -n --sort-keys --indent 2 \
-      --arg agent "$agent" \
-      --slurpfile d "$live" \
-      --slurpfile s "$source" \
-      -f "$reconciler" >"$temporary" ||
-      [[ ! -s $temporary ]] || ! jq empty "$temporary" 2>/dev/null; then
-      dot_hook_warn "    warning: AgentGuard $label reconciliation failed — preserving $destination"
-      rm -f "$temporary"
-      return 1
-    fi
-    if [[ ! -L $destination ]] && cmp -s "$temporary" "$destination" 2>/dev/null; then
-      rm -f "$temporary"
-      return 0
-    fi
-    dot_commit_tmp "$temporary" "$destination" || {
-      rm -f "$temporary"
-      return 1
-    }
-  }
-
   # Hooks source the same base-owned compatibility layer after this standalone
   # fixture has installed its equivalent functions. The dev-owned reversible
-  # state helper is sourced from this checkout; all other extension lookup
-  # still belongs to the public Dot API.
+  # state and AgentGuard helpers are sourced from this checkout; all other
+  # extension lookup still belongs to the public Dot API.
   dot_hook_source() {
     case ${1:-} in
       merge-hooks.d/lib/compat.sh) return 0 ;;
-      merge-hooks.d/lib/profile-state.sh)
+      merge-hooks.d/lib/profile-state.sh | merge-hooks.d/lib/agentguard.sh)
         # shellcheck source=/dev/null
-        . "$DOT_EXTENSIONS_DIR/merge-hooks.d/lib/profile-state.sh"
+        . "$DOT_EXTENSIONS_DIR/$1"
         ;;
       *) return 1 ;;
     esac

@@ -28,7 +28,7 @@ dot_dev_doctor_test() {
   local installed_section fixture_health=false owner_root source_doctor host_doctor
   local grok_compat_path reg_home reg_bin reg_path reg_count python_bin hook
   local hooks_home nvim_dev_home module_path
-  local registration_def real_nvim nvim_head marker_def
+  local registration_def real_nvim nvim_head
   local nvim_home nvim_calls started real_home real_bin real_tmp git_log
   local before_snapshot
   local permissive_home no_pre_home no_stop_home multiline_home _checkout_def
@@ -78,6 +78,11 @@ dot_dev_doctor_test() {
     for path in "$source_doctor"/lib/*.sh; do
       cp "$path" "$extension_home/.local/lib/dotfiles/doctor.d/lib/${path##*/}"
     done
+    # The agent-hook checks share the overlay's AgentGuard adapter with the
+    # merge hooks rather than vendoring its marker into doctor.d.
+    mkdir -p "$extension_home/.local/lib/dotfiles/merge-hooks.d/lib"
+    cp "$owner_root/home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh" \
+      "$extension_home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh"
   fi
 
   _test_load_dot_doctor_api "$extension_home" || {
@@ -466,13 +471,6 @@ PLUGIN
     $'warn\tOpenCode AgentGuard plugin unmanaged' "$result"
   rm "$reg_home/.config/opencode/plugins/dotfiles-agentguard.js"
   mv "$reg_home/plugin.js" "$reg_home/.config/opencode/plugins/dotfiles-agentguard.js"
-  marker_def=$(declare -f dot_agentguard_opencode_marker || true)
-  unset -f dot_agentguard_opencode_marker
-  result=$(_reg_records)
-  [[ -z $marker_def ]] || eval "$marker_def"
-  _assert_contains 'Registration table says so when base lacks the plugin marker helper' \
-    $'warn\tOpenCode AgentGuard plugin unchecked\tbase lacks dot_agentguard_opencode_marker' \
-    "$result"
   rm -f "$reg_bin/opencode"
 
   printf '#!/usr/bin/env bash\nexit 0\n' >"$doctor_bin/grok"

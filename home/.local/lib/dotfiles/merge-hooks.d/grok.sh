@@ -1,5 +1,6 @@
 # shellcheck shell=bash
 dot_hook_source merge-hooks.d/lib/compat.sh || return
+dot_hook_source merge-hooks.d/lib/agentguard.sh || return
 
 # shellcheck shell=bash
 # Install AgentGuard's provider-owned Grok hooks fragment.
