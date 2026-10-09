@@ -64,6 +64,7 @@ EOF
   printf 'validator=%s\n' "${SLEY_COMMIT_MESSAGE_VALIDATOR:-}"
   printf 'template=%s\n' "${SLEY_COMMIT_MESSAGE_TEMPLATE:-}"
   printf 'format=%s\n' "${COMMIT_MSG_FORMAT:-}"
+  printf 'strict=%s\n' "${COMMIT_MSG_STRICT:-}"
   printf 'skip-untracked=%s\n' "${SLEY_SKIP_UNTRACKED:-}"
   printf 'args'
   printf ' <%s>' "$@"
@@ -316,14 +317,197 @@ _assert_contains "missing validator still dispatches Sley's generic hook" \
 _assert_contains "missing validator does not select a stale provider" \
   "validator=" "$(cat "$provider_log")"
 
-: >"$provider_log"
-: >"$cli_log"
-GITHOOK_COMMITMSG_SKIP=1 \
-  DOT_SLEY_ROOT="$provider_root" \
-  "$HOOK_DIR/commit-msg" "$message_file"
+echo
+echo "=== Agent commit-message policy ==="
+
+# The hooks ask AgentGuard (through the base shdeps helper) whether an agent is
+# driving. A fixture HOME supplies a stand-in API controlled by
+# TEST_AGENT_SESSION so these cases are independent of whichever agent or
+# human runs the suite.
+agent_home="$test_root/agent-home"
+mkdir -p "$agent_home/.local/lib/dotfiles"
+cat >"$agent_home/agentguard.sh" <<'EOF'
+agentguard_is_session() { [ "${TEST_AGENT_SESSION:-0}" = 1 ]; }
+EOF
+cat >"$agent_home/.local/lib/dotfiles/shdeps-assets.sh" <<'EOF'
+dot_shdeps_dep_source() {
+  [ "$1" = cgraf78/agentguard ] && [ "$2" = lib/agentguard/agentguard.sh ] || return 1
+  . "$HOME/agentguard.sh"
+}
+EOF
+
+# _policy_repo NAME [ORIGIN_URL]: an empty repository with an optional origin.
+_policy_repo() {
+  local repo="$test_root/repos/$1"
+  git init -q "$repo"
+  [[ -z ${2:-} ]] || git -C "$repo" remote add origin "$2"
+  printf '%s\n' "$repo"
+}
+
+owned_repo=$(_policy_repo owned https://github.com/cgraf78/example.git)
+alias_repo=$(_policy_repo alias github-dotfiles-work:cgraf78/dotfiles-work.git)
+upper_repo=$(_policy_repo upper git@github.com:CGraf78/Example.git)
+third_repo=$(_policy_repo third https://github.com/neovim/neovim.git)
+lookalike_repo=$(_policy_repo lookalike https://github.com/cgraf78x/example.git)
+no_origin_repo=$(_policy_repo no-origin)
+
+# _run_commit_msg REPO AGENT [ENV...]: run commit-msg from REPO with the
+# fixture AgentGuard; sets commit_rc and commit_err.
+_run_commit_msg() {
+  local repo="$1" agent="$2"
+  shift 2
+  : >"$provider_log"
+  : >"$cli_log"
+  commit_err=$(
+    cd "$repo" &&
+      env -u COMMIT_MSG_STRICT -u COMMIT_MSG_SKIP -u GITHOOK_COMMITMSG_SKIP \
+        HOME="$agent_home" TEST_AGENT_SESSION="$agent" \
+        DOT_SLEY_ROOT="$provider_root" "$@" \
+        "$HOOK_DIR/commit-msg" "$message_file" 2>&1 >/dev/null
+  )
+  commit_rc=$?
+}
+
+_run_commit_msg "$owned_repo" 1
+_assert_exit "agent in owner repo: activation succeeds" 0 "$commit_rc"
+_assert_contains "agent in owner repo: strict policy forced" \
+  "strict=1" "$(cat "$provider_log")"
+
+_run_commit_msg "$owned_repo" 1 COMMIT_MSG_STRICT=0
+_assert_contains "agent in owner repo: COMMIT_MSG_STRICT=0 cannot relax policy" \
+  "strict=1" "$(cat "$provider_log")"
+
+for repo in "$alias_repo" "$upper_repo"; do
+  _run_commit_msg "$repo" 1
+  _assert_contains "agent in owner repo: strict via $(git -C "$repo" remote get-url origin)" \
+    "strict=1" "$(cat "$provider_log")"
+done
+
+_run_commit_msg "$owned_repo" 0
+_assert_exit "human in owner repo: activation succeeds" 0 "$commit_rc"
+_assert_contains "human in owner repo: advisory policy kept" \
+  "strict=" "$(cat "$provider_log")"
+_assert_not_contains "human in owner repo: strict not forced" \
+  "strict=1" "$(cat "$provider_log")"
+
+_run_commit_msg "$owned_repo" 0 COMMIT_MSG_STRICT=1
+_assert_contains "human in owner repo: explicit COMMIT_MSG_STRICT=1 honored" \
+  "strict=1" "$(cat "$provider_log")"
+
+fork_msg_repo=$(_policy_repo fork-msg https://github.com/cgraf78/aravis.git)
+git -C "$fork_msg_repo" remote add upstream https://github.com/AravisProject/aravis.git
+for repo in "$third_repo" "$lookalike_repo" "$no_origin_repo" "$fork_msg_repo"; do
+  _run_commit_msg "$repo" 1
+  _assert_exit "agent in third-party repo ${repo##*/}: activation succeeds" 0 "$commit_rc"
+  _assert_not_contains "agent in third-party repo ${repo##*/}: advisory policy kept" \
+    "strict=1" "$(cat "$provider_log")"
+done
+
+for knob in GITHOOK_COMMITMSG_SKIP COMMIT_MSG_SKIP; do
+  for repo in "$owned_repo" "$third_repo"; do
+    _run_commit_msg "$repo" 1 "$knob=1"
+    _assert_exit "agent $knob in ${repo##*/} repo: refused" 1 "$commit_rc"
+    _assert_contains "agent $knob in ${repo##*/} repo: names the refused knob" \
+      "not allowed in agent sessions" "$commit_err"
+    _assert_file_content "agent $knob in ${repo##*/} repo: provider not reached" \
+      "" "$provider_log"
+  done
+done
+
+_run_commit_msg "$owned_repo" 0 GITHOOK_COMMITMSG_SKIP=1
+_assert_exit "human GITHOOK_COMMITMSG_SKIP: exit 0" 0 "$commit_rc"
 _assert_file_content "commit-msg skip bypasses provider activation" \
   "" "$provider_log"
 _assert_file_content "commit-msg skip bypasses the provider CLI" \
   "" "$cli_log"
+
+# COMMIT_MSG_SKIP only skips structure: the hook still dispatches so Sley's
+# independent secret scan runs.
+_run_commit_msg "$owned_repo" 0 COMMIT_MSG_SKIP=1
+_assert_exit "human COMMIT_MSG_SKIP: exit 0" 0 "$commit_rc"
+_assert_contains "human COMMIT_MSG_SKIP: provider still dispatched" \
+  "hook=commit-msg" "$(cat "$provider_log")"
+
+# A broken AgentGuard install degrades to the human policy with a warning.
+: >"$provider_log"
+commit_err=$(
+  cd "$owned_repo" &&
+    env -u COMMIT_MSG_STRICT HOME="$test_root/no-helper-home" \
+      DOT_SLEY_ROOT="$provider_root" \
+      "$HOOK_DIR/commit-msg" "$message_file" 2>&1 >/dev/null
+)
+commit_rc=$?
+_assert_exit "missing AgentGuard: commit-msg still succeeds" 0 "$commit_rc"
+_assert_contains "missing AgentGuard: warning names the dependency" \
+  "AgentGuard is unavailable" "$commit_err"
+_assert_not_contains "missing AgentGuard: advisory policy kept" \
+  "strict=1" "$(cat "$provider_log")"
+
+echo
+echo "=== Remote ownership parsing ==="
+
+# shellcheck source=../git-hooks/policy.sh
+. "$HOOK_DIR/policy.sh"
+while IFS='|' read -r url expected; do
+  actual=$(_githook_remote_repo "$url") || actual='<none>'
+  _assert_eq "remote repo of '$url'" "$expected" "$actual"
+done <<'EOF'
+https://github.com/cgraf78/dotfiles.git|cgraf78/dotfiles
+https://github.com/cgraf78/dotfiles|cgraf78/dotfiles
+https://github.com/cgraf78/dotfiles/|cgraf78/dotfiles
+ssh://git@github.com/cgraf78/shdeps.git|cgraf78/shdeps
+ssh://git@github.com:22/cgraf78/shdeps.git|cgraf78/shdeps
+git@github.com:CGraf78/Sley.git|cgraf78/sley
+github-dotfiles-work:cgraf78/dotfiles-work.git|cgraf78/dotfiles-work
+https://gitlab.example.com/group/sub/project.git|<none>
+/tmp/cgraf78/remote.git|<none>
+./cgraf78/remote.git|<none>
+../remote.git|<none>
+file:///tmp/cgraf78/remote.git|<none>
+dir/cgraf78:remote.git|<none>
+https://github.com|<none>
+|<none>
+git@github.com:/cgraf78/x.git|cgraf78/x
+ssh://git@github.com//cgraf78/x|cgraf78/x
+https://github.com//cgraf78/x.git|cgraf78/x
+https://github.com/cgraf78//x.git//|cgraf78/x
+https://github.com/cgraf78/./zz|cgraf78/zz
+https://github.com/x/../cgraf78/zz|cgraf78/zz
+https://github.com/../cgraf78/zz|cgraf78/zz
+EOF
+
+echo
+echo "=== AgentGuard detection contract ==="
+
+# The policy relies on AgentGuard seeing agent identity in the environment
+# Git hooks inherit from agent tool shells. Check the real API when the host
+# has it: Claude exports CLAUDE_CODE_SESSION_ID, Codex AGENT=codex (plus
+# CODEX_THREAD_ID), and Muse AGENT=muse to their tool subprocesses.
+host_assets="${DOT_TEST_HOST_HOME:-$HOME}/.local/lib/dotfiles/shdeps-assets.sh"
+real_api=''
+if [[ -r $host_assets ]]; then
+  real_api=$(
+    # shellcheck source=/dev/null # host-installed base helper.
+    . "$host_assets" 2>/dev/null &&
+      dot_shdeps_dep_file cgraf78/agentguard lib/agentguard/agentguard.sh 2>/dev/null
+  ) || real_api=''
+fi
+if [[ -z $real_api || ! -r $real_api ]]; then
+  echo "  SKIP: AgentGuard is not installed on this host"
+else
+  _detect() {
+    # shellcheck disable=SC2016 # expanded by the child shell.
+    env -i PATH="$PATH" HOME="$HOME" AGENTGUARD_PROCESS_DETECT=0 "$@" \
+      bash -c '. "$1"; agentguard_is_session' _ "$real_api"
+  }
+  _detect CLAUDE_CODE_SESSION_ID=s
+  _assert_exit "AgentGuard detects Claude tool shells" 0 "$?"
+  _detect AGENT=codex
+  _assert_exit "AgentGuard detects Codex tool shells" 0 "$?"
+  _detect AGENT=muse MUSE_SESSION_ID=s
+  _assert_exit "AgentGuard detects Muse tool shells" 0 "$?"
+  _detect
+  _assert_exit "AgentGuard reports a plain human shell" 1 "$?"
+fi
 
 _test_summary

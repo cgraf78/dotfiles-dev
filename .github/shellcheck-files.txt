@@ -31,6 +31,7 @@ program	home/.local/lib/dotfiles/doctor.d/lib/dev-integrations.sh
 program	home/.local/lib/dotfiles/doctor.d/lib/hive-memory.sh
 program	home/.local/lib/dotfiles/doctor.d/lib/nvim-dev.sh
 program	home/.local/lib/dotfiles/git-hooks/commit-msg
+program	home/.local/lib/dotfiles/git-hooks/policy.sh
 program	home/.local/lib/dotfiles/git-hooks/pre-applypatch
 program	home/.local/lib/dotfiles/git-hooks/pre-commit
 program	home/.local/lib/dotfiles/git-hooks/pre-merge-commit

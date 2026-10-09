@@ -74,26 +74,39 @@ done
 
 if [ -n "$file" ]; then
   [ ! -f "$file" ] && exit 0
-  # Git's default comment marker is `#`, while this repository's conventional
-  # commit sections are Markdown headings such as `## Summary`. Template
-  # comments use exactly one leading marker, so remove those without erasing
-  # the two-or-more-marker headings that are part of the actual message.
-  msg=$(grep -vE '^#([^#]|$)' <"$file")
+  # Git's default comment marker is `#`. Template comments use exactly one
+  # leading marker, so remove those without erasing two-or-more-marker
+  # Markdown headings, which the section policy must still see (and flag).
+  # Everything below the scissors line is the `commit -v` diff, not message:
+  # checking it would report diff lines (and a README's `## Testing`) as
+  # message findings and cost a pass over the whole diff.
+  msg=$(awk '/^# -+ >8 -+$/ { exit } !/^#([^#]|$)/' <"$file")
 else
   msg=$(cat)
 fi
 
-# Strip trailing blank lines (awk for BSD sed portability)
+# Strip leading and trailing blank lines, as Git's cleanup does, so the title
+# is the first line Git will record (awk for BSD sed portability)
 msg=$(printf '%s\n' "$msg" | awk '
   { lines[NR] = $0 }
-  /[^[:space:]]/ { last = NR }
-  END { for (i = 1; i <= last; i++) print lines[i] }
+  /[^[:space:]]/ { if (!first) first = NR; last = NR }
+  END { for (i = first; first && i <= last; i++) print lines[i] }
 ')
 [ -z "$msg" ] && exit 0
 
 title=${msg%%$'\n'*}
 title=${title#"${title%%[![:space:]]*}"}
 line_count=$(printf '%s\n' "$msg" | wc -l | tr -d ' ')
+
+# Section lookups read a copy whose fenced code lines (markers included) are
+# replaced by a neutral `.`: a quoted `Testing` inside a code block must not
+# satisfy the real section, while a code block still counts as content and
+# line numbers stay aligned with the message.
+sections_msg=$(printf '%s\n' "$msg" | awk '
+  /^[[:space:]]*(```|~~~)/ { fence = !fence; print "."; next }
+  fence { print "."; next }
+  { print }
+')
 
 # ── Diagnostics ───────────────────────────────────────────────────────
 
@@ -141,9 +154,17 @@ fi
 # comments; plain and colon-style headers remain supported for compatibility.
 _section_prefix_re='[[:space:]]*(#{2,6}[[:space:]]+)?'
 _section_suffix_re='(:|[[:space:]]*$)'
+# Bash has no scoped case-insensitive regex operator, so spell the known
+# names with portable bracket pairs rather than changing a process-wide
+# `nocasematch` setting. The name is BASH_REMATCH[2] after a match.
+_known_section_re="^${_section_prefix_re}("
+_known_section_re+='[Ss][Uu][Mm][Mm][Aa][Rr][Yy]|'
+_known_section_re+='[Tt][Ee][Ss][Tt][Ii][Nn][Gg]|'
+_known_section_re+='[Tt][Ee][Ss][Tt][[:space:]]+[Pp][Ll][Aa][Nn]'
+_known_section_re+=")${_section_suffix_re}"
 
 if [ -z "$format" ]; then
-  if printf '%s\n' "$msg" |
+  if printf '%s\n' "$sections_msg" |
     grep -qiE "^${_section_prefix_re}Test Plan${_section_suffix_re}"; then
     format=sl
   else
@@ -154,10 +175,13 @@ fi
 _check_section() {
   local name="$1"
 
+  # Search below the title so a title that happens to be a bare section
+  # name cannot satisfy its own section.
   local hline
-  hline=$(printf '%s\n' "$msg" |
+  hline=$(printf '%s\n' "$sections_msg" | tail -n +2 |
     grep -niE "^${_section_prefix_re}${name}${_section_suffix_re}" |
     head -1 | cut -d: -f1)
+  [ -n "$hline" ] && hline=$((hline + 1))
 
   if [ -z "$hline" ]; then
     _check "missing '${name}' section"
@@ -166,7 +190,7 @@ _check_section() {
 
   # Inline content on the header line (e.g., "Summary: content here")
   local inline
-  inline=$(printf '%s\n' "$msg" | sed -n "${hline}p" | sed -E 's/^[[:space:]]*[^:]+:?[[:space:]]*//')
+  inline=$(printf '%s\n' "$sections_msg" | sed -n "${hline}p" | sed -E 's/^[[:space:]]*[^:]+:?[[:space:]]*//')
   if [ -n "$inline" ]; then
     if printf '%s\n' "$inline" | grep -qiE '^(TODO|TBD|FIXME|N/?A)[[:space:]]*$'; then
       _check "'${name}' is a placeholder"
@@ -175,17 +199,10 @@ _check_section() {
   fi
 
   # Content on subsequent lines. Stop at known section headers
-  # or metadata lines. Bash has no scoped case-insensitive regex operator, so
-  # spell the known names with portable bracket pairs rather than changing a
-  # process-wide `nocasematch` setting.
-  local content='' known_section_re
-  known_section_re="^${_section_prefix_re}("
-  known_section_re+='[Ss][Uu][Mm][Mm][Aa][Rr][Yy]|'
-  known_section_re+='[Tt][Ee][Ss][Tt][Ii][Nn][Gg]|'
-  known_section_re+='[Tt][Ee][Ss][Tt][[:space:]]+[Pp][Ll][Aa][Nn]'
-  known_section_re+=")${_section_suffix_re}"
+  # or metadata lines.
+  local content=''
   while IFS= read -r _line; do
-    if [[ "$_line" =~ $known_section_re ]]; then
+    if [[ "$_line" =~ $_known_section_re ]]; then
       break
     fi
     case "$_line" in
@@ -194,7 +211,7 @@ _check_section() {
     [[ "$_line" =~ ^[[:space:]]*$ ]] && continue
     content="$_line"
     break
-  done < <(printf '%s\n' "$msg" | tail -n +"$((hline + 1))" | head -10)
+  done < <(printf '%s\n' "$sections_msg" | tail -n +"$((hline + 1))" | head -10)
 
   if [ -z "$content" ]; then
     _check "'${name}' section is empty"
@@ -218,6 +235,178 @@ else
       ;;
   esac
 fi
+
+# ── Section layout ───────────────────────────────────────────────────
+
+# _section_key LINE PREVIOUS PREVIOUS_WAS_HEADER
+#   Set _key to the canonical name of a section header, or return 1. Layout
+#   rules need a stricter notion of "header" than the content lookup above,
+#   so wrapped prose that happens to begin with "testing: ..." is not
+#   mistaken for a misplaced section: a header starts in column 0, and an
+#   inline `name: text` field counts after prose only when spelled exactly
+#   (`Summary:`). A Markdown heading is never prose, wherever it sits.
+#   Assigns instead of printing so the per-line scan needs no subshell.
+_section_key() {
+  local name markdown_re='^ {0,3}#{2,6}[[:space:]]'
+  [[ "$1" =~ $_known_section_re ]] || return 1
+  name=${BASH_REMATCH[2]}
+  if ! [[ "$1" =~ $markdown_re ]]; then
+    [[ "$1" =~ ^[^[:space:]] ]] || return 1
+    if [[ "$1" =~ :[[:space:]]*[^[:space:]] ]] && [[ "$2" =~ [^[:space:]] ]] &&
+      [ "$3" != 1 ]; then
+      case "$name" in
+        Summary | Testing | 'Test Plan') ;;
+        *) return 1 ;;
+      esac
+    fi
+  fi
+  case "$name" in
+    [Ss]*) _key=Summary ;;
+    [Tt][Ee][Ss][Tt][Ii]*) _key=Testing ;;
+    *) _key='Test Plan' ;;
+  esac
+}
+
+# Section headers appear in the documented order and, for Git, are plain
+# text after a blank line. Markdown headings (`## Summary`) are accepted by
+# the section lookup above for compatibility, but the Git format forbids
+# them; flag them here so strict mode rejects them and humans see a warning.
+# Sapling keeps accepting Markdown subheadings and adjacent Phabricator-style
+# fields (`Summary: ...` directly followed by `Test Plan: ...`), which jf
+# parses.
+_check_layout() {
+  local n=0 prev='' line _key summary_at=0 second_at=0 second_name
+  local header=0 in_fence=0 fence_re='^[[:space:]]*(```|~~~)'
+  case "$format" in
+    sl) second_name='Test Plan' ;;
+    *) second_name='Testing' ;;
+  esac
+  while IFS= read -r line; do
+    n=$((n + 1))
+    # Code blocks may quote anything, including a bare `Testing` line.
+    if [[ "$line" =~ $fence_re ]]; then
+      in_fence=$((1 - in_fence))
+    fi
+    if [ "$in_fence" -eq 1 ] || [[ "$line" =~ $fence_re ]]; then
+      prev=$line
+      header=0
+      continue
+    fi
+    if [ "$n" -gt 1 ] && _section_key "$line" "$prev" "$header"; then
+      header=1
+      # Sapling summaries are Phabricator Markdown, where `## Testing` is a
+      # legitimate subheading; only Git's plain-text format forbids it.
+      [ "$format" != sl ] && [[ "$line" =~ ^\ {0,3}# ]] &&
+        _check "'${_key}' header must be plain text, without a '#' prefix"
+      [ "$format" != sl ] && [ "$n" -gt 2 ] && [[ "$prev" =~ [^[:space:]] ]] &&
+        _check "missing blank line before '${_key}' section"
+      if [ "$_key" = Summary ] && [ "$summary_at" -eq 0 ]; then
+        summary_at=$n
+      elif [ "$_key" = "$second_name" ] && [ "$second_at" -eq 0 ]; then
+        second_at=$n
+      fi
+    else
+      header=0
+    fi
+    prev=$line
+  done < <(printf '%s\n' "$msg")
+  if [ "$summary_at" -gt 0 ] && [ "$second_at" -gt 0 ] &&
+    [ "$second_at" -lt "$summary_at" ]; then
+    _check "'Summary' section must come before '${second_name}'"
+  fi
+}
+_check_layout
+
+# ── Body wrapping (git only) ─────────────────────────────────────────
+
+# _columns TEXT
+#   Set _cols to the display width of TEXT in characters, not bytes: dropping
+#   UTF-8 continuation bytes in the C locale counts an em dash once regardless
+#   of the caller's locale. Assigns instead of printing so long bodies need no
+#   subshell per line or word.
+_columns() {
+  local LC_ALL=C s="$1"
+  s=${s//[$'\x80'-$'\xbf']/}
+  _cols=${#s}
+}
+
+# _code_span_crosses LINE
+#   Return 0 when a backtick code span in LINE straddles column 72, so the
+#   line cannot be wrapped there without moving the whole span.
+_code_span_crosses() {
+  local rest="$1" pre pos=0 open close
+  while [[ "$rest" == *'`'*'`'* ]]; do
+    pre=${rest%%\`*}
+    open=$((pos + ${#pre}))
+    rest=${rest#*\`}
+    pre=${rest%%\`*}
+    close=$((open + 1 + ${#pre}))
+    rest=${rest#*\`}
+    [ "$open" -lt 72 ] && [ "$close" -ge 72 ] && return 0
+    pos=$((close + 1))
+  done
+  return 1
+}
+
+# Git bodies are hard-wrapped at ~72 columns; Sapling messages back
+# Phabricator fields, whose paragraphs stay unwrapped. Lines that wrapping
+# cannot fix are exempt: URLs, fenced or indented code, `*-by:` trailers,
+# and lines holding a single word that overflows the limit on its own.
+# The rule says "~72", and hand-wrapped messages routinely land a column or
+# few over, so 73-80 columns (or a code span straddling column 72) only
+# warn; strict mode rejects lines past 80 columns.
+_check_wrap() {
+  local n=0 line _cols cols in_fence=0 word indent long_word
+  local soft='' soft_count=0 hard='' hard_count=0
+  local fence_re='^[[:space:]]*(```|~~~)' trailer_re='^[A-Za-z-]+-[Bb]y:[[:space:]]'
+  local -a words
+  while IFS= read -r line; do
+    n=$((n + 1))
+    [ "$n" -le 2 ] && continue
+    if [[ "$line" =~ $fence_re ]]; then
+      in_fence=$((1 - in_fence))
+      continue
+    fi
+    [ "$in_fence" -eq 1 ] && continue
+    # Byte length bounds the column count from above, so short lines skip
+    # the column count.
+    [ "${#line}" -le 72 ] && continue
+    _columns "$line"
+    cols=$_cols
+    [ "$cols" -le 72 ] && continue
+    case "$line" in
+      *://* | '    '* | $'\t'*) continue ;;
+    esac
+    [[ "$line" =~ $trailer_re ]] && continue
+    indent=${line%%[![:space:]]*}
+    long_word=0
+    read -r -a words <<<"$line"
+    # Bash before 4.4 treats an empty array as unset under `set -u`.
+    for word in ${words[@]+"${words[@]}"}; do
+      [ $((${#word} + ${#indent})) -gt 72 ] || continue
+      _columns "$word"
+      if [ $((_cols + ${#indent})) -gt 72 ]; then
+        long_word=1
+        break
+      fi
+    done
+    [ "$long_word" -eq 1 ] && continue
+    if [ "$cols" -le 80 ] || _code_span_crosses "$line"; then
+      soft_count=$((soft_count + 1))
+      [ "$soft_count" -le 3 ] && soft="${soft:+$soft, }$n ($cols)"
+    else
+      hard_count=$((hard_count + 1))
+      [ "$hard_count" -le 3 ] && hard="${hard:+$hard, }$n ($cols)"
+    fi
+  done < <(printf '%s\n' "$msg")
+  [ "$soft_count" -gt 3 ] && soft="$soft, and $((soft_count - 3)) more"
+  [ "$hard_count" -gt 3 ] && hard="$hard, and $((hard_count - 3)) more"
+  [ "$soft_count" -gt 0 ] &&
+    _warn "body exceeds 72 columns on line(s) $soft; consider wrapping"
+  [ "$hard_count" -gt 0 ] &&
+    _check "body exceeds 80 columns on line(s) $hard; wrap the text at ~72"
+}
+[ "$format" = sl ] || _check_wrap
 
 # ── Result ────────────────────────────────────────────────────────────
 

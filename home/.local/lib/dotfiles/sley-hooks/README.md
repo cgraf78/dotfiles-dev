@@ -11,6 +11,18 @@ message-file path; dotfiles selects the applicable profile through
 user's required sections while allowing every supported SCM integration to use
 the same Sley orchestration.
 
+Strict mode (`--strict` or `COMMIT_MSG_STRICT=1`) turns every structural
+finding into an error: missing or placeholder sections, sections out of
+order, and, for Git, Markdown (`##`) section headers, a missing blank line
+before a section, or body text past 80 columns. Lines of 73-80 columns, or
+whose code span straddles column 72, only warn, since the rule is "~72".
+URLs, code, trailers, and single words too long to wrap are exempt from the
+width check, and the
+`commit -v` diff below Git's scissors line is never checked. Sapling messages
+back Phabricator Markdown fields, so their paragraphs stay unwrapped, their
+headings stay legal, and adjacent `Summary:`/`Test Plan:` fields remain
+valid. Without strict mode the same findings are warnings.
+
 The validator retains stdin, `--file`, `--format`, and `--strict` inputs for
 focused policy tests and compatible internal callers. Hook integrations should
 route through `sley hook validate-message --validator ...` instead of invoking
