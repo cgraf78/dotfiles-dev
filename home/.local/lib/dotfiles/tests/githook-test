@@ -320,6 +320,13 @@ _assert_contains "missing validator does not select a stale provider" \
 echo
 echo "=== Agent commit-message policy ==="
 
+# The policy keys on each fixture repository's origin URL. Read them exactly
+# as written here: a caller's global or system Git config can rewrite URLs
+# with `insteadOf` (the composed profile fixture maps the work overlay's
+# github-dotfiles-work alias to a missing file:// origin), and the rewritten
+# URL would no longer name the owner.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
 # The hooks ask AgentGuard (through the base shdeps helper) whether an agent is
 # driving. A fixture HOME supplies a stand-in API controlled by
 # TEST_AGENT_SESSION so these cases are independent of whichever agent or
