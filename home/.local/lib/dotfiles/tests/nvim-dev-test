@@ -503,19 +503,41 @@ output=$(DOT_TEST_WORKSPACE_CALLBACK_ROOT="$workspace_callback_root" _nvim_lua '
 _assert_eq 'Workspace callback prefers markers, consumes Sley, and fails closed' \
   'workspace-callbacks-ok' "$output"
 
+# lazy.nvim keeps one `init` per plugin, so an `init` here would replace the
+# editor overlay's nvim-workspace init and drop its Ctrl-click mapping.
 output=$(_nvim_lua '
-  local registered
+  local spec = dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))[1]
+  print("init=" .. tostring(spec.init))
+  print("config=" .. tostring(spec.config))
+')
+_assert_eq 'Workspace dev spec leaves the editor init and config in place' \
+  $'init=nil\nconfig=nil' "$output"
+
+output=$(_nvim_lua '
+  local registered = {}
   local scheduled = false
   vim.api.nvim_create_autocmd = function(event, opts)
     assert(event == "User" and opts.pattern == "VeryLazy")
-    registered = opts.callback
+    table.insert(registered, opts.callback)
   end
   vim.schedule = function(fn) scheduled = true; fn() end
   package.loaded["config.keymaps.workspace-dev"] = { setup = function() print("setup") end }
-  dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))[1].init()
-  registered()
+  dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))
+  print("hooks=" .. #registered)
+  registered[1]()
   print("scheduled=" .. tostring(scheduled))
 ')
-_assert_eq 'Workspace init schedules its dev keymap callback after VeryLazy' \
-  $'setup\nscheduled=true' "$output"
+_assert_eq 'Workspace dev spec import schedules its keymap callback after VeryLazy' \
+  $'hooks=1\nsetup\nscheduled=true' "$output"
+
+# Re-importing the spec (lazy reload) must replace the hook, not stack a copy.
+output=$(_nvim_lua '
+  package.loaded["config.keymaps.workspace-dev"] = { setup = function() print("setup") end }
+  local path = vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua")
+  dofile(path)
+  dofile(path)
+  vim.schedule = function(fn) fn() end
+  vim.api.nvim_exec_autocmds("User", { pattern = "VeryLazy" })
+')
+_assert_eq 'Workspace dev spec re-import keeps a single keymap hook' 'setup' "$output"
 _test_summary
