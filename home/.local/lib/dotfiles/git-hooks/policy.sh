@@ -110,12 +110,15 @@ _githook_fork() {
 #   Return 0 when the current repository's origin is owned by
 #   $_GITHOOK_OWNER and the repository is not a fork. Repositories without an
 #   origin are treated as third-party: there is no ownership signal to act on.
-#   `git remote get-url` applies insteadOf rewrites, so an alias cannot hide
-#   the owner.
+#   Either spelling of the URL counts: `git remote get-url` applies insteadOf
+#   rewrites, so an alias cannot hide the owner, and the configured URL is
+#   checked too, so a rewrite to a local mirror cannot hide it either.
 _githook_owned_origin() {
   local url
   url=$(git remote get-url origin 2>/dev/null) || return 1
-  _githook_owned_url "$url" && ! _githook_fork
+  { _githook_owned_url "$url" ||
+    _githook_owned_url "$(git config --get remote.origin.url)"; } &&
+    ! _githook_fork
 }
 
 # _githook_agent_session
