@@ -23,6 +23,26 @@ jobs:
       test-command: test/run
       termux-command: test/run --termux
 
+  installed-profiles:
+    name: Installed profiles
+    # This overlay's own suites run without base or dotfiles-nvim installed.
+    # The base gate installs this pull request's revision into the dev home
+    # and runs its `dot test`, so a change that is only wrong once composed
+    # fails before it lands. It tracks base main on purpose: hosts run base
+    # main, so that is the combination to test.
+    uses: cgraf78/dotfiles/.github/workflows/installed-profiles.yml@main # zizmor: ignore[unpinned-uses]
+    with:
+      dev-revision: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Only the dev home installs this overlay; the base and editor homes
+      # never clone it, and the size budgets are base's.
+      profiles: dev
+      footprint: false
+      # The upgrade/downgrade lifecycle, `dot doctor`, and the cross-repository
+      # ownership and composition checks all install this overlay's content,
+      # but base CI only runs them with this overlay at main.
+      lifecycle: true
+      stack: true
+
   provider-compatibility:
     name: Current provider compatibility
     runs-on: ubuntu-24.04
