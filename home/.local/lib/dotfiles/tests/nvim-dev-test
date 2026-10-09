@@ -275,7 +275,6 @@ output=$(PATH="$workspace_bin:$PATH" DOT_TEST_WORKSPACE="$workspace_tmp" _nvim_l
   local spec = dofile(spec_path)[1]
   local opts = {}
   spec.opts(nil, opts)
-  assert(opts.workspace.repo_root_detector(vim.env.DOT_TEST_WORKSPACE .. "/project") == vim.env.DOT_TEST_WORKSPACE .. "/project")
   local ctx = {
     default_root = vim.env.HOME,
     relative_to_default_root = function(path)
@@ -482,11 +481,23 @@ workspace_callback_root=$(_tmpdir)
 mkdir -p "$workspace_callback_root/project/.git" "$workspace_callback_root/outside"
 output=$(DOT_TEST_WORKSPACE_CALLBACK_ROOT="$workspace_callback_root" _nvim_lua '
   local spec = dofile(vim.fn.expand("~/.config/nvim/lua/dotfiles/plugin_overrides/workspace-dev.lua"))[1]
-  local opts = {}
-  spec.opts(nil, opts)
   local root = vim.env.DOT_TEST_WORKSPACE_CALLBACK_ROOT
-  assert(opts.workspace.repo_root_detector(root .. "/project") == root .. "/project")
+  -- The editor layer supplies the marker detector; dev extends it with Sley.
+  local marker_calls = {}
+  local opts = {
+    workspace = {
+      repo_root_detector = function(cwd, detector_opts)
+        table.insert(marker_calls, detector_opts)
+        if cwd == root .. "/project" then return root .. "/project" end
+      end,
+    },
+  }
+  spec.opts(nil, opts)
   local old_system = vim.system
+  vim.system = function() error("Sley must not run when the marker detector finds a root") end
+  local passed = { marker_root = root .. "/project" }
+  assert(opts.workspace.repo_root_detector(root .. "/project", passed) == root .. "/project")
+  assert(marker_calls[1] == passed)
   vim.fn.executable = function(command) return command == "sley" and 1 or 0 end
   vim.system = function(command, options)
     assert(table.concat(command, " ") == "sley status --json")
@@ -497,10 +508,17 @@ output=$(DOT_TEST_WORKSPACE_CALLBACK_ROOT="$workspace_callback_root" _nvim_lua '
   assert(opts.workspace.repo_root_detector(root .. "/outside") == root)
   vim.system = function() error("sley failure") end
   assert(opts.workspace.repo_root_detector(root .. "/outside") == nil)
+  -- Without an editor detector to extend, Sley is the only source.
+  local bare = {}
+  spec.opts(nil, bare)
+  vim.system = function()
+    return { wait = function() return { code = 0, stdout = vim.json.encode({ root = root }) } end }
+  end
+  assert(bare.workspace.repo_root_detector(root .. "/project") == root)
   vim.system = old_system
   print("workspace-callbacks-ok")
 ')
-_assert_eq 'Workspace callback prefers markers, consumes Sley, and fails closed' \
+_assert_eq 'Workspace callback extends the editor detector, consumes Sley, and fails closed' \
   'workspace-callbacks-ok' "$output"
 
 # lazy.nvim keeps one `init` per plugin, so an `init` here would replace the
