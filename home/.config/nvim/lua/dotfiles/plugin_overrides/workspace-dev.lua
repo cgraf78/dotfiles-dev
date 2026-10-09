@@ -1,4 +1,3 @@
-local vcs_markers = { ".git", ".hg", ".jj", ".svn" }
 local vcs_root_env = {
   DOT_GIT_REAL = "1",
   SLEY_SKIP_BARE_REPO_FALLBACK = "1",
@@ -18,30 +17,9 @@ local function contains(root, path)
   return path == root or path:sub(1, #root + 1) == root .. "/"
 end
 
-local function marker_root(cwd)
-  local marker = vim.fs.find(vcs_markers, { path = cwd, upward = true, limit = 1 })[1]
-  if marker then
-    local root = normalize_dir(vim.fs.dirname(marker))
-    if root ~= home() then
-      return root
-    end
-  end
-end
-
-local function option_marker_root(opts)
-  if type(opts) == "table" and type(opts.marker_root) == "string" and opts.marker_root ~= "" then
-    local root = normalize_dir(opts.marker_root)
-    if root ~= home() then
-      return root
-    end
-  end
-end
-
-local function sley_root(cwd, opts)
-  local fast_root = option_marker_root(opts) or marker_root(cwd)
-  if fast_root then
-    return fast_root
-  end
+-- Fallback for directories the editor's marker detector cannot place. Paths
+-- under HOME are never sent to Sley.
+local function sley_root(cwd)
   if contains(home(), cwd) or vim.fn.executable("sley") ~= 1 then
     return nil
   end
@@ -119,8 +97,12 @@ return {
     "cgraf78/nvim-workspace",
     opts = function(_, opts)
       opts.workspace = opts.workspace or {}
+      -- Extend the editor's marker-based detector instead of copying it, so
+      -- its VCS marker list and HOME rules stay single-sourced. Sley is only
+      -- the fallback for directories that detector cannot place.
+      local marker_detector = opts.workspace.repo_root_detector
       opts.workspace.repo_root_detector = function(cwd, detector_opts)
-        return sley_root(cwd, detector_opts)
+        return (marker_detector and marker_detector(cwd, detector_opts)) or sley_root(cwd)
       end
       opts.lazygit = opts.lazygit or {}
       opts.lazygit.opts_for_path = dotfiles_lazygit_opts
