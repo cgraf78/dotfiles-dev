@@ -20,7 +20,7 @@ development toolchains and checks, public agent tooling, VS Code policy, and
 additive development Neovim modules. Public agent rules and
 `agent-rules-sync` remain in the base `dotfiles` repository; this overlay adds
 only the rule and playbook fragments for tools it owns, such as Hive Memory,
-gstack, and Checkrun.
+gstack, Checkrun, and git-tools (its landing and worktree cleanup recipe).
 
 The tracked overlay payload is roughly 5 MiB. A clean cumulative `dev` profile
 is expected to use about 2.5–4.5 GiB after its declared tools are installed;
