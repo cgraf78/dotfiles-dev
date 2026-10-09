@@ -106,6 +106,45 @@ dot_dev_static_test() {
   check_contains 'gstack roster includes Muse' \
     .config/dot/merge-hooks.d/gstack/README.md Muse
 
+  # Agent rules for dev-owned tools ride with the tools, so hosts without
+  # this overlay never load guidance for commands they do not have. Base
+  # agent-rules-sync validates the composed set; these pin the contracts.
+  local hm_rule=.config/agent-rules/rules.d/015-hive-memory.md
+  local hm_playbook=.config/agent-rules/playbooks.d/hive-memory/hygiene.md
+  local checkrun_playbook=.config/agent-rules/playbooks.d/checkrun/schema-associations.md
+  check_contains 'Hive Memory rule declares its ID' "$hm_rule" \
+    '<!-- agent-rule-id: dev-hive-memory-policy -->'
+  check_contains 'Hive Memory rule uses the hm command' "$hm_rule" \
+    "Hive Memory is available through the \`hm\` command"
+  check_contains 'Hive Memory rule requires project-aware writes' "$hm_rule" \
+    "pass \`--project <file-or-repo-path>\`"
+  check_contains 'Hive Memory rule handles pending reminders' "$hm_rule" \
+    'If a prompt or hook reminder says memory is pending'
+  check_contains 'Hive Memory rule forbids secrets' "$hm_rule" \
+    'Do not store secrets or sensitive credentials'
+  check_contains 'Hive Memory rule routes to its hygiene playbook' "$hm_rule" \
+    '/.config/agent-rules/playbooks.d/hive-memory/hygiene.md'
+  check_contains 'Hive Memory hygiene declares its ID' "$hm_playbook" \
+    '<!-- agent-rule-id: dev-hive-memory-hygiene -->'
+  check_contains 'Hive Memory hygiene has a routed trigger' "$hm_playbook" \
+    '<!-- agent-rule-trigger: Writing, correcting, superseding, reconciling, retagging, scoping, troubleshooting, or auditing durable memory and its retrieval health -->'
+  check_contains 'Hive Memory corrections supersede stale facts' "$hm_playbook" \
+    'hm remember --supersedes <id>'
+  check_contains 'Hive Memory metadata uses supported commands' "$hm_playbook" \
+    'hand-edit stored records because'
+  check_contains 'Hive Memory health separates retrieval dimensions' "$hm_playbook" \
+    'Separate store reachability'
+  check_contains 'gstack rule declares its ID' .config/agent-rules/rules.d/025-gstack.md \
+    '<!-- agent-rule-id: dev-gstack-checkout -->'
+  check_contains 'gstack rule names the checkout' .config/agent-rules/rules.d/025-gstack.md \
+    '/.local/share/garrytan/gstack'
+  check_contains 'Checkrun schema playbook declares its ID' "$checkrun_playbook" \
+    '<!-- agent-rule-id: dev-checkrun-schema-associations -->'
+  check_contains 'Checkrun schema playbook has a routed trigger' "$checkrun_playbook" \
+    '<!-- agent-rule-trigger: Editing structured dotfiles config -->'
+  check_contains 'Checkrun schema playbook names the association policy' \
+    "$checkrun_playbook" '/.config/checkrun/associations.json'
+
   shell_fixture=$(_tmpdir)
   shell_bin=$shell_fixture/.local/bin
   mkdir -p "$shell_bin" "$shell_fixture/.config/gh" "$shell_fixture/.dotfiles"
@@ -435,7 +474,18 @@ PY
     pass=$((pass + 1))
   fi
 
-  if [[ -e $root/.config/agent-rules ||
+  # Dev may add rule and playbook fragments for its own tools, but the rule
+  # sources' documentation, target selection, and provider stay in base.
+  local agent_rules_extra
+  agent_rules_extra=$(
+    if [[ -d $root/.config/agent-rules ]]; then
+      find "$root/.config/agent-rules" ! -type d \
+        ! -path "$root/.config/agent-rules/rules.d/*.md" \
+        ! -path "$root/.config/agent-rules/playbooks.d/*/*.md"
+    fi
+  )
+  if [[ -n $agent_rules_extra ||
+    -e $root/.config/dot/merge-hooks.d/agent-rules ||
     -e $root/.local/lib/dotfiles/agent-rules-sync.sh ]] ||
     grep -F 'cgraf78/agent-rules-sync' "$root/.config/shdeps/30-dev.conf" >/dev/null 2>&1; then
     printf 'FAIL: base agent rules or agent-rules-sync leaked into dev\n' >&2

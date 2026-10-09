@@ -25,8 +25,10 @@ dot_dev_launchers_test() {
     fi
   done
 
-  _assert_file_missing 'base agent rules remain outside dev' \
-    "$root/.config/agent-rules"
+  # Dev ships rule fragments for its own tools; the sources README and the
+  # rest of the agent-rules machinery stay in base.
+  _assert_file_missing 'base agent-rules sources README remains outside dev' \
+    "$root/.config/agent-rules/README.md"
   _assert_file_missing 'base agent-rules-sync implementation remains outside dev' \
     "$root/.local/lib/dotfiles/agent-rules-sync.sh"
   echo "=== hm launcher ==="
