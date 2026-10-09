@@ -112,6 +112,7 @@ dot_dev_static_test() {
   local hm_rule=.config/agent-rules/rules.d/015-hive-memory.md
   local hm_playbook=.config/agent-rules/playbooks.d/hive-memory/hygiene.md
   local checkrun_playbook=.config/agent-rules/playbooks.d/checkrun/schema-associations.md
+  local git_tools_playbook=.config/agent-rules/playbooks.d/git-tools/cleanup.md
   check_contains 'Hive Memory rule declares its ID' "$hm_rule" \
     '<!-- agent-rule-id: dev-hive-memory-policy -->'
   check_contains 'Hive Memory rule uses the hm command' "$hm_rule" \
@@ -144,6 +145,18 @@ dot_dev_static_test() {
     '<!-- agent-rule-trigger: Editing structured dotfiles config -->'
   check_contains 'Checkrun schema playbook names the association policy' \
     "$checkrun_playbook" '/.config/checkrun/associations.json'
+  check_contains 'git-tools cleanup playbook declares its ID' "$git_tools_playbook" \
+    '<!-- agent-rule-id: dev-git-tools-cleanup -->'
+  check_contains 'git-tools cleanup playbook has a routed trigger' "$git_tools_playbook" \
+    '<!-- agent-rule-trigger: Landing a GitHub pull request or removing its merged branch and completed worktree -->'
+  check_contains 'git-tools cleanup scopes removal with --worktree' "$git_tools_playbook" \
+    "\`git cleanup-repo --no-update-base --worktree <worktree> --min-age 1\`"
+  check_contains 'git-tools cleanup forbids --remove-worktrees' "$git_tools_playbook" \
+    "Never pass \`--remove-worktrees\`, alone or with \`--worktree\`"
+  check_contains 'git-tools landing names the core.worktree refusal' \
+    "$git_tools_playbook" "\`core.worktree\`, such as the base dotfiles checkout of \`\$HOME\`"
+  check_contains 'git-tools cleanup reports kept worktrees instead of forcing' \
+    "$git_tools_playbook" 'instead of forcing'
 
   shell_fixture=$(_tmpdir)
   shell_bin=$shell_fixture/.local/bin
