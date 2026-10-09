@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.145.1 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.148.3 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.145.1",
+  "x-renovate-version": "44.148.3",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -8648,8 +8648,7 @@
       "default": {},
       "additionalProperties": {
         "type": "string"
-      },
-      "$ref": "#"
+      }
     },
     "registryUrlTemplate": {
       "description": "Optional registry URL for extracted dependencies. Valid only within a `customManagers` object.\nSee also: https://docs.renovatebot.com/configuration-options/#custommanagersregistryurltemplate",
