@@ -99,19 +99,24 @@ local function dotfiles_lazygit_opts(path, ctx)
   }
 end
 
+-- lazy.nvim keeps only one `init` per plugin, so an `init` on this spec would
+-- replace the editor overlay's nvim-workspace init and drop the mappings it
+-- installs. Register the dev keymap hook when the spec is imported instead.
+-- The cleared augroup keeps a spec re-import from stacking duplicate hooks.
+-- VeryLazy plus schedule runs after LazyVim's default <leader>gg mapping.
+vim.api.nvim_create_autocmd("User", {
+  group = vim.api.nvim_create_augroup("dotfiles_workspace_dev_keymaps", { clear = true }),
+  pattern = "VeryLazy",
+  callback = function()
+    vim.schedule(function()
+      require("config.keymaps.workspace-dev").setup()
+    end)
+  end,
+})
+
 return {
   {
     "cgraf78/nvim-workspace",
-    init = function()
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "VeryLazy",
-        callback = function()
-          vim.schedule(function()
-            require("config.keymaps.workspace-dev").setup()
-          end)
-        end,
-      })
-    end,
     opts = function(_, opts)
       opts.workspace = opts.workspace or {}
       opts.workspace.repo_root_detector = function(cwd, detector_opts)
