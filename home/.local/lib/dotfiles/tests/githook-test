@@ -377,9 +377,17 @@ _run_commit_msg "$owned_repo" 1 COMMIT_MSG_STRICT=0
 _assert_contains "agent in owner repo: COMMIT_MSG_STRICT=0 cannot relax policy" \
   "strict=1" "$(cat "$provider_log")"
 
+# A rewrite to a local mirror must not hide the owner of the configured URL.
+mirror_msg_repo=$(_policy_repo mirror-msg https://github.com/cgraf78/mirrored.git)
+git -C "$mirror_msg_repo" config "url.file://$test_root/mirrors/mirrored.git.insteadOf" \
+  https://github.com/cgraf78/mirrored.git
+_run_commit_msg "$mirror_msg_repo" 1
+_assert_contains "agent in owner repo: strict when origin is rewritten to a local mirror" \
+  "strict=1" "$(cat "$provider_log")"
+
 for repo in "$alias_repo" "$upper_repo"; do
   _run_commit_msg "$repo" 1
-  _assert_contains "agent in owner repo: strict via $(git -C "$repo" remote get-url origin)" \
+  _assert_contains "agent in owner repo: strict via $(git -C "$repo" config --get remote.origin.url)" \
     "strict=1" "$(cat "$provider_log")"
 done
 
