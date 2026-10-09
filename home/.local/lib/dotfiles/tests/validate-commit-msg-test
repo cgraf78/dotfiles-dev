@@ -19,8 +19,13 @@ SOURCE_HOME=$OWNER_ROOT/home
 VALIDATOR="$SOURCE_HOME/.local/lib/dotfiles/sley-hooks/validate-commit-msg"
 # Exercise the hook selected by the tracked Git configuration rather than a
 # second test-owned path. A storage-only refactor must preserve this behavior.
+# Expand its `~` against the checkout under test; the live HOME would select
+# the installed hooks instead of the ones being changed. Expand by hand: a
+# fixture HOME would make the dotfiles Git launcher write caches into the
+# checkout.
 HOOK_DIR=$(git config --file "$SOURCE_HOME/.config/git/config" \
-  --path --get core.hooksPath)
+  --get core.hooksPath)
+HOOK_DIR=${HOOK_DIR/#\~/$SOURCE_HOME}
 COMMIT_MSG_HOOK="$HOOK_DIR/commit-msg"
 DOT_SLEY_ROOT=${DOT_TEST_SLEY_ROOT:-}
 if [[ -z $DOT_SLEY_ROOT ]]; then
@@ -228,7 +233,10 @@ _assert_exit "valid sl message: exit 0" 0 "$__VAL_RC"
 
 echo "=== Validator: Markdown section headings ==="
 
-_validate "$(
+# The documented format uses plain headers. Markdown headings still satisfy
+# the section lookup, so humans only see a warning, but strict mode (agents
+# in owner repositories, Sapling agent commits) rejects them.
+markdown_git_message=$(
   cat <<'EOF'
 Fix the Git integration
 
@@ -240,8 +248,20 @@ Fix the Git integration
 
 - ran the focused suite
 EOF
-)" --format git --strict
-_assert_exit "Markdown git headings: exit 0" 0 "$__VAL_RC"
+)
+_validate "$markdown_git_message" --format git --strict
+_assert_exit "Markdown git headings (strict): blocked" 1 "$__VAL_RC"
+_assert_contains "Markdown git headings (strict): Summary prefix named" \
+  "'Summary' header must be plain text" "$__VAL_OUT"
+_assert_contains "Markdown git headings (strict): Testing prefix named" \
+  "'Testing' header must be plain text" "$__VAL_OUT"
+_assert_not_contains "Markdown git headings (strict): sections still found" \
+  "missing" "$__VAL_OUT"
+
+_validate "$markdown_git_message" --format git
+_assert_exit "Markdown git headings (non-strict): warn only" 0 "$__VAL_RC"
+_assert_contains "Markdown git headings (non-strict): warning shown" \
+  "'Summary' header must be plain text" "$__VAL_OUT"
 
 _validate "$(
   cat <<'EOF'
@@ -256,7 +276,9 @@ Fix the Sapling integration
 - ran the focused suite
 EOF
 )" --format sl --strict
-_assert_exit "Markdown sl headings: exit 0" 0 "$__VAL_RC"
+# Sapling messages back Phabricator Markdown, where headings are legitimate.
+_assert_exit "Markdown sl headings (strict): exit 0" 0 "$__VAL_RC"
+_assert_eq "Markdown sl headings (strict): no findings" "" "$__VAL_OUT"
 
 # Format inference must recognize the rendered Test Plan heading too. Without
 # this check, the validator can parse the heading but still choose Git policy
@@ -273,8 +295,10 @@ Fix automatic format detection
 
 - ran the focused suite
 EOF
-)" --strict
+)"
 _assert_exit "Markdown Test Plan auto-detection: exit 0" 0 "$__VAL_RC"
+_assert_not_contains "Markdown Test Plan auto-detection: no Testing required" \
+  "missing 'Testing'" "$__VAL_OUT"
 
 # A prose heading that merely starts with the same words is not the Sapling
 # section. Keep Git format inference exact so unrelated notes cannot make a
@@ -283,11 +307,11 @@ _validate "$(
   cat <<'EOF'
 Fix automatic format detection
 
-## Summary
+Summary
 
 - keep section matching exact
 
-## Testing
+Testing
 
 - ran the focused suite
 
@@ -297,6 +321,147 @@ Fix automatic format detection
 EOF
 )" --strict
 _assert_exit "Markdown Test Planning prose keeps Git format" 0 "$__VAL_RC"
+
+echo "=== Validator: section layout ==="
+
+_validate "$(printf 'Fix it\n\nTesting\n- ran it\n\nSummary\n- did it\n')" --format git --strict
+_assert_exit "sections out of order (strict): blocked" 1 "$__VAL_RC"
+_assert_contains "sections out of order: reported" \
+  "'Summary' section must come before 'Testing'" "$__VAL_OUT"
+
+_validate "$(printf 'Fix it\n\nTesting\n- ran it\n\nSummary\n- did it\n')" --format git
+_assert_exit "sections out of order (non-strict): warn only" 0 "$__VAL_RC"
+
+_validate "$(printf 'Fix it\n\nSummary\n- did it\nTesting\n- ran it\n')" --format git --strict
+_assert_exit "no blank line before Testing (strict): blocked" 1 "$__VAL_RC"
+_assert_contains "no blank line before Testing: reported" \
+  "missing blank line before 'Testing' section" "$__VAL_OUT"
+
+# Phabricator-style adjacent fields remain valid Sapling messages.
+_validate "$(printf 'Fix it\n\nSummary: did it\nTest Plan: ran it\n')" --format sl --strict
+_assert_exit "adjacent sl fields (strict): exit 0" 0 "$__VAL_RC"
+
+_validate "$(printf 'Testing\n\nSummary\n- did it\n')" --format git --strict
+_assert_exit "title named like a section does not satisfy it" 1 "$__VAL_RC"
+_assert_contains "title named like a section: Testing still missing" \
+  "missing 'Testing' section" "$__VAL_OUT"
+
+# Wrapped prose may begin with a section word and a colon; only a column-0
+# header (inline `Name: text` only after a blank line) is a section.
+_validate "$(printf 'Fix it\n\nSummary\n\n- explain the change; the old harness\ntesting: was flaky, and the\nsummary: line was wrong\n\nTesting\n\n- ran it\n')" \
+  --format git --strict
+_assert_exit "prose starting with a section word: exit 0" 0 "$__VAL_RC"
+_assert_eq "prose starting with a section word: no findings" "" "$__VAL_OUT"
+
+_validate "$(printf 'Fix it\n\nSummary\n\n- did it\n\n## Testing\n\n- ran it\n')" --format git --strict
+_assert_exit "git Markdown header after a blank line (strict): blocked" 1 "$__VAL_RC"
+
+_validate "$(printf 'Fix it\n\nSummary: did it\n\n## Details\n\nTest Plan: ran it\n')" --format sl --strict
+_assert_exit "sl Markdown subheading (strict): exit 0" 0 "$__VAL_RC"
+
+# Markdown headings are headers wherever they sit, and an exactly spelled
+# inline field after prose or another field is still a section.
+for layout_case in \
+  'Fix it\n\n  ## Summary\n\n- did it\n\n  ## Testing\n\n- ran it\n|header must be plain text' \
+  'Fix it\n\nSummary\n\n- did it\n## Testing: ran it\n|header must be plain text' \
+  'Fix it\n\nSummary: did things\nTesting: ran it\n|missing blank line before' \
+  'Fix it\n\nTesting\n\nfoo\nSummary: x\n|must come before'; do
+  _validate "$(printf '%b' "${layout_case%|*}")" --format git --strict
+  _assert_exit "layout violation is caught: ${layout_case##*|}" 1 "$__VAL_RC"
+  _assert_contains "layout violation is reported: ${layout_case##*|}" \
+    "${layout_case##*|}" "$__VAL_OUT"
+done
+
+# shellcheck disable=SC2016 # literal Markdown fence.
+_validate "$(printf 'Fix it\n\nSummary\n\n- quote:\n\n```\nfoo\nTesting\n```\n\nTesting\n\n- ran it\n')" \
+  --format git --strict
+_assert_exit "section word inside a code fence: exit 0" 0 "$__VAL_RC"
+_assert_eq "section word inside a code fence: no findings" "" "$__VAL_OUT"
+
+# A section quoted in a code fence does not stand in for the real one.
+# shellcheck disable=SC2016 # literal Markdown fence.
+_validate "$(printf 'Fix it\n\nSummary\n\n- quote:\n\n```\nTesting\n```\n')" --format git --strict
+_assert_exit "section only inside a code fence (strict): blocked" 1 "$__VAL_RC"
+_assert_contains "section only inside a code fence: reported missing" \
+  "missing 'Testing' section" "$__VAL_OUT"
+
+# shellcheck disable=SC2016 # literal Markdown fence.
+_validate "$(printf 'Fix it\n\nSummary\n\n- did it\n\nTesting\n\n```\nmake test\n```\n')" --format git --strict
+_assert_exit "section whose content is a code fence: exit 0" 0 "$__VAL_RC"
+
+# An indented code block may quote a Markdown heading.
+_validate "$(printf 'Fix it\n\nSummary\n\n- add a README section:\n\n    ## Testing\n\n    Run it.\n\nTesting\n\n- ran it\n')" \
+  --format git --strict
+_assert_exit "Markdown heading in an indented code block: exit 0" 0 "$__VAL_RC"
+_assert_eq "Markdown heading in an indented code block: no findings" "" "$__VAL_OUT"
+
+# Git drops leading blank lines, so the first non-blank line is the title.
+_validate "$(printf '\n  \nFix it\n\nSummary\n\n- did it\n\nTesting\n\n- ran it\n')" --format git --strict
+_assert_exit "leading blank lines before the title: exit 0" 0 "$__VAL_RC"
+
+echo "=== Validator: body wrapping ==="
+
+_wrap_message() {
+  printf 'Fix it\n\nSummary\n\n%s\n\nTesting\n\n- ran it\n' "$1"
+}
+long_prose='- this sentence keeps going and going until it is well beyond the limits.'
+
+very_long_prose='- this sentence keeps going and going and going until it is well beyond eighty cols'
+
+# "~72": a line a few columns over warns even in strict mode; past 80 it is
+# rejected.
+_validate "$(_wrap_message "$long_prose")" --format git --strict
+_assert_exit "73-column line (strict): warn only" 0 "$__VAL_RC"
+_assert_contains "73-column line: line and width reported" \
+  "line(s) 5 (73); consider wrapping" "$__VAL_OUT"
+
+_validate "$(_wrap_message '- this sentence keeps going and going and going until it stops at column eighty.')" \
+  --format git --strict
+_assert_exit "80-column line (strict): warn only" 0 "$__VAL_RC"
+
+_validate "$(_wrap_message "$very_long_prose")" --format git --strict
+_assert_exit "81-column line (strict): blocked" 1 "$__VAL_RC"
+_assert_contains "81-column line: hard limit reported" \
+  "exceeds 80 columns on line(s) 5 (${#very_long_prose})" "$__VAL_OUT"
+
+# shellcheck disable=SC2016 # literal Markdown code span.
+_validate "$(_wrap_message '  everything passes except `native_doctor_term_reaps_every_parallel_extension`')" \
+  --format git --strict
+_assert_exit "code span straddling column 72 (strict): warn only" 0 "$__VAL_RC"
+_assert_contains "code span straddling column 72: warned" "consider wrapping" "$__VAL_OUT"
+
+_validate "$(_wrap_message "$long_prose")" --format git
+_assert_exit "unwrapped line (non-strict): warn only" 0 "$__VAL_RC"
+_assert_contains "unwrapped line (non-strict): warned" "exceeds 72 columns" "$__VAL_OUT"
+
+# Sapling messages back Phabricator fields, whose paragraphs stay unwrapped.
+_validate "$(printf 'Fix it\n\nSummary:\n%s\n\nTest Plan:\n- ran it\n' "$long_prose")" \
+  --format sl --strict
+_assert_exit "unwrapped line in sl format: allowed" 0 "$__VAL_RC"
+
+_validate "$(_wrap_message "$(printf '%s\n' "$very_long_prose" "$very_long_prose" "$very_long_prose" "$very_long_prose")")" \
+  --format git --strict
+_assert_contains "many unwrapped lines: summarized" "and 1 more" "$__VAL_OUT"
+
+_validate "$(_wrap_message "$(printf '%0.s—' {1..72})")" --format git --strict
+_assert_exit "72 multibyte characters fit" 0 "$__VAL_RC"
+
+# A whitespace-only overlong line must not crash on Bash 3.2's empty-array
+# handling under `set -u`.
+_validate "$(_wrap_message "$(printf -- '- did it\n  %s' "$(printf '%0.s ' {1..80})")")" \
+  --format git --strict
+_assert_exit "whitespace-only long line: no crash" 0 "$__VAL_RC"
+
+# shellcheck disable=SC2016 # backticks are literal Markdown code spans.
+for exempt in \
+  '- see https://example.com/a/long/path/that/keeps/going/and/going/forever' \
+  '    indented code that is long enough to pass the seventy-two column limit' \
+  'Co-authored-by: Somebody With A Long Name <somebody.with.a.long.name@example.com>' \
+  '- `home/.local/lib/dotfiles/some/really/long/path/to/a/deeply/nested/source.sh`' \
+  "$(printf '```\n%s\n```' "$long_prose")"; do
+  _validate "$(_wrap_message "$exempt")" --format git --strict
+  _assert_exit "unwrappable line exempt: ${exempt:0:24}" 0 "$__VAL_RC"
+done
 
 echo "=== Validator: inline section content ==="
 
@@ -467,6 +632,7 @@ commit-msg: title ends with a period
 commit-msg: missing blank line after title
 commit-msg: 'Summary' is a placeholder
 commit-msg: 'Testing' is a placeholder
+commit-msg: missing blank line before 'Testing' section
 EOF
 )" "$__VAL_OUT"
 
@@ -579,9 +745,29 @@ Fix `something` in the codebase
 - ran the test
 EOF
 
-__VAL_OUT=$("$VALIDATOR" --format git --strict --file "$tmpf" 2>&1)
+__VAL_OUT=$("$VALIDATOR" --format git --file "$tmpf" 2>&1)
 __VAL_RC=$?
 _assert_exit "--file mode: preserves Markdown headings" 0 "$__VAL_RC"
+_assert_contains "--file mode: Markdown heading reaches section policy" \
+  "'Summary' header must be plain text" "$__VAL_OUT"
+_assert_not_contains "--file mode: Markdown sections are found" \
+  "missing" "$__VAL_OUT"
+
+# `git commit -v` appends the diff below a scissors line; it is not message
+# text, so neither its long lines nor a README's `## Testing` count.
+tmpf=$(_tmpdir)/verbose-msg.txt
+{
+  printf 'Fix it\n\nSummary\n\n- did it\n\nTesting\n\n- ran it\n'
+  printf '# ------------------------ >8 ------------------------\n'
+  printf '# Do not modify or remove the line above.\n'
+  printf 'diff --git a/README.md b/README.md\n'
+  printf ' ## Testing\n'
+  printf '+%s\n' "$(printf '%0.sx ' {1..60})"
+} >"$tmpf"
+__VAL_OUT=$("$VALIDATOR" --format git --strict --file "$tmpf" 2>&1)
+__VAL_RC=$?
+_assert_exit "--file mode: verbose diff below scissors ignored" 0 "$__VAL_RC"
+_assert_eq "--file mode: verbose diff produces no findings" "" "$__VAL_OUT"
 
 # Make comment removal observable: if this one-marker template line survives,
 # the parser would mistake it for Summary content and let the empty section
@@ -1206,6 +1392,107 @@ EOF
 )" env COMMIT_MSG_STRICT=1
 _assert_exit "strict via env: missing sections blocks" 1 "$__COMMIT_RC"
 _assert_contains "strict via env: reports Summary" "Summary" "$__COMMIT_OUT"
+
+# ===========================================================================
+# Git hook: agent sessions in owner repositories
+# ===========================================================================
+
+echo "=== Git hook: agent strictness ==="
+
+# A fixture HOME stands in for the AgentGuard API the hook resolves through
+# the base shdeps helper, so the result does not depend on who runs the suite.
+agent_home=$(_tmpdir)
+mkdir -p "$agent_home/.local/lib/dotfiles"
+cat >"$agent_home/.local/lib/dotfiles/shdeps-assets.sh" <<'EOF'
+dot_shdeps_dep_source() {
+  agentguard_is_session() { [ "${TEST_AGENT_SESSION:-0}" = 1 ]; }
+}
+EOF
+
+# _agent_commit REPO AGENT MESSAGE: commit a fresh change from REPO.
+_agent_commit() {
+  local repo="$1" agent="$2" msg="$3"
+  echo "$RANDOM" >>"$repo/change.txt"
+  (cd "$repo" && git add change.txt)
+  _commit "$repo" "$msg" env HOME="$agent_home" TEST_AGENT_SESSION="$agent"
+}
+
+owned_repo=$(_new_repo)
+git -C "$owned_repo" remote add origin https://github.com/cgraf78/example.git
+third_repo=$(_new_repo)
+git -C "$third_repo" remote add origin https://github.com/neovim/neovim.git
+
+_agent_commit "$owned_repo" 1 "Fix something"
+_assert_exit "agent owner repo: title-only commit blocked" 1 "$__COMMIT_RC"
+_assert_contains "agent owner repo: title-only reports Summary" \
+  "missing 'Summary'" "$__COMMIT_OUT"
+
+_agent_commit "$owned_repo" 0 "Fix something"
+_assert_exit "human owner repo: title-only commit allowed" 0 "$__COMMIT_RC"
+
+_agent_commit "$third_repo" 1 "Fix something"
+_assert_exit "agent third-party repo: title-only commit allowed" 0 "$__COMMIT_RC"
+
+markdown_message=$(
+  cat <<'EOF'
+Fix something
+
+## Summary
+
+- change the thing
+
+## Testing
+
+- ran the suite
+EOF
+)
+_agent_commit "$owned_repo" 1 "$markdown_message"
+_assert_exit "agent owner repo: Markdown headers blocked" 1 "$__COMMIT_RC"
+_agent_commit "$owned_repo" 0 "$markdown_message"
+_assert_exit "human owner repo: Markdown headers warn only" 0 "$__COMMIT_RC"
+_assert_contains "human owner repo: Markdown headers warned" \
+  "header must be plain text" "$__COMMIT_OUT"
+
+_agent_commit "$owned_repo" 1 "$(
+  cat <<'EOF'
+Fix something
+
+Summary
+
+- change the thing so that this explanation runs well past the wrap column limit of
+  the message body
+
+Testing
+
+- ran the suite
+EOF
+)"
+_assert_exit "agent owner repo: unwrapped body blocked" 1 "$__COMMIT_RC"
+_assert_contains "agent owner repo: unwrapped body reported" \
+  "exceeds 80 columns" "$__COMMIT_OUT"
+
+_agent_commit "$owned_repo" 1 "$(
+  cat <<'EOF'
+Fix `something`
+
+Summary
+
+- change the thing, see
+  https://github.com/cgraf78/example/blob/main/a/very/long/path/to/a/file.sh
+
+Testing
+
+- ran the suite
+EOF
+)"
+_assert_exit "agent owner repo: conforming message allowed" 0 "$__COMMIT_RC"
+
+for skip_title in 'fixup! Fix something' 'squash! Fix something' \
+  'amend! Fix something' 'Merge branch '\''topic'\''' 'Revert "Fix something"'; do
+  _agent_commit "$owned_repo" 1 "$skip_title"
+  _assert_exit "agent owner repo: '${skip_title%% *}' commit skips validation" \
+    0 "$__COMMIT_RC"
+done
 
 # ===========================================================================
 # Summary

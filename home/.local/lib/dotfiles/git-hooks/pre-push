@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# pre-push — refuse direct pushes to an owner repository's main branch.
+#
+# Changes to the owner's GitHub repositories land through pull requests, so a
+# push that updates or deletes refs/heads/main or refs/heads/master on one of
+# them is refused, from any shell. Exceptions:
+#   - the private overlays listed in _push_main_allowed, whose scripted
+#     fast-forward pushes to main are the intended workflow;
+#   - creating main on a remote that has none (a new repository's first push);
+#   - forks: a repository whose `upstream` remote belongs to someone else
+#     syncs its main from that project;
+#   - GIT_ALLOW_PUSH_MAIN=1 from a human. Agent sessions cannot use it, and
+#     no refusal message spells it out.
+# Tags, feature branches, local-path remotes (test fixtures), and repositories
+# owned by anyone else are never affected. `scripts/release.sh --push` keeps
+# working because Git does not pass the already-merged main it pushes before
+# the release tag to this hook; equal local and remote shas are skipped too.
+#
+# Last resort: git push --no-verify
+
+set -u
+
+remote_url=${2:-}
+
+hook_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || exit 0
+# A broken install must not lock every push on the machine; GitHub-side
+# protection remains, and the warning keeps the gap visible.
+# shellcheck source=policy.sh
+if ! . "$hook_dir/policy.sh"; then
+  echo "pre-push: $hook_dir/policy.sh is unreadable — main-branch guard skipped" >&2
+  cat >/dev/null
+  exit 0
+fi
+
+# Owner repositories (lowercase owner/repo) where pushing main is intended.
+_push_main_allowed() {
+  case $1 in
+    "$_GITHOOK_OWNER/dotfiles-personal" | "$_GITHOOK_OWNER/dotfiles-work") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Git passes one line per ref: <local ref> <local sha> <remote ref> <remote
+# sha>. Read every line even after a decision so Git never sees a broken pipe.
+protected=''
+while read -r _local_ref local_sha remote_ref remote_sha; do
+  case $remote_ref in
+    refs/heads/main | refs/heads/master) ;;
+    *) continue ;;
+  esac
+  [ "$local_sha" = "$remote_sha" ] && continue
+  # An all-zero remote sha means the branch does not exist yet: the first
+  # push of a new repository has no reviewed history to bypass.
+  case $remote_sha in *[!0]*) ;; *) continue ;; esac
+  protected=${protected:-$remote_ref}
+done
+
+[ -n "$protected" ] || exit 0
+_githook_owned_url "$remote_url" || exit 0
+repo=$(_githook_remote_repo "$remote_url") || exit 0
+_push_main_allowed "$repo" && exit 0
+_githook_fork && exit 0
+
+if _githook_agent_session; then
+  echo "pre-push: refusing to push $protected to $repo from an agent session; push a feature branch and open a pull request" >&2
+  exit 1
+fi
+if [ "${GIT_ALLOW_PUSH_MAIN:-0}" = 1 ]; then
+  echo "pre-push: GIT_ALLOW_PUSH_MAIN=1 — allowing direct push of $protected to $repo" >&2
+  exit 0
+fi
+# The override is documented in this header and the README, not in the
+# message: agent pushes relayed through a human tmux pane look human here.
+echo "pre-push: refusing to push $protected to $repo; push a feature branch and open a pull request" >&2
+exit 1

@@ -3,20 +3,47 @@
 #
 # Sley owns the reusable provider dispatch and secret scan. Dotfiles selects
 # its local advanced validator and Git profile here; the validator itself owns
-# the message grammar. Non-strict policy remains the default, while
+# the message grammar. Non-strict policy remains the default for humans, while
 # COMMIT_MSG_STRICT=1 promotes advisory structural findings to errors.
 #
-# Knobs:
+# Agent sessions (detected by AgentGuard) get two extra rules:
+#   - commits in repositories whose origin is owned by the dotfiles owner are
+#     always strict, because the agent rules require the full message format;
+#     third-party clones and owner-hosted forks keep the advisory policy since
+#     they follow their own upstream conventions;
+#   - the skip knobs below are refused everywhere: they bypass the message
+#     gate, and GITHOOK_COMMITMSG_SKIP also skips Sley's secret scan.
+#
+# Knobs (humans only):
 #   COMMIT_MSG_SKIP=1               skip validation (passed through)
 #   COMMIT_MSG_STRICT=1             promote warnings to errors
 #   GITHOOK_COMMITMSG_SKIP=1        skip this hook entirely
 # Last resort: git commit --no-verify
 
-[ "${GITHOOK_COMMITMSG_SKIP:-0}" = "1" ] && exit 0
-
 hook_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || exit 1
 dot_lib_dir=$(cd -P -- "$hook_dir/.." && pwd) || exit 1
 validator=${DOT_COMMIT_MSG_VALIDATOR:-$dot_lib_dir/sley-hooks/validate-commit-msg}
+
+# Detection costs a process-table scan for humans, so ask only when the answer
+# changes the outcome: a skip knob is set, or the repository is owner-owned.
+# A missing policy helper is a broken install; fall back to the human policy
+# rather than blocking every commit on the machine.
+# shellcheck source=policy.sh
+if ! . "$hook_dir/policy.sh"; then
+  echo "commit-msg: $hook_dir/policy.sh is unreadable — applying human policy" >&2
+  _githook_agent_session() { return 1; }
+  _githook_owned_origin() { return 1; }
+fi
+
+if [ "${GITHOOK_COMMITMSG_SKIP:-0}" = "1" ] || [ "${COMMIT_MSG_SKIP:-0}" = "1" ]; then
+  if _githook_agent_session; then
+    echo "commit-msg: GITHOOK_COMMITMSG_SKIP and COMMIT_MSG_SKIP are not allowed in agent sessions; fix the message instead" >&2
+    exit 1
+  fi
+  [ "${GITHOOK_COMMITMSG_SKIP:-0}" = "1" ] && exit 0
+elif _githook_owned_origin && _githook_agent_session; then
+  export COMMIT_MSG_STRICT=1
+fi
 
 # Dotfiles deliberately chooses the advanced provider rather than inheriting
 # ambient Sley provider configuration. Otherwise a shell-level template could
