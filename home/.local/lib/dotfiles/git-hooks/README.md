@@ -19,8 +19,11 @@ load or dispatch them.
   then delegates the portable readiness behavior to Sley.
 - `commit-msg` selects dotfiles' advanced message-policy provider before
   dispatching to Sley's generic finalized-message hook.
+- `pre-push` refuses direct pushes to `main` or `master` of the owner's
+  GitHub repositories.
 - `policy.sh` is a sourced helper, not a hook: it holds the remote-ownership
-  parser and the AgentGuard session check that `commit-msg` uses.
+  parser and the AgentGuard session check that `commit-msg` and `pre-push`
+  share.
 
 Sley owns the reusable decisions about ordinary commits, merges, patches, and
 Git sequencer operations. Keeping those implementations in Sley gives direct
@@ -57,7 +60,14 @@ else), and human commits keep the advisory behavior.
   body text. Agents may not use `GITHOOK_COMMITMSG_SKIP` or `COMMIT_MSG_SKIP`
   in any repository: both bypass the message gate, and skipping the hook also
   skips Sley's secret scan.
-- If AgentGuard cannot be resolved, the hook warns and applies the human
+- `pre-push` blocks updating or deleting `refs/heads/main` and
+  `refs/heads/master` on owner repositories, except for the private
+  `dotfiles-personal` and `dotfiles-work` overlays, whose fast-forward pushes
+  to `main` are intended. Forks, creating `main` on a new repository, tags,
+  and feature branches pass, and `scripts/release.sh --push` keeps working
+  because Git does not hand the hook its already-merged `main`. Humans may
+  override with `GIT_ALLOW_PUSH_MAIN=1`; agent sessions may not.
+- If AgentGuard cannot be resolved, both hooks warn and apply the human
   policy rather than blocking work on a broken install.
 
 These hooks cannot see Git's `--no-verify` or `-c core.hooksPath=` flags,

@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # policy.sh — shared agent and repository facts for dotfiles' Git hooks.
 #
-# Sourced by `commit-msg`; not a hook itself (the dot in its
+# Sourced by `commit-msg` and `pre-push`; not a hook itself (the dot in its
 # name keeps Git, `dot doctor`, and readers from treating it as one). Hooks
 # may run under macOS /bin/bash 3.2, so keep this Bash 3.2 compatible.
 #

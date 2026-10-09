@@ -35,6 +35,7 @@ program	home/.local/lib/dotfiles/git-hooks/policy.sh
 program	home/.local/lib/dotfiles/git-hooks/pre-applypatch
 program	home/.local/lib/dotfiles/git-hooks/pre-commit
 program	home/.local/lib/dotfiles/git-hooks/pre-merge-commit
+program	home/.local/lib/dotfiles/git-hooks/pre-push
 program	home/.local/lib/dotfiles/git-hooks/prepare-commit-msg
 program	home/.local/lib/dotfiles/git-hooks/sley-commit-gate
 program	home/.local/lib/dotfiles/git-hooks/sley-provider-hook

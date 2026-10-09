@@ -29,7 +29,7 @@ HOOK_DIR_REAL=$(_test_realpath "$HOOK_DIR")
 
 for hook in \
   pre-commit pre-merge-commit pre-applypatch prepare-commit-msg commit-msg \
-  sley-commit-gate sley-provider-hook; do
+  pre-push sley-commit-gate sley-provider-hook; do
   if [[ -x "$HOOK_DIR/$hook" ]]; then
     _pass "configured Git hook is executable: $hook"
   else
@@ -475,6 +475,168 @@ https://github.com/cgraf78/./zz|cgraf78/zz
 https://github.com/x/../cgraf78/zz|cgraf78/zz
 https://github.com/../cgraf78/zz|cgraf78/zz
 EOF
+
+echo
+echo "=== pre-push main guard ==="
+
+zero=0000000000000000000000000000000000000000
+old_sha=1111111111111111111111111111111111111111
+new_sha=2222222222222222222222222222222222222222
+
+# _run_pre_push URL AGENT STDIN [ENV...]: sets push_rc and push_err. Runs
+# from a fixture repository so the caller's own remotes (an `upstream` makes
+# a fork) cannot change the outcome.
+_run_pre_push() {
+  local url="$1" agent="$2" input="$3"
+  shift 3
+  push_err=$(
+    cd "$owned_repo" &&
+      printf '%s' "$input" |
+      env -u GIT_ALLOW_PUSH_MAIN HOME="$agent_home" TEST_AGENT_SESSION="$agent" "$@" \
+        "$HOOK_DIR/pre-push" origin "$url" 2>&1 >/dev/null
+  )
+  push_rc=$?
+}
+
+owned_url=https://github.com/cgraf78/example.git
+main_update="refs/heads/main $new_sha refs/heads/main $old_sha"$'\n'
+
+_run_pre_push "$owned_url" 0 "$main_update"
+_assert_exit "push main to owner repo: blocked" 1 "$push_rc"
+_assert_contains "push main to owner repo: names the ref and repo" \
+  "refusing to push refs/heads/main to cgraf78/example" "$push_err"
+_assert_not_contains "push main to owner repo: refusal does not advertise the override" \
+  "GIT_ALLOW_PUSH_MAIN" "$push_err"
+
+_run_pre_push "$owned_url" 0 "refs/heads/topic $new_sha refs/heads/master $old_sha"$'\n'
+_assert_exit "push to master of owner repo: blocked" 1 "$push_rc"
+
+_run_pre_push "$owned_url" 0 "(delete) $zero refs/heads/main $old_sha"$'\n'
+_assert_exit "delete main of owner repo: blocked" 1 "$push_rc"
+
+_run_pre_push "git@github.com:cgraf78/example.git" 0 "$main_update"
+_assert_exit "push main to owner repo over SSH: blocked" 1 "$push_rc"
+
+_run_pre_push "$owned_url" 0 "$main_update" GIT_ALLOW_PUSH_MAIN=1
+_assert_exit "push main with human override: allowed" 0 "$push_rc"
+_assert_contains "push main with human override: logged" \
+  "allowing direct push" "$push_err"
+
+_run_pre_push "$owned_url" 1 "$main_update" GIT_ALLOW_PUSH_MAIN=1
+_assert_exit "push main with agent override: blocked" 1 "$push_rc"
+_assert_contains "push main from agent: explains the agent refusal" \
+  "from an agent session" "$push_err"
+_assert_not_contains "push main from agent: does not advertise the override" \
+  "GIT_ALLOW_PUSH_MAIN" "$push_err"
+
+for url in \
+  https://github.com/cgraf78/dotfiles-personal.git \
+  git@github.com:cgraf78/dotfiles-personal.git \
+  github-dotfiles-work:cgraf78/dotfiles-work.git \
+  https://github.com/cgraf78/dotfiles-work; do
+  _run_pre_push "$url" 1 "$main_update"
+  _assert_exit "push main to allowlisted overlay $url: allowed" 0 "$push_rc"
+done
+
+_run_pre_push "$owned_url" 1 "refs/tags/v1.2.3 $new_sha refs/tags/v1.2.3 $zero"$'\n'
+_assert_exit "push release tag: allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 1 "HEAD $new_sha refs/tags/v1-self-pin $zero"$'\n'
+_assert_exit "push self-pin tag by sha: allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 1 "refs/heads/feat/x $new_sha refs/heads/feat/x $old_sha"$'\n'
+_assert_exit "push feature branch: allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 1 "refs/heads/main $new_sha refs/heads/main-fix $zero"$'\n'
+_assert_exit "push to a main-prefixed feature branch: allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 1 "refs/heads/main $old_sha refs/heads/main $old_sha"$'\n'
+_assert_exit "no-op main update (release.sh --push): allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 1 "refs/heads/main $new_sha refs/heads/main $zero"$'\n'
+_assert_exit "create main on a new repository: allowed" 0 "$push_rc"
+
+_run_pre_push "$owned_url" 0 \
+  "refs/tags/v1 $new_sha refs/tags/v1 $zero"$'\n'"$main_update"
+_assert_exit "push tag together with main: blocked" 1 "$push_rc"
+
+for url in https://github.com/neovim/neovim.git https://github.com/cgraf78x/example.git \
+  "$test_root/remote.git" ../remote.git; do
+  _run_pre_push "$url" 1 "$main_update"
+  _assert_exit "push main to non-owner remote $url: allowed" 0 "$push_rc"
+done
+
+_run_pre_push "$owned_url" 0 \
+  "$main_update""refs/tags/v1 $new_sha refs/tags/v1 $zero"$'\n'
+_assert_exit "push main listed before a tag: blocked" 1 "$push_rc"
+
+for url in git@github.com:/cgraf78/example.git https://github.com//cgraf78/example.git; do
+  _run_pre_push "$url" 0 "$main_update"
+  _assert_exit "push main to slash-variant owner URL $url: blocked" 1 "$push_rc"
+done
+
+_run_pre_push "$owned_url" 0 ""
+_assert_exit "push with no refs: allowed" 0 "$push_rc"
+
+# An owner-hosted fork syncs main from its upstream project.
+fork_repo=$(_policy_repo fork https://github.com/cgraf78/aravis.git)
+git -C "$fork_repo" remote add upstream https://github.com/AravisProject/aravis.git
+push_err=$(cd "$fork_repo" && printf '%s' "$main_update" |
+  env -u GIT_ALLOW_PUSH_MAIN HOME="$agent_home" TEST_AGENT_SESSION=1 \
+    "$HOOK_DIR/pre-push" origin https://github.com/cgraf78/aravis.git 2>&1 >/dev/null)
+_assert_exit "push main to an owner fork with third-party upstream: allowed" 0 "$?"
+mirror_repo=$(_policy_repo mirror https://github.com/cgraf78/example.git)
+git -C "$mirror_repo" remote add upstream https://github.com/cgraf78/other.git
+push_err=$(cd "$mirror_repo" && printf '%s' "$main_update" |
+  env -u GIT_ALLOW_PUSH_MAIN HOME="$agent_home" TEST_AGENT_SESSION=0 \
+    "$HOOK_DIR/pre-push" origin "$owned_url" 2>&1 >/dev/null)
+_assert_exit "push main with an owner-owned upstream: still blocked" 1 "$?"
+local_upstream_repo=$(_policy_repo local-upstream https://github.com/cgraf78/example.git)
+git -C "$local_upstream_repo" remote add upstream /srv/mirror/example.git
+push_err=$(cd "$local_upstream_repo" && printf '%s' "$main_update" |
+  env -u GIT_ALLOW_PUSH_MAIN HOME="$agent_home" TEST_AGENT_SESSION=0 \
+    "$HOOK_DIR/pre-push" origin "$owned_url" 2>&1 >/dev/null)
+_assert_exit "push main with a local-path upstream: still blocked" 1 "$?"
+
+# A blocked push from a host with a broken AgentGuard is still blocked; only
+# the agent-specific wording degrades. Like _run_pre_push, these run from the
+# fixture repository so the caller's own remotes cannot change the outcome.
+push_err=$(cd "$owned_repo" && printf '%s' "$main_update" |
+  env -u GIT_ALLOW_PUSH_MAIN HOME="$test_root/no-helper-home" \
+    "$HOOK_DIR/pre-push" origin "$owned_url" 2>&1 >/dev/null)
+push_rc=$?
+_assert_exit "missing AgentGuard: main push still blocked" 1 "$push_rc"
+push_err=$(cd "$owned_repo" && printf '%s' "$main_update" |
+  env GIT_ALLOW_PUSH_MAIN=1 HOME="$test_root/no-helper-home" \
+    "$HOOK_DIR/pre-push" origin "$owned_url" 2>&1 >/dev/null)
+_assert_exit "missing AgentGuard: human override still works" 0 "$?"
+
+# A missing policy helper must not lock every push on the machine.
+broken_hooks="$test_root/broken-hooks"
+mkdir -p "$broken_hooks"
+cp "$HOOK_DIR/pre-push" "$broken_hooks/pre-push"
+push_err=$(cd "$owned_repo" && printf '%s' "$main_update" |
+  "$broken_hooks/pre-push" origin "$owned_url" 2>&1 >/dev/null)
+push_rc=$?
+_assert_exit "missing policy helper: push allowed" 0 "$push_rc"
+_assert_contains "missing policy helper: warning shown" \
+  "main-branch guard skipped" "$push_err"
+
+# End to end through Git: fixture pushes of main to local-path remotes, which
+# many test suites rely on, keep working under the global hook directory.
+e2e_remote="$test_root/e2e-remote.git"
+e2e_work="$test_root/e2e-work"
+git init -q --bare "$e2e_remote"
+git init -q -b main "$e2e_work"
+_git_set_test_identity git -C "$e2e_work"
+# Seed without any hooks: the commit is fixture setup, not the subject.
+mkdir -p "$test_root/no-hooks"
+git -C "$e2e_work" -c core.hooksPath="$test_root/no-hooks" \
+  commit -q --allow-empty -m seed
+git -C "$e2e_work" remote add origin "$e2e_remote"
+env HOME="$agent_home" TEST_AGENT_SESSION=1 \
+  git -C "$e2e_work" -c core.hooksPath="$HOOK_DIR" push -q origin main 2>/dev/null
+_assert_exit "git push main to a local-path remote: allowed" 0 "$?"
 
 echo
 echo "=== AgentGuard detection contract ==="
