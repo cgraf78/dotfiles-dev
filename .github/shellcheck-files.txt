@@ -104,5 +104,6 @@ program	test/lib/capability-fixture.sh
 program	test/lib/dot-release.sh
 program	test/lib/suite-inventory.sh
 program	test/lib/wait-github-state.sh
+program	test/lib/workflow-contract.sh
 program	test/run
 program	test/workflow-test
