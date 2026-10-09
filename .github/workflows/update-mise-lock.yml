@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: cgraf78/actions/.github/workflows/mise-lock-refresh.yml@d08e7db3c8a0cc3c31305f80902507878f3befe1
+    uses: cgraf78/actions/.github/workflows/mise-lock-refresh.yml@becad8d814bce500a31e7382888f76b1cd65689f
     with:
       project_name: Dotfiles Dev
       mise_config_file: home/.config/mise/config.toml
