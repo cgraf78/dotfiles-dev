@@ -83,10 +83,12 @@ merge() {
   # This is the shape Checkrun's Neovim adapter consumes: a version-1 object,
   # capabilities, a JSON schema list, and YAML/TOML association maps. The
   # adapter silently ignores a wrong-shaped section, so reject it here instead.
-  if ! jq -e '.version == 1 and (.capabilities | type == "object")
+  # Compare the printed verdict rather than trusting `jq -e`: jq 1.6 exits 0 for
+  # empty input, which would publish an empty projection.
+  if [[ $(jq '.version == 1 and (.capabilities | type == "object")
     and (.schemas.json | type == "array")
     and (.schemas.yaml | type == "object")
-    and (.schemas.toml | type == "object")' "$temporary" >/dev/null 2>&1; then
+    and (.schemas.toml | type == "object")' "$temporary" 2>/dev/null) != true ]]; then
     rm -f -- "$temporary"
     dot_hook_warn "    warning: checkrun editor-metadata output failed validation — keeping the previous Neovim metadata"
     return 0
@@ -103,7 +105,8 @@ merge() {
   dot_hook_log "  checkrun-nvim"
   # dot_commit_tmp refuses a directory or symlink at the destination rather
   # than moving the file inside it or replacing the link.
-  if ! chmod 0644 -- "$temporary" || ! dot_commit_tmp "$temporary" "$destination"; then
+  # BSD chmod rejects `--`; the staged path is always absolute.
+  if ! chmod 0644 "$temporary" || ! dot_commit_tmp "$temporary" "$destination"; then
     rm -f -- "$temporary"
     dot_hook_warn "    warning: cannot publish Checkrun Neovim metadata to $destination (not a regular file?)"
   fi

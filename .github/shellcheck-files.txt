@@ -39,6 +39,7 @@ program	home/.local/lib/dotfiles/git-hooks/pre-push
 program	home/.local/lib/dotfiles/git-hooks/prepare-commit-msg
 program	home/.local/lib/dotfiles/git-hooks/sley-commit-gate
 program	home/.local/lib/dotfiles/git-hooks/sley-provider-hook
+program	home/.local/lib/dotfiles/merge-hooks.d/checkrun-nvim.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/claude.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/codex.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gemini.sh
@@ -49,6 +50,7 @@ program	home/.local/lib/dotfiles/merge-hooks.d/grok.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/gstack.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/hive-memory.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh
+program	home/.local/lib/dotfiles/merge-hooks.d/lib/checkrun-nvim.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/codex/api.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/profile-state.sh
 program	home/.local/lib/dotfiles/merge-hooks.d/lib/superpowers-muse-sync
