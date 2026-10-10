@@ -1409,7 +1409,7 @@ PY
     }
 
     # Grok creates sandbox.toml as an empty file. The profile grants an
-    # absolute path because Grok skips `~` grants without warning.
+    # absolute path because Grok reads `~/...` as a path under CWD.
     _grok_config_seed_toml
     rm -rf "$grok_config_home/.local"
     : >"$grok_sandbox_dst"
@@ -1541,8 +1541,18 @@ PY
     rm -f "$grok_sandbox_dst"
     : >"$grok_sandbox_dst"
 
-    # Malformed sibling profiles must not stop `~` expansion of good ones;
-    # a literal `~` grant is silently ignored by Grok.
+    _grok_config_profile() {
+      python3 - "$grok_config_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(data.get("sandbox", {}).get("profile", "<unset>"))
+PY
+    }
+
+    # Grok type-checks the whole [profiles] map: one malformed entry makes
+    # every custom profile unresolvable. A malformed layer is refused, so it
+    # cannot break the file, and the config falls back to workspace.
     cat >"$grok_sandbox_family/05-malformed.toml" <<'TOML'
 [profiles]
 scalar = 1
@@ -1550,18 +1560,33 @@ scalar = 1
 [profiles.stringgrant]
 read_write = "~/not-an-array"
 TOML
-    _run_grok_config_merge >/dev/null 2>&1
+    _grok_config_seed_toml
+    : >"$grok_sandbox_dst"
+    grok_sandbox_malformed_status=0
+    grok_sandbox_malformed_output=$(_run_grok_config_merge 2>&1) ||
+      grok_sandbox_malformed_status=$?
     rm -f "$grok_sandbox_family/05-malformed.toml"
-    _assert_eq "Grok sandbox merge: malformed profiles keep ~ expansion" \
-      "$grok_sandbox_grant" \
-      "$(
-        python3 - "$grok_sandbox_dst" <<'PY'
-import sys, tomllib
-from pathlib import Path
-data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(",".join(data["profiles"]["workspace-agent-state"]["read_write"]))
-PY
-      )"
+    _assert_exit "Grok sandbox merge: malformed layer fails the refresh" \
+      1 "$grok_sandbox_malformed_status"
+    _assert_contains "Grok sandbox merge: names the invalid layer" \
+      "invalid Grok sandbox layer" "$grok_sandbox_malformed_output"
+    _assert_eq "Grok sandbox merge: malformed layer is not written" \
+      "" "$(cat "$grok_sandbox_dst")"
+    _assert_eq "Grok config merge: malformed layer falls back to workspace" \
+      "workspace" "$(_grok_config_profile)"
+
+    # A user's own malformed profile already in sandbox.toml makes Grok drop
+    # ours too, so the gate must not select it even though it is defined.
+    _grok_config_seed_toml
+    cat >"$grok_sandbox_dst" <<'TOML'
+[profiles.mine]
+read_write = "/not-an-array"
+TOML
+    _run_grok_config_merge >/dev/null 2>&1
+    _assert_contains "Grok sandbox merge: still defines our profile beside a bad one" \
+      "workspace-agent-state" "$(cat "$grok_sandbox_dst")"
+    _assert_eq "Grok config merge: schema-invalid sandbox.toml falls back to workspace" \
+      "workspace" "$(_grok_config_profile)"
     : >"$grok_sandbox_dst"
 
     # An empty or comment-only sandbox layer (yq reads it as null) is a
@@ -1597,7 +1622,7 @@ data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(str(data.get("relay", {}).get("enabled", "<unset>")).lower())
 PY
       )"
-    unset -f _grok_sandbox_probe
+    unset -f _grok_sandbox_probe _grok_config_profile
 
     # Native hooks make the gated layer non-empty so dest is parsed. With
     # no ungated tables, an empty gated layer would skip without seeing

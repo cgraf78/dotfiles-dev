@@ -46,24 +46,46 @@ _grok_config_native_rules() {
   [[ -f $path && ! -L $path ]]
 }
 
-# Sandbox profile names Grok accepts in config.toml: its built-ins plus every
-# [profiles.*] table in ~/.grok/sandbox.toml, as a JSON array. A missing,
-# empty, or unparsable sandbox.toml contributes only the built-ins.
-_grok_config_sandbox_profiles() {
-  local yq_bin=$1 sandbox="$HOME/.grok/sandbox.toml" defined='[]'
+# Grok's sandbox.toml schema as jq definitions, shared by the profile gate
+# and the sandbox layer check. Grok type-checks the whole [profiles] map: one
+# entry that is not a table, or a known field of the wrong type in any
+# profile, makes every custom profile unresolvable (verified with grok:
+# "Custom sandbox profile ... not found"). Unknown keys are accepted. A
+# profile's own `extends` must name a built-in. Filter in jq, not yq: yq's
+# `type` reports YAML tags (`!!map`), not JSON type names.
+_GROK_SANDBOX_SCHEMA_JQ='
+  def grok_builtin_profiles: ["off", "workspace", "devbox", "read-only", "strict"];
+  def grok_string_list: type == "array" and all(.[]; type == "string");
+  def grok_profile_valid:
+    type == "object" and
+    ((has("extends") | not) or (.extends | type) == "string") and
+    ((has("restrict_network") | not) or (.restrict_network | type) == "boolean") and
+    ([.read_only, .read_write, .deny] | all(. == null or grok_string_list));
+  def grok_profiles_valid:
+    (.profiles // {}) | type == "object" and all(.[]; grok_profile_valid);
+'
 
-  # Only table-valued entries are profiles. Filter in jq: yq's `type` reports
-  # YAML tags (`!!map`), not JSON type names.
+# Sandbox profile names Grok accepts in config.toml: its built-ins plus every
+# custom profile it can resolve from ~/.grok/sandbox.toml, as a JSON array. A
+# missing, empty, unparsable, or schema-invalid sandbox.toml contributes only
+# the built-ins.
+_grok_config_sandbox_profiles() {
+  local yq_bin=$1 sandbox="$HOME/.grok/sandbox.toml" doc='{}'
+
   if [[ -s $sandbox ]]; then
-    defined=$("$yq_bin" eval --input-format toml --output-format json \
-      '.profiles // {}' "$sandbox" 2>/dev/null |
-      jq -c 'if type == "object"
-        then to_entries | map(select(.value | type == "object") | .key)
-        else []
-        end' 2>/dev/null) || defined='[]'
+    doc=$("$yq_bin" eval --input-format toml --output-format json '.' \
+      "$sandbox" 2>/dev/null) || doc='{}'
   fi
-  jq -cn --argjson defined "${defined:-[]}" \
-    '["off", "workspace", "devbox", "read-only", "strict"] + $defined'
+  jq -c "$_GROK_SANDBOX_SCHEMA_JQ"'
+    grok_builtin_profiles + (
+      if type == "object" and grok_profiles_valid
+      then .profiles // {} | to_entries
+        | map(select(.value.extends == null or
+            (.value.extends | IN(grok_builtin_profiles[]))) | .key)
+      else []
+      end)
+  ' <<<"$doc" 2>/dev/null ||
+    jq -cn "$_GROK_SANDBOX_SCHEMA_JQ"'grok_builtin_profiles'
 }
 
 # Drop Claude-compat keys whose native Grok replacement is not installed yet.
@@ -134,8 +156,9 @@ _grok_sandbox_grants() {
 }
 
 # Sandbox layer as JSON with `~`/$HOME grants made absolute. Grok resolves
-# read_only/read_write as literal directories and skips a `~` entry without
-# warning, so the expansion must happen here.
+# read_only/read_write as literal paths: a `~/...` entry becomes a directory
+# named `~` under the session's CWD, never the home directory, so the
+# expansion must happen here.
 _grok_sandbox_layer_json() {
   local src=$1 yq_bin=$2
   local layer grants grant expanded map='{}'
@@ -199,6 +222,13 @@ _merge_grok_sandbox_layer() {
   yq_bin=$(_merge_hook_mikefarah_yq) || return 1
   layer_json=$(_grok_sandbox_layer_json "$src" "$yq_bin") || return 1
   [[ -n $layer_json ]] || return 0
+  # One malformed profile would make Grok drop every custom profile in the
+  # file, the user's own included, so a bad layer is never written.
+  jq -e "$_GROK_SANDBOX_SCHEMA_JQ"'grok_profiles_valid' <<<"$layer_json" \
+    >/dev/null 2>&1 || {
+    dot_hook_warn "    warning: invalid Grok sandbox layer $src; preserving $dst"
+    return 1
+  }
   _grok_sandbox_make_grants "$layer_json" || {
     dot_hook_warn "    warning: could not create a Grok sandbox grant; preserving $dst"
     return 1

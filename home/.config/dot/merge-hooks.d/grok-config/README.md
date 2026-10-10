@@ -35,7 +35,8 @@ the built-in `workspace` profile plus a read-write grant for
 `~/.local/state/agentguard`. Grok hooks run inside the sandbox, and
 `workspace` writes only CWD, `~/.grok`, and temp dirs, so a session started
 outside `$HOME` could not write AgentGuard telemetry or hook state. Grok
-skips a `~` grant without warning, so the hook expands `~` and `$HOME` in
+treats grants as literal paths, so a `~/...` grant names a `~` directory under
+the session's CWD, not home; the hook expands `~` and `$HOME` in
 `read_only`/`read_write` to absolute paths. It also creates a missing
 `read_write` directory 0700, since Grok would create it 0755; missing parents
 get the normal umask. A profile a sandbox layer names is owned whole: it
@@ -47,7 +48,11 @@ comment records the tradeoff.
 
 Sandbox layers merge before config layers. A config `sandbox.profile` applies
 only when it names a built-in profile or one `sandbox.toml` defines, because
-Grok refuses to start under an undefined profile. Otherwise the hook selects
+Grok refuses to start under an undefined profile. Grok type-checks the whole
+`[profiles]` map, and one malformed entry makes every custom profile
+unresolvable, so "defines" means the whole map passes that check and the
+profile's `extends` is a built-in. A sandbox layer that fails the same check
+is never written. Otherwise the hook selects
 built-in `workspace`, the profile this layer forced before, never Grok's
 unsandboxed default or a current profile that is weaker or undefined. An
 empty `sandbox.toml` (as Grok creates it) merges as an empty document. A

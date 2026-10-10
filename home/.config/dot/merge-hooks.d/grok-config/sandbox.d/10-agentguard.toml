@@ -3,9 +3,10 @@
 # telemetry and its hook-state fallback under ~/.local/state/agentguard, so
 # a session started anywhere but $HOME silently lost both.
 #
-# Grok skips a `~` grant without warning (verified with grok 2026-10-09), so
-# the merge hook expands `~` to an absolute path and creates the directory
-# 0700 first; Grok would otherwise create a missing grant 0755.
+# Grok treats grants as literal paths, so `~/...` would name a `~` directory
+# under the session's CWD, not home (verified with grok 2026-10-09). The
+# merge hook expands `~` to an absolute path and creates the directory 0700
+# first; Grok would otherwise create a missing grant 0755.
 #
 # Grant only AgentGuard's directory, not ~/.local/state: other tools keep
 # history and credentials-adjacent state there. $XDG_RUNTIME_DIR stays out:
