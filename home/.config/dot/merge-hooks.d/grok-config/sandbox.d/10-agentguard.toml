@@ -1,0 +1,23 @@
+# Grok's built-in workspace profile writes only CWD, ~/.grok, and temp dirs,
+# and Grok hooks run inside that Landlock sandbox. AgentGuard keeps durable
+# telemetry and its hook-state fallback under ~/.local/state/agentguard, so
+# a session started anywhere but $HOME silently lost both.
+#
+# Grok treats grants as literal paths, so `~/...` would name a `~` directory
+# under the session's CWD, not home (verified with grok 2026-10-09). The
+# merge hook expands `~` to an absolute path and creates the directory 0700
+# first; Grok would otherwise create a missing grant 0755.
+#
+# Grant only AgentGuard's directory, not ~/.local/state: other tools keep
+# history and credentials-adjacent state there. $XDG_RUNTIME_DIR stays out:
+# it holds this login's sockets and agents.
+#
+# Accepted tradeoff: Landlock covers the whole Grok process, so anything the
+# hooks can write, the agent's own Bash can write too, including deleting
+# its telemetry or resetting hook counters. That was already true for every
+# session started in $HOME (the workspace grant covers it), and the churn
+# bypass is agent-invocable by design. Tamper-proof audit would need a
+# writer outside the sandbox, not a narrower grant.
+[profiles.workspace-agent-state]
+extends = "workspace"
+read_write = ["~/.local/state/agentguard"]

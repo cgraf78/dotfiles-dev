@@ -25,10 +25,38 @@ ralph-loop `decision:block` only when a rule or loop is active, and
 security-guidance's Stop dispatcher reads Claude snake_case stdin so it
 fails open on Grok. Superpowers SessionStart stdout is ignored.
 
-`20-safety.toml` sets `[sandbox] profile = "workspace"` and a conservative
-`[permission] deny` list (`Bash(rm -rf *)` plus Read/Edit of SSH, GnuPG, and
-common credential files). It does not set `ui.permission_mode`; that key stays
-user-owned.
+`20-safety.toml` sets `[sandbox] profile = "workspace-agent-state"` and a
+conservative `[permission] deny` list (`Bash(rm -rf *)` plus Read/Edit of SSH,
+GnuPG, and common credential files). It does not set `ui.permission_mode`;
+that key stays user-owned.
+
+`sandbox.d/10-agentguard.toml` defines that profile in `~/.grok/sandbox.toml`:
+the built-in `workspace` profile plus a read-write grant for
+`~/.local/state/agentguard`. Grok hooks run inside the sandbox, and
+`workspace` writes only CWD, `~/.grok`, and temp dirs, so a session started
+outside `$HOME` could not write AgentGuard telemetry or hook state. Grok
+treats grants as literal paths, so a `~/...` grant names a `~` directory under
+the session's CWD, not home; the hook expands `~` and `$HOME` in
+`read_only`/`read_write` to absolute paths. It also creates a missing
+`read_write` directory 0700, since Grok would create it 0755; missing parents
+get the normal umask. A profile a sandbox layer names is owned whole: it
+replaces the live table rather than merging into it, so keys a user or an
+older layer added cannot widen it. Other profiles are left alone. The grant
+also lets the agent's own Bash write AgentGuard state (Landlock covers the
+whole process); that matches sessions started in `$HOME`, and the layer
+comment records the tradeoff.
+
+Sandbox layers merge before config layers. A config `sandbox.profile` applies
+only when it names a built-in profile or one `sandbox.toml` defines, because
+Grok refuses to start under an undefined profile. Grok type-checks the whole
+`[profiles]` map, and one malformed entry makes every custom profile
+unresolvable, so "defines" means the whole map passes that check and the
+profile's `extends` is a built-in. A sandbox layer that fails the same check
+is never written. Otherwise the hook selects
+built-in `workspace`, the profile this layer forced before, never Grok's
+unsandboxed default or a current profile that is weaker or undefined. An
+empty `sandbox.toml` (as Grok creates it) merges as an empty document. A
+corrupt or symlinked one is preserved and fails the refresh.
 
 `30-statusline.toml` enables `[ui.status_line]` as Grok's builtin row
 (`cwd`, `model`, `context`, `session-name`). Nested merge keeps other `[ui]`
