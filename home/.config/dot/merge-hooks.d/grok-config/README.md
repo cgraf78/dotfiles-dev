@@ -38,7 +38,12 @@ outside `$HOME` could not write AgentGuard telemetry or hook state. Grok
 skips a `~` grant without warning, so the hook expands `~` and `$HOME` in
 `read_only`/`read_write` to absolute paths. It also creates a missing
 `read_write` directory 0700, since Grok would create it 0755; missing parents
-get the normal umask.
+get the normal umask. A profile a sandbox layer names is owned whole: it
+replaces the live table rather than merging into it, so keys a user or an
+older layer added cannot widen it. Other profiles are left alone. The grant
+also lets the agent's own Bash write AgentGuard state (Landlock covers the
+whole process); that matches sessions started in `$HOME`, and the layer
+comment records the tradeoff.
 
 Sandbox layers merge before config layers. A config `sandbox.profile` applies
 only when it names a built-in profile or one `sandbox.toml` defines, because

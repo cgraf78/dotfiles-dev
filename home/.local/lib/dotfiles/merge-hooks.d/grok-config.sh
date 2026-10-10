@@ -203,14 +203,18 @@ _merge_grok_sandbox_layer() {
     dot_hook_warn "    warning: could not create a Grok sandbox grant; preserving $dst"
     return 1
   }
-  _merge_grok_toml_json "$layer_json" "$dst"
+  # Profiles the layer names are owned whole: a recursive merge would keep
+  # keys a user or an older layer added (an extra grant, `deny`, a different
+  # `extends`), so the live profile could drift wider than the policy says.
+  _merge_grok_toml_json "$layer_json" "$dst" profiles
 }
 
 # Merge a JSON layer into a Grok TOML file. Source wins on overlapping keys;
 # nested tables merge recursively so unnamed cells, user profiles, and
-# unrelated root tables survive.
+# unrelated root tables survive. An optional OWNED table name makes each of
+# its entries the layer names replace the destination entry instead.
 _merge_grok_toml_json() {
-  local layer_json=$1 dst=$2
+  local layer_json=$1 dst=$2 owned=${3:-}
   local yq_bin renderer dst_json src_json merged_json temporary
 
   yq_bin=$(_merge_hook_mikefarah_yq) || return 1
@@ -256,7 +260,15 @@ _merge_grok_toml_json() {
   if ! jq -n --sort-keys --indent 2 \
     --slurpfile d "$dst_json" \
     --slurpfile s "$src_json" \
-    '$d[0] * $s[0]' >"$merged_json" ||
+    --arg owned "$owned" '
+      $d[0] as $d | $s[0] as $s |
+      if $owned != "" and ($d[$owned] | type) == "object" and
+        ($s[$owned] | type) == "object"
+      then $d | .[$owned] |= with_entries(
+        select(.key as $k | $s[$owned] | has($k) | not))
+      else $d
+      end | . * $s
+    ' >"$merged_json" ||
     [[ ! -s $merged_json ]] || ! jq empty "$merged_json" 2>/dev/null; then
     dot_hook_warn "    warning: Grok config merge failed; preserving $dst"
     rm -f "$dst_json" "$src_json" "$merged_json"

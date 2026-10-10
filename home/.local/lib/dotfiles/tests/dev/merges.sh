@@ -1441,6 +1441,35 @@ TOML
     _assert_eq "Grok sandbox merge: keeps user-defined profiles" \
       "mine,workspace-agent-state|workspace|$grok_sandbox_grant" \
       "$(_grok_sandbox_probe)"
+    # The overlay owns its profile whole: keys a user or an older layer added
+    # (a wider extends, extra grants) must not survive and widen the policy.
+    cat >"$grok_sandbox_dst" <<'TOML'
+[profiles.mine]
+extends = "strict"
+
+[profiles.workspace-agent-state]
+extends = "devbox"
+read_write = ["/"]
+restrict_network = false
+TOML
+    _run_grok_config_merge >/dev/null
+    _assert_eq "Grok sandbox merge: replaces a drifted owned profile whole" \
+      "mine,workspace-agent-state|workspace|$grok_sandbox_grant|extends,read_write|strict" \
+      "$(
+        python3 - "$grok_sandbox_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+profiles = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["profiles"]
+agent = profiles["workspace-agent-state"]
+print("|".join([
+    ",".join(sorted(profiles)),
+    agent["extends"],
+    ",".join(agent["read_write"]),
+    ",".join(sorted(agent)),
+    profiles["mine"]["extends"],
+]))
+PY
+      )"
     _assert_eq "Grok sandbox merge: leaves an existing grant's mode alone" \
       "750" "$(stat -c '%a' "$grok_sandbox_grant" 2>/dev/null ||
         stat -f '%Lp' "$grok_sandbox_grant")"
