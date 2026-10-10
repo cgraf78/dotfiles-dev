@@ -142,9 +142,13 @@ dot_dev_static_test() {
   check_contains 'Checkrun schema playbook declares its ID' "$checkrun_playbook" \
     '<!-- agent-rule-id: dev-checkrun-schema-associations -->'
   check_contains 'Checkrun schema playbook has a routed trigger' "$checkrun_playbook" \
-    '<!-- agent-rule-trigger: Editing structured dotfiles config -->'
+    '<!-- agent-rule-trigger: Editing structured dotfiles config or adding a Checkrun schema association -->'
   check_contains 'Checkrun schema playbook names the association policy' \
     "$checkrun_playbook" '/.config/checkrun/associations.json'
+  check_contains 'Checkrun schema playbook routes to the consumer checklist' \
+    "$checkrun_playbook" '"Adding a Schema Association"'
+  check_contains 'Checkrun README keeps the consumer checklist' \
+    .config/checkrun/README.md '## Adding a Schema Association'
   check_contains 'git-tools cleanup playbook declares its ID' "$git_tools_playbook" \
     '<!-- agent-rule-id: dev-git-tools-cleanup -->'
   check_contains 'git-tools cleanup playbook has a routed trigger' "$git_tools_playbook" \

@@ -1,7 +1,7 @@
 # Checkrun Schema Associations
 
 <!-- agent-rule-id: dev-checkrun-schema-associations -->
-<!-- agent-rule-trigger: Editing structured dotfiles config -->
+<!-- agent-rule-trigger: Editing structured dotfiles config or adding a Checkrun schema association -->
 
 When adding or modifying tracked JSON, JSONC, YAML, or TOML configuration files
 in dotfiles, consider whether the file should be associated with a schema in
@@ -15,7 +15,14 @@ in dotfiles, consider whether the file should be associated with a schema in
   with the generated target's schema rather than only the generated output.
 - When a schema is useful for editor feedback but cannot be enforced offline,
   use the policy's advisory/editor-only shape instead of blocking lint.
-- If adding a refreshable public schema, add or refresh the pinned payload under
-  `~/.local/share/checkrun/schemas` with `checkrun schema refresh`.
+- To add or change an association, follow the "Adding a Schema Association"
+  checklist in `~/.config/checkrun/README.md` step by step. Besides the policy
+  entry, it fetches a new public payload the way the scheduled refresh does,
+  regenerates the checked-in Neovim projection
+  (`.config/nvim/checkrun-editor-metadata.json`), confirms the VS Code
+  projection, and extends `schema-associations-test`; skipping a step leaves
+  one consumer without the schema.
+- Decide `enforce` by validating the real tracked files and a deliberately
+  invalid sample, not by assuming the published schema fits local usage.
 - If no proper schema exists, leave the file unassociated and rely on parser,
   formatter, linter, or native validation tools.

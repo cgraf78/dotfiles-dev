@@ -96,7 +96,40 @@ expected = {
         "matches": [".clangd"],
         "enforce": False,
     },
+    "OpenCode config layers": {
+        "format": "json",
+        "schema": "opencode.schema.json",
+        "source": "https://opencode.ai/config.json",
+        "matches": [
+            ".config/dot/merge-hooks.d/opencode-settings/settings.d/*.json",
+            ".config/opencode/opencode.json",
+            ".config/opencode/opencode.jsonc",
+            "opencode.json",
+            ".opencode/opencode.json",
+        ],
+        "enforce": False,
+    },
 }
+
+# Project-level configs reuse their fallback's pinned payload, and carry no
+# source of their own, so the scheduled refresh updates one payload for both.
+project_configs = {
+    "typos project config": ("typos fallback config", ["typos.toml", "_typos.toml", ".typos.toml"], True),
+    "StyLua project config": ("StyLua fallback config", ["stylua.toml", ".stylua.toml"], True),
+    "Taplo project config": ("Taplo fallback config", ["taplo.toml", ".taplo.toml"], True),
+    "rumdl project config": ("rumdl fallback config", ["rumdl.toml", ".rumdl.toml"], True),
+    "Ruff project config": ("Ruff fallback config", ["ruff.toml", ".ruff.toml"], False),
+    "rustfmt project config": ("rustfmt fallback config", ["rustfmt.toml", ".rustfmt.toml"], False),
+}
+for name, (fallback, matches, enforce) in project_configs.items():
+    fallback_entry = associations[fallback]
+    expected[name] = {
+        "format": fallback_entry["format"],
+        "schema": fallback_entry["schema"],
+        "matches": matches,
+        "enforce": enforce,
+    }
+    assert "source" not in associations.get(name, {}), f"{name}: reuses the fallback payload"
 
 for name, wanted in expected.items():
     actual = associations.get(name)
@@ -115,6 +148,7 @@ for filename in (
     "claude-code-marketplace.schema.json",
     "clang-tidy.schema.json",
     "clangd.schema.json",
+    "opencode.schema.json",
 ):
     assert (schema_dir / filename).is_file(), f"missing pinned payload: {filename}"
 

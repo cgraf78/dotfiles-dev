@@ -171,6 +171,21 @@
       "note": "Merge-hook source layers are valid Gemini settings documents before they are merged into the generated destination config."
     },
     {
+      "name": "OpenCode config layers",
+      "format": "json",
+      "schema": "opencode.schema.json",
+      "source": "https://opencode.ai/config.json",
+      "matches": [
+        ".config/dot/merge-hooks.d/opencode-settings/settings.d/*.json",
+        ".config/opencode/opencode.json",
+        ".config/opencode/opencode.jsonc",
+        "opencode.json",
+        ".opencode/opencode.json"
+      ],
+      "enforce": false,
+      "note": "Merge-hook source layers are valid partial OpenCode configs before they are merged into the generated client config, which must stay strict JSON. Advisory because the schema restricts agent models to the public models.dev catalog, which rejects custom provider models such as the homelab local LLM. Project opencode.jsonc files may contain comments, so only strict-JSON project names are matched."
+    },
+    {
       "name": "VS Code settings layers",
       "format": "json",
       "editorSource": "vscode://schemas/settings/user",
@@ -419,6 +434,14 @@
       "note": "Ruff shares formatter and linter options in one fallback config."
     },
     {
+      "name": "Ruff project config",
+      "format": "toml",
+      "schema": "ruff.schema.json",
+      "matches": ["ruff.toml", ".ruff.toml"],
+      "enforce": false,
+      "note": "Project configs reuse the fallback's pinned payload, but repositories may pin an older release whose options the latest schema has dropped, so expose schema feedback without enforcing it, like the clang-format project config."
+    },
+    {
       "name": "rustfmt fallback config",
       "format": "toml",
       "schema": "rustfmt.schema.json",
@@ -426,6 +449,14 @@
       "matches": [".config/checkrun/rustfmt.toml"],
       "enforce": true,
       "note": "This is autoformat's global fallback config, so it is associated by dotfiles path rather than relying on project-local names."
+    },
+    {
+      "name": "rustfmt project config",
+      "format": "toml",
+      "schema": "rustfmt.schema.json",
+      "matches": ["rustfmt.toml", ".rustfmt.toml"],
+      "enforce": false,
+      "note": "Project configs reuse the fallback's pinned payload, but repositories may pin an older release whose options the latest schema has dropped, so expose schema feedback without enforcing it, like the clang-format project config."
     },
     {
       "name": "StyLua fallback config",
@@ -437,6 +468,14 @@
       "note": "This is autoformat's global fallback config, so it is associated by dotfiles path rather than relying on project-local names."
     },
     {
+      "name": "StyLua project config",
+      "format": "toml",
+      "schema": "stylua.schema.json",
+      "matches": ["stylua.toml", ".stylua.toml"],
+      "enforce": true,
+      "note": "Project configs reuse the fallback's pinned payload, which the scheduled refresh keeps current; the option set is small and stable across releases, so a mismatch is a real mistake worth blocking."
+    },
+    {
       "name": "Taplo fallback config",
       "format": "toml",
       "schema": "taplo.schema.json",
@@ -444,6 +483,14 @@
       "matches": [".config/checkrun/taplo.toml"],
       "enforce": true,
       "note": "Taplo shares formatter and linter options in one fallback config."
+    },
+    {
+      "name": "Taplo project config",
+      "format": "toml",
+      "schema": "taplo.schema.json",
+      "matches": ["taplo.toml", ".taplo.toml"],
+      "enforce": true,
+      "note": "Project configs reuse the fallback's pinned payload, which the scheduled refresh keeps current; the option set is small and stable across releases, so a mismatch is a real mistake worth blocking."
     },
     {
       "name": "typos fallback config",
@@ -455,6 +502,14 @@
       "note": "This is autolint's global fallback config, so it is associated by dotfiles path rather than relying on project-local names."
     },
     {
+      "name": "typos project config",
+      "format": "toml",
+      "schema": "typos.schema.json",
+      "matches": ["typos.toml", "_typos.toml", ".typos.toml"],
+      "enforce": true,
+      "note": "Project configs reuse the fallback's pinned payload, which the scheduled refresh keeps current; the option set is small and stable across releases, so a mismatch is a real mistake worth blocking."
+    },
+    {
       "name": "rumdl fallback config",
       "format": "toml",
       "schema": "rumdl.schema.json",
@@ -462,6 +517,14 @@
       "matches": [".config/checkrun/rumdl.toml"],
       "enforce": true,
       "note": "rumdl shares markdown formatting and lint policy in one fallback config."
+    },
+    {
+      "name": "rumdl project config",
+      "format": "toml",
+      "schema": "rumdl.schema.json",
+      "matches": ["rumdl.toml", ".rumdl.toml"],
+      "enforce": true,
+      "note": "Project configs reuse the fallback's pinned payload, which the scheduled refresh keeps current; the option set is small and stable across releases, so a mismatch is a real mistake worth blocking."
     },
     {
       "name": "yamlfmt fallback config",
