@@ -28,9 +28,13 @@ oldest 30 open pull requests are checked, and a longer queue prints a warning.
 
 Scheduled runs catch nightly failures that a later push would otherwise hide,
 since a push moves the default branch past the commit the nightly ran on.
-Failing or running scheduled runs are listed under their repository; runs from
-inactive workflows, older than 45 days, or cancelled/skipped are ignored. A
-run waiting on an approval counts as failing because it needs a person.
+Failing, running, or stale scheduled runs are listed under their repository;
+runs from inactive workflows, older than 45 days, or cancelled/skipped are
+ignored. A run waiting on an approval counts as failing because it needs a
+person. An active workflow whose newest scheduled run is older than
+`--stale-days` (default: 10) fails as stale, so a schedule that suddenly stops
+cannot keep reporting its last pass as ok; workflows that run less often need
+a higher value, and 45 or higher disables stale detection.
 
 Exit status is 0 when nothing failed (checks still running are not failures),
 1 on any failure or query error, 2 on a usage or local environment error, and

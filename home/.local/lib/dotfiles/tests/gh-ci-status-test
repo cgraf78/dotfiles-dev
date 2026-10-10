@@ -198,12 +198,15 @@ run() {
     PATH="$stub_bin:$PATH" invoke "$command_path" "$@"
 }
 
-# Scheduled runs: epochs are relative to now so the 45-day cutoff holds no
+# Scheduled runs: epochs are relative to now so the age cutoffs hold no
 # matter when the suite runs. Only active workflows are listed; the command's
 # jq program does that filtering, which the replay at the end covers.
+# Stale runs sit between --stale-days (default 10) and the 45-day cutoff, where
+# the schedule is assumed removed or paused and the run is ignored.
 now=$(date +%s)
 recent=$((now - 3600))
-stale=$((now - 50 * 86400))
+stale=$((now - 15 * 86400))
+old=$((now - 50 * 86400))
 # Write fixture dir $1's newest-run record for repository $2's workflow $3,
 # named $4, with conclusion or status $5 and creation epoch $6.
 _sched() {
@@ -211,20 +214,23 @@ _sched() {
   _rec "$id" "$name" "$raw" 2026-01-02T03:04:05Z "$epoch" \
     "https://github.test/o/$repo/actions/runs/$id" >"$dir/$repo.$id"
 }
-printf '11\n13\n14\n15\n' >"$sched_dir/alpha.workflows"
+printf '11\n13\n14\n15\n16\n' >"$sched_dir/alpha.workflows"
 _sched "$sched_dir" alpha 11 Nightly failure "$recent"
-_sched "$sched_dir" alpha 13 Weekly failure "$stale"
+_sched "$sched_dir" alpha 13 Weekly failure "$old"
 _sched "$sched_dir" alpha 14 Superseded cancelled "$recent"
+_sched "$sched_dir" alpha 16 OldFailure failure "$stale"
 printf '21\n' >"$sched_dir/beta.workflows"
 _sched "$sched_dir" beta 21 Nightly in_progress "$recent"
 : >"$sched_dir/delta.workflows.fail"
-printf '31\n' >"$sched_dir/epsilon.workflows"
+printf '31\n32\n' >"$sched_dir/epsilon.workflows"
 _sched "$sched_dir" epsilon 31 Nightly success "$recent"
+_sched "$sched_dir" epsilon 32 StaleNightly success "$stale"
 printf '61\n' >"$sched_dir/gamma.workflows"
 _sched "$sched_dir" gamma 61 Approval waiting "$recent"
-printf '71\n72\n' >"$sched_dir/zeta.workflows"
+printf '71\n72\n73\n' >"$sched_dir/zeta.workflows"
 _sched "$sched_dir" zeta 71 Timeout timed_out "$recent"
 _sched "$sched_dir" zeta 72 Skipper skipped "$recent"
+_sched "$sched_dir" zeta 73 CancelledOld cancelled "$stale"
 empty_sched=$(_tmpdir)
 
 echo "=== status presentation ==="
@@ -305,7 +311,7 @@ _assert_contains "summary: repository without CI reports none" \
 _assert_contains "summary: sanitized titles print verbatim" \
   "#5 Tab title \\ slash" "$out"
 _assert_contains "summary: counts cover branches, scheduled runs, and pull requests" \
-  "summary: 5 pass, 5 fail, 3 pending, 4 without checks (5 scheduled runs checked)" "$out"
+  "summary: 5 pass, 7 fail, 3 pending, 4 without checks (7 scheduled runs checked)" "$out"
 _assert_contains "scheduled: a failing nightly is listed under its repository" \
   "  ✗ fail     scheduled Nightly: failure (2026-01-02 03:04Z)" "$out"
 _assert_contains "scheduled: a failing nightly links to its run" \
@@ -318,6 +324,14 @@ _assert_contains "scheduled: a run awaiting approval needs attention" \
 _assert_contains "scheduled: a timed-out run fails" "  ✗ fail     scheduled Timeout: timed_out" "$out"
 _assert_not_contains "scheduled: a skipped run is ignored" "Skipper" "$out"
 _assert_not_contains "scheduled: a cancelled run is ignored" "Superseded" "$out"
+_assert_not_contains "scheduled: a cancelled run in the stale window is ignored" \
+  "CancelledOld" "$out"
+_assert_contains "stale: a passing run that stopped fails instead of reporting ok" \
+  "  ✗ fail     scheduled StaleNightly: stale (last success 2026-01-02 03:04Z)" "$out"
+_assert_contains "stale: a stale run links to its last run" \
+  "https://github.test/o/epsilon/actions/runs/32" "$out"
+_assert_contains "stale: a failing run that stopped reports stale with its last conclusion" \
+  "  ✗ fail     scheduled OldFailure: stale (last failure 2026-01-02 03:04Z)" "$out"
 _assert_not_contains "scheduled: a passing nightly is counted but not listed" \
   "epsilon/actions/runs/31" "$out"
 _assert_contains "scheduled: an unreadable repository warns" \
@@ -370,14 +384,29 @@ out=$(run --porcelain --owner=acme 2>&1)
 _assert_contains "porcelain: overall state" "state=fail" "$out"
 _assert_contains "porcelain: explicit owner" "owner=acme" "$out"
 _assert_contains "porcelain: counts" \
-  $'pass=5\nfail=5\npending=3\nnone=4\ntruncated=1\nscheduled=5\nsched_errors=1' "$out"
+  $'pass=5\nfail=7\npending=3\nnone=4\ntruncated=1\nscheduled=7\nsched_errors=1\nstale=2' "$out"
 _assert_contains "porcelain: scheduled record" \
   "sched${tab}fail${tab}alpha${tab}Nightly${tab}failure${tab}2026-01-02T03:04:05Z${tab}https://github.test/o/alpha/actions/runs/11" \
   "$out"
 _assert_contains "porcelain: passing scheduled runs are listed" \
   "sched${tab}pass${tab}epsilon${tab}Nightly" "$out"
+_assert_contains "porcelain: stale runs fail with their last conclusion" \
+  "stale${tab}fail${tab}epsilon${tab}StaleNightly${tab}success${tab}2026-01-02T03:04:05Z${tab}https://github.test/o/epsilon/actions/runs/32" \
+  "$out"
+_assert_contains "porcelain: stale failures keep their last conclusion" \
+  "stale${tab}fail${tab}alpha${tab}OldFailure${tab}failure${tab}2026-01-02T03:04:05Z${tab}https://github.test/o/alpha/actions/runs/16" \
+  "$out"
 _assert_contains "porcelain: scheduled read failures are listed" \
   "schederror${tab}none${tab}delta" "$out"
+out=$(run --porcelain --stale-days 45 2>&1)
+_assert_contains "stale-days: a 45-day threshold disables stale detection" \
+  $'pass=6\nfail=6\npending=3\nnone=4\ntruncated=1\nscheduled=7\nsched_errors=1\nstale=0' "$out"
+_assert_contains "stale-days: stale runs report their conclusion when fresh enough" \
+  "sched${tab}pass${tab}epsilon${tab}StaleNightly" "$out"
+_assert_not_contains "stale-days: no stale records when the threshold covers them" \
+  "stale${tab}fail" "$out"
+out=$(run --porcelain --stale-days=20 2>&1)
+_assert_contains "stale-days: the equals form is accepted" "stale=0" "$out"
 _assert_contains "porcelain: repo record" \
   "repo${tab}pass${tab}alpha${tab}main${tab}aaaaaaa1111111111111111111111111111111" "$out"
 _assert_contains "porcelain: a no-checks pull request keeps every column" \
@@ -389,6 +418,8 @@ out=$(run --porcelain --failing 2>&1)
 _assert_not_contains "porcelain failing: filters on the state column only" \
   "repo${tab}pass${tab}fail" "$out"
 _assert_contains "porcelain failing: keeps the truncation record" "truncated${tab}none${tab}delta" "$out"
+_assert_contains "porcelain failing: keeps stale failures" \
+  "stale${tab}fail${tab}epsilon${tab}StaleNightly" "$out"
 : >"$gh_log"
 run --owner acme >/dev/null 2>&1
 _assert_not_contains "owner: an explicit owner skips the user lookup" "api user" "$(cat "$gh_log")"
@@ -549,6 +580,18 @@ run --interval 00 >/dev/null 2>&1
 _assert_exit "usage: a zero-padded zero interval is rejected" 2 "$?"
 run --timeout x >/dev/null 2>&1
 _assert_exit "usage: a non-numeric timeout is rejected" 2 "$?"
+out=$(run --stale-days 0 2>&1)
+_assert_exit "usage: a zero stale-days is rejected" 2 "$?"
+_assert_contains "usage: a zero stale-days names the constraint" \
+  "must be a positive integer" "$out"
+out=$(run --stale-days x 2>&1)
+_assert_exit "usage: a non-numeric stale-days is rejected" 2 "$?"
+_assert_contains "usage: a non-numeric stale-days names the constraint" \
+  "must be a positive integer" "$out"
+out=$(run --stale-days 2>&1)
+_assert_exit "usage: a missing stale-days is rejected" 2 "$?"
+_assert_contains "usage: a missing stale-days names the missing value" \
+  "requires a value" "$out"
 run --owner 'bad owner' >/dev/null 2>&1
 _assert_exit "usage: an invalid owner is rejected" 2 "$?"
 run --owner= >/dev/null 2>&1
