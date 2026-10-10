@@ -18,10 +18,9 @@ in dotfiles, consider whether the file should be associated with a schema in
 - To add or change an association, follow the "Adding a Schema Association"
   checklist in `~/.config/checkrun/README.md` step by step. Besides the policy
   entry, it fetches a new public payload the way the scheduled refresh does,
-  regenerates the checked-in Neovim projection
-  (`.config/nvim/checkrun-editor-metadata.json`), confirms the VS Code
-  projection, and extends `schema-associations-test`; skipping a step leaves
-  one consumer without the schema.
+  confirms the Neovim and VS Code projections that `dot update` regenerates,
+  and extends `schema-associations-test`; skipping a step leaves one consumer
+  without the schema.
 - Decide `enforce` by validating the real tracked files and a deliberately
   invalid sample, not by assuming the published schema fits local usage.
 - If no proper schema exists, leave the file unassociated and rely on parser,

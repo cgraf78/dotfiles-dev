@@ -156,6 +156,7 @@ dot_dev_merges_test() {
   local expected_guard
   guard_table=$(
     cat <<'DEV_HOOK_GUARDS'
+checkrun-nvim|_dot_tool_any_command checkrun || return 0
 claude|_dot_tool_any_command claude || return 0
 codex|_dot_tool_any_command codex || return 0
 gemini|_dot_tool_any_command gemini || return 0
@@ -2172,5 +2173,179 @@ GH
     'args=prune' "$(<"$mise_log")"
 
   unset -f _run_mise_merge _mise_interactive merge 2>/dev/null
+
+  # ---------------------------------------------------------------------------
+  # Tests: checkrun-nvim merge hook
+  # ---------------------------------------------------------------------------
+
+  echo ""
+  echo "=== Checkrun Neovim metadata merge hook ==="
+
+  local checkrun_nvim_hook checkrun_nvim_bin checkrun_nvim_state
+  local checkrun_nvim_target checkrun_nvim_output checkrun_nvim_before
+  checkrun_nvim_hook="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/checkrun-nvim.sh"
+  checkrun_nvim_bin=$(_mock_bin)
+  checkrun_nvim_state=$(_tmpdir)/state
+  checkrun_nvim_target=$checkrun_nvim_state/dot/overlays/dev/checkrun-editor-metadata.json
+  # The fixture prints CHECKRUN_NVIM_OUTPUT verbatim, or fails, and records
+  # each invocation so tests can tell a skipped hook from a quiet one.
+  cat >"$checkrun_nvim_bin/checkrun" <<'CHECKRUN'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$CHECKRUN_NVIM_LOG"
+[[ $* == "editor-metadata --json" ]] || exit 2
+[[ -z ${CHECKRUN_NVIM_SLEEP:-} ]] || sleep "$CHECKRUN_NVIM_SLEEP"
+if [[ ${CHECKRUN_NVIM_FAIL:-0} == 1 ]]; then
+  printf 'Traceback (most recent call last):\n  frame\nValueError: broken policy\n\n' >&2
+  exit 1
+fi
+printf '%s\n' "$CHECKRUN_NVIM_OUTPUT"
+CHECKRUN
+  chmod +x "$checkrun_nvim_bin/checkrun"
+  export CHECKRUN_NVIM_LOG
+  CHECKRUN_NVIM_LOG=$(_tmpdir)/checkrun.log
+
+  _run_checkrun_nvim_merge() {
+    local rc
+    unset -f merge 2>/dev/null
+    # shellcheck source=/dev/null
+    . "$checkrun_nvim_hook"
+    # shellcheck disable=SC2031 # PATH is a command-scoped fixture.
+    PATH="$checkrun_nvim_bin:$PATH" XDG_STATE_HOME=$checkrun_nvim_state merge 2>&1
+    rc=$?
+    unset -f merge
+    return "$rc"
+  }
+
+  # GNU and BSD stat spell the modification-time format differently.
+  _checkrun_nvim_mtime() {
+    stat -c %Y "$checkrun_nvim_target" 2>/dev/null || stat -f %m "$checkrun_nvim_target"
+  }
+
+  _checkrun_nvim_tmp_count() {
+    local staged count=0
+    for staged in "$checkrun_nvim_target".tmp.*; do
+      [[ -e $staged ]] && count=$((count + 1))
+    done
+    printf '%s\n' "$count"
+  }
+
+  # Shapes follow `checkrun editor-metadata --json`: a JSON schema list and
+  # YAML/TOML association maps.
+  local valid_v1='{"version":1,"capabilities":{"version":2},"schemas":{"json":[],"yaml":{},"toml":{}}}'
+  local valid_v2='{"version":1,"capabilities":{"version":2},"schemas":{"json":[{"fileMatch":["x.json"],"url":"file:///x"}],"yaml":{},"toml":{}}}'
+
+  CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge >/dev/null
+  _assert_file_content 'Checkrun Neovim hook publishes generated metadata' \
+    "$valid_v1" "$checkrun_nvim_target"
+  _assert_eq 'Checkrun Neovim hook publishes a readable file' '644' \
+    "$(stat -c '%a' "$checkrun_nvim_target" 2>/dev/null || stat -f '%Lp' "$checkrun_nvim_target")"
+
+  # Unchanged output must not rewrite the destination.
+  touch -t 200101010000 "$checkrun_nvim_target"
+  checkrun_nvim_before=$(_checkrun_nvim_mtime)
+  # An empty reading would make the comparison below vacuous.
+  if [[ $checkrun_nvim_before =~ ^[0-9]+$ ]]; then
+    _pass 'Checkrun Neovim hook test reads the metadata timestamp'
+  else
+    _fail "Checkrun Neovim hook test reads the metadata timestamp (got '$checkrun_nvim_before')"
+  fi
+  checkrun_nvim_output=$(CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+  _assert_eq 'Checkrun Neovim hook leaves unchanged metadata untouched' \
+    "$checkrun_nvim_before" "$(_checkrun_nvim_mtime)"
+  _assert_eq 'Checkrun Neovim hook is quiet when nothing changed' '' "$checkrun_nvim_output"
+
+  CHECKRUN_NVIM_OUTPUT=$valid_v2 _run_checkrun_nvim_merge >/dev/null
+  _assert_file_content 'Checkrun Neovim hook replaces changed metadata' \
+    "$valid_v2" "$checkrun_nvim_target"
+
+  # Failed or invalid generation keeps the last good projection.
+  checkrun_nvim_output=$(CHECKRUN_NVIM_FAIL=1 CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+  _assert_exit 'Checkrun Neovim hook does not fail dot update on a Checkrun error' 0 "$?"
+  _assert_contains 'Checkrun Neovim hook reports a Checkrun error' \
+    'keeping the previous Neovim metadata' "$checkrun_nvim_output"
+  _assert_contains 'Checkrun Neovim hook names the last Checkrun error line' \
+    'exit 1: ValueError: broken policy' "$checkrun_nvim_output"
+  _assert_file_content 'Checkrun Neovim hook keeps metadata after a Checkrun error' \
+    "$valid_v2" "$checkrun_nvim_target"
+  local invalid
+  for invalid in '' 'not json' \
+    '{"version":2,"capabilities":{},"schemas":{"json":[],"yaml":{},"toml":{}}}' \
+    '{"version":1,"capabilities":[],"schemas":{"json":[],"yaml":{},"toml":{}}}' \
+    '{"version":1,"capabilities":{}}' \
+    '{"version":1,"capabilities":{},"schemas":{"json":{},"yaml":{},"toml":{}}}'; do
+    CHECKRUN_NVIM_OUTPUT=$invalid _run_checkrun_nvim_merge >/dev/null
+    _assert_file_content "Checkrun Neovim hook rejects invalid metadata: ${invalid:-empty}" \
+      "$valid_v2" "$checkrun_nvim_target"
+  done
+  _assert_eq 'Checkrun Neovim hook leaves no staging files behind' '0' "$(_checkrun_nvim_tmp_count)"
+  checkrun_nvim_output=$(CHECKRUN_NVIM_OUTPUT='{"version":1}' _run_checkrun_nvim_merge)
+  _assert_contains 'Checkrun Neovim hook reports invalid output distinctly' \
+    'output failed validation' "$checkrun_nvim_output"
+
+  # A wedged Checkrun is bounded, where a timeout command exists.
+  if { command -v timeout || command -v gtimeout; } >/dev/null 2>&1 &&
+    command -v sleep >/dev/null 2>&1; then
+    checkrun_nvim_output=$(DOT_CHECKRUN_NVIM_TIMEOUT_SECONDS=1 CHECKRUN_NVIM_SLEEP=10 \
+      CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+    _assert_contains 'Checkrun Neovim hook bounds a wedged Checkrun' \
+      'checkrun editor-metadata failed (exit 124' "$checkrun_nvim_output"
+    _assert_file_content 'Checkrun Neovim hook keeps metadata after a timeout' \
+      "$valid_v2" "$checkrun_nvim_target"
+  fi
+
+  # Staging files an interrupted run left behind are swept on the next run.
+  printf 'partial' >"$checkrun_nvim_target.tmp.AbC123"
+  CHECKRUN_NVIM_OUTPUT=$valid_v2 _run_checkrun_nvim_merge >/dev/null
+  _assert_file_missing 'Checkrun Neovim hook sweeps interrupted staging files' \
+    "$checkrun_nvim_target.tmp.AbC123"
+
+  # Only a regular file is replaced: a directory or symlink at the destination
+  # is refused with a warning instead of being written into or replaced.
+  local checkrun_nvim_link_target
+  rm -f -- "$checkrun_nvim_target"
+  mkdir "$checkrun_nvim_target"
+  checkrun_nvim_output=$(CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+  _assert_contains 'Checkrun Neovim hook refuses a directory destination' \
+    'cannot publish Checkrun Neovim metadata' "$checkrun_nvim_output"
+  local checkrun_nvim_entries=("$checkrun_nvim_target"/* "$checkrun_nvim_target"/.[!.]*)
+  local checkrun_nvim_entry checkrun_nvim_found=''
+  for checkrun_nvim_entry in "${checkrun_nvim_entries[@]}"; do
+    [[ -e $checkrun_nvim_entry ]] && checkrun_nvim_found+=" ${checkrun_nvim_entry##*/}"
+  done
+  _assert_eq 'Checkrun Neovim hook writes nothing into a directory destination' '' \
+    "$checkrun_nvim_found"
+  rmdir "$checkrun_nvim_target"
+  checkrun_nvim_link_target=$(_tmpdir)/elsewhere.json
+  printf 'theirs\n' >"$checkrun_nvim_link_target"
+  ln -s "$checkrun_nvim_link_target" "$checkrun_nvim_target"
+  checkrun_nvim_output=$(CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+  _assert_contains 'Checkrun Neovim hook refuses a symlink destination' \
+    'cannot publish Checkrun Neovim metadata' "$checkrun_nvim_output"
+  if [[ -L $checkrun_nvim_target ]]; then
+    _pass 'Checkrun Neovim hook keeps a symlink destination'
+  else
+    _fail 'Checkrun Neovim hook keeps a symlink destination'
+  fi
+  _assert_file_content 'Checkrun Neovim hook leaves a symlink target alone' \
+    'theirs' "$checkrun_nvim_link_target"
+  rm -f -- "$checkrun_nvim_target"
+  CHECKRUN_NVIM_OUTPUT=$valid_v2 _run_checkrun_nvim_merge >/dev/null
+  _assert_eq 'Checkrun Neovim hook leaves no staging files after refusals' '0' \
+    "$(_checkrun_nvim_tmp_count)"
+
+  # An unwritable state directory warns without failing or touching anything.
+  chmod 0555 "${checkrun_nvim_target%/*}"
+  checkrun_nvim_output=$(CHECKRUN_NVIM_OUTPUT=$valid_v1 _run_checkrun_nvim_merge)
+  _assert_exit 'Checkrun Neovim hook survives an unwritable state directory' 0 "$?"
+  chmod 0755 "${checkrun_nvim_target%/*}"
+  if [[ $(id -u) != 0 ]]; then
+    _assert_contains 'Checkrun Neovim hook reports an unwritable state directory' \
+      'cannot stage Checkrun Neovim metadata' "$checkrun_nvim_output"
+    _assert_file_content 'Checkrun Neovim hook keeps metadata it cannot replace' \
+      "$valid_v2" "$checkrun_nvim_target"
+  fi
+
+  unset -f _run_checkrun_nvim_merge _checkrun_nvim_tmp_count _checkrun_nvim_mtime \
+    merge 2>/dev/null
   _test_summary
 }

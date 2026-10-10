@@ -117,9 +117,9 @@ the repo-relative `"schema"` path. The shared interpreter resolves that through
 Every association reaches four consumers: `checkrun lint` and Sley read
 `associations.json` directly, VS Code regenerates its `json.schemas`,
 `yaml.schemas`, and `evenBetterToml.schema.associations` settings from it on
-`dot update`, and Neovim reads the checked-in projection
-`.config/nvim/checkrun-editor-metadata.json`. Work through every step so none
-of them is left behind.
+`dot update`, and Neovim reads the projection that the `checkrun-nvim` merge
+hook regenerates on every `dot update`. Work through every step so none of them
+is left behind.
 
 1. Find the schema owner. Use an official, SchemaStore, first-party, or
    shdeps dependency schema. If none exists, stop and leave the file
@@ -152,12 +152,13 @@ of them is left behind.
 
    The daily `Refresh Checkrun schemas` workflow then refreshes every
    association with a `"source"`, so no workflow change is needed.
-5. Regenerate the Neovim projection from the same policy and confirm its diff
-   only adds the new patterns:
+5. Confirm the Neovim projection lists the new patterns. `dot update` writes it
+   with `checkrun editor-metadata --json`; preview it from the checkout under
+   change with:
 
    ```sh
    CHECKRUN_SCHEMA_ASSOCIATIONS="$PWD/home/.config/checkrun/associations.json" \
-     checkrun editor-metadata --json >home/.config/nvim/checkrun-editor-metadata.json
+     checkrun editor-metadata --json
    ```
 
 6. Confirm the VS Code projection lists the new patterns:
