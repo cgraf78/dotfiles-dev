@@ -6,8 +6,12 @@
 # patterns catch the same credential files after expansion without
 # embedding a username. Do not deny the whole home directory.
 
+# workspace-agent-state is workspace plus AgentGuard's state dir; it is
+# defined in grok-config/sandbox.d. Until ~/.grok/sandbox.toml defines it,
+# the merge hook selects built-in workspace instead, because Grok cannot
+# start under an undefined profile.
 [sandbox]
-profile = "workspace"
+profile = "workspace-agent-state"
 
 [permission]
 deny = [

@@ -1200,6 +1200,12 @@ JSON
     "$grok_config_home/.grok/rules"
   cp "$REAL_HOME/.config/dot/merge-hooks.d/grok-config/config.d/"*.toml \
     "$grok_config_family/"
+  grok_sandbox_family="$grok_config_home/.config/dot/merge-hooks.d/grok-config/sandbox.d"
+  grok_sandbox_dst="$grok_config_home/.grok/sandbox.toml"
+  grok_sandbox_grant="$grok_config_home/.local/state/agentguard"
+  mkdir -p "$grok_sandbox_family"
+  cp "$REAL_HOME/.config/dot/merge-hooks.d/grok-config/sandbox.d/"*.toml \
+    "$grok_sandbox_family/"
   grok_hive_skill="$REAL_HOME/.grok/skills/hive-memory-attach/SKILL.md"
   grok_hive_name=""
   [[ -f $grok_hive_skill ]] &&
@@ -1300,7 +1306,7 @@ PY
     _assert_exit "Grok config merge: no native targets is a successful skip" \
       0 "$grok_config_status"
     _assert_eq "Grok config merge: no native targets leaves mcps unset" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
     grok_config_deny=$(
       python3 - "$grok_config_dst" <<'PY'
@@ -1323,7 +1329,7 @@ PY
     _assert_contains "Grok config merge: logs the Grok config layer" \
       "Grok config" "$grok_config_output"
     _assert_eq "Grok config merge: native hooks only disables hooks; mcps stay unset" \
-      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "false|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -1331,7 +1337,7 @@ PY
     printf '# grok rules\n' >"$grok_config_native_rules"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: native rules only disables rules/agents" \
-      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "true|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -1345,7 +1351,7 @@ PY
       "7b" "$grok_config_hooks_bytes"
     _run_grok_config_merge >/dev/null
     _assert_eq "Grok config merge: both native targets disable Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
     grok_config_hooks_bytes_after=$(od -An -tx1 -v "$grok_config_user_hooks")
     _assert_eq "Grok config merge: leaves sibling ~/.grok/hooks/user.json unchanged" \
@@ -1356,7 +1362,7 @@ PY
     _assert_exit "Grok config merge: second run is idempotent" \
       0 "$grok_config_again_status"
     _assert_eq "Grok config merge: second run keeps the same Claude-compat cells" \
-      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "false|false|false|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
 
     _grok_config_seed_toml
@@ -1380,9 +1386,189 @@ PY
     _assert_eq "Grok config merge: ungated tables survive empty compat.claude" \
       "true" "$grok_config_relay"
     _assert_eq "Grok config merge: gated-empty compat.claude leaves user hooks" \
-      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
+      "true|<unset>|<unset>|true|<unset>|always-approve|xAI Official|<no-plugin-disable>|workspace-agent-state|Bash(rm -rf *)|builtin|cwd,model,context,session-name|<no-autoplan>|keep-investigate" \
       "$(_grok_config_probe)"
     rm -f "$grok_config_family/99-gated.toml"
+
+    _grok_sandbox_probe() {
+      python3 - "$grok_sandbox_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+profiles = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("profiles", {})
+agent = profiles.get("workspace-agent-state", {})
+print(
+    "|".join(
+        [
+            ",".join(sorted(profiles)),
+            agent.get("extends", "<unset>"),
+            ",".join(agent.get("read_write", [])),
+        ]
+    )
+)
+PY
+    }
+
+    # Grok creates sandbox.toml as an empty file. The profile grants an
+    # absolute path because Grok skips `~` grants without warning.
+    _grok_config_seed_toml
+    rm -rf "$grok_config_home/.local"
+    : >"$grok_sandbox_dst"
+    grok_sandbox_status=0
+    _run_grok_config_merge >/dev/null 2>&1 || grok_sandbox_status=$?
+    _assert_exit "Grok sandbox merge: empty sandbox.toml merges" \
+      0 "$grok_sandbox_status"
+    _assert_eq "Grok sandbox merge: defines the AgentGuard state profile" \
+      "workspace-agent-state|workspace|$grok_sandbox_grant" \
+      "$(_grok_sandbox_probe)"
+    _assert_eq "Grok sandbox merge: creates the grant directory privately" \
+      "700" "$(stat -c '%a' "$grok_sandbox_grant" 2>/dev/null ||
+        stat -f '%Lp' "$grok_sandbox_grant")"
+    mkdir "$grok_config_home/umask-probe"
+    _assert_eq "Grok sandbox merge: missing parents get the normal umask" \
+      "$(stat -c '%a' "$grok_config_home/umask-probe" 2>/dev/null ||
+        stat -f '%Lp' "$grok_config_home/umask-probe")" \
+      "$(stat -c '%a' "${grok_sandbox_grant%/*}" 2>/dev/null ||
+        stat -f '%Lp' "${grok_sandbox_grant%/*}")"
+    rmdir "$grok_config_home/umask-probe"
+
+    # User profiles survive, and an existing grant keeps its own mode.
+    chmod 750 "$grok_sandbox_grant"
+    cat >"$grok_sandbox_dst" <<'TOML'
+[profiles.mine]
+extends = "strict"
+TOML
+    _run_grok_config_merge >/dev/null
+    _assert_eq "Grok sandbox merge: keeps user-defined profiles" \
+      "mine,workspace-agent-state|workspace|$grok_sandbox_grant" \
+      "$(_grok_sandbox_probe)"
+    _assert_eq "Grok sandbox merge: leaves an existing grant's mode alone" \
+      "750" "$(stat -c '%a' "$grok_sandbox_grant" 2>/dev/null ||
+        stat -f '%Lp' "$grok_sandbox_grant")"
+
+    # Without a sandbox layer the profile is undefined, and Grok refuses to
+    # start under an undefined profile. The fallback is built-in workspace,
+    # never a weaker current profile such as `off`.
+    _grok_config_seed_toml
+    printf '[sandbox]\nprofile = "off"\n' >>"$grok_config_dst"
+    : >"$grok_sandbox_dst"
+    mv "$grok_sandbox_family" "$grok_sandbox_family.off"
+    _run_grok_config_merge >/dev/null
+    _assert_contains "Grok config merge: undefined profile falls back to workspace, not off" \
+      "|workspace|Bash(rm -rf *)|" "$(_grok_config_probe)"
+
+    # A corrupt sandbox.toml is preserved and fails the refresh, but
+    # config.toml still converges. A current profile that is itself no
+    # longer defined is replaced too, or Grok would refuse to start.
+    mv "$grok_sandbox_family.off" "$grok_sandbox_family"
+    _grok_config_seed_toml
+    printf '[sandbox]\nprofile = "workspace-agent-state"\n' >>"$grok_config_dst"
+    printf 'not toml {' >"$grok_sandbox_dst"
+    grok_sandbox_corrupt_status=0
+    grok_sandbox_corrupt_output=$(_run_grok_config_merge 2>&1) ||
+      grok_sandbox_corrupt_status=$?
+    _assert_exit "Grok sandbox merge: corrupt sandbox.toml fails the refresh" \
+      1 "$grok_sandbox_corrupt_status"
+    _assert_contains "Grok sandbox merge: reports a corrupt sandbox.toml" \
+      "corrupt" "$grok_sandbox_corrupt_output"
+    _assert_eq "Grok sandbox merge: corrupt sandbox.toml bytes are unchanged" \
+      "not toml {" "$(cat "$grok_sandbox_dst")"
+    _assert_contains "Grok sandbox merge: corrupt sandbox.toml falls back to workspace" \
+      "|workspace|Bash(rm -rf *)|" "$(_grok_config_probe)"
+    # A fresh config must never end up without a profile: Grok's default is
+    # unsandboxed. A grant that cannot be created fails the sandbox merge.
+    rm -f "$grok_config_dst"
+    : >"$grok_sandbox_dst"
+    rm -rf "$grok_config_home/.local"
+    mkdir -p "$grok_config_home/.local/state"
+    ln -s "$grok_config_home/missing/dir" "$grok_sandbox_grant"
+    grok_sandbox_fresh_status=0
+    _run_grok_config_merge >/dev/null 2>&1 || grok_sandbox_fresh_status=$?
+    rm -f "$grok_sandbox_grant"
+    _assert_exit "Grok sandbox merge: uncreatable grant fails the refresh" \
+      1 "$grok_sandbox_fresh_status"
+    grok_sandbox_fresh_profile=$(
+      python3 - "$grok_config_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(data.get("sandbox", {}).get("profile", "<unset>"))
+PY
+    )
+    _assert_eq "Grok config merge: fresh config falls back to workspace" \
+      "workspace" "$grok_sandbox_fresh_profile"
+
+    # A symlinked sandbox.toml is preserved and named as a symlink.
+    : >"$grok_config_home/sandbox-target.toml"
+    ln -sfn "$grok_config_home/sandbox-target.toml" "$grok_sandbox_dst"
+    grok_sandbox_link_status=0
+    grok_sandbox_link_output=$(_run_grok_config_merge 2>&1) ||
+      grok_sandbox_link_status=$?
+    _assert_exit "Grok sandbox merge: symlinked sandbox.toml fails the refresh" \
+      1 "$grok_sandbox_link_status"
+    _assert_contains "Grok sandbox merge: reports a symlinked sandbox.toml" \
+      "symlink" "$grok_sandbox_link_output"
+    _assert_eq "Grok sandbox merge: symlink target stays empty" \
+      "" "$(cat "$grok_config_home/sandbox-target.toml")"
+    rm -f "$grok_sandbox_dst"
+    : >"$grok_sandbox_dst"
+
+    # Malformed sibling profiles must not stop `~` expansion of good ones;
+    # a literal `~` grant is silently ignored by Grok.
+    cat >"$grok_sandbox_family/05-malformed.toml" <<'TOML'
+[profiles]
+scalar = 1
+
+[profiles.stringgrant]
+read_write = "~/not-an-array"
+TOML
+    _run_grok_config_merge >/dev/null 2>&1
+    rm -f "$grok_sandbox_family/05-malformed.toml"
+    _assert_eq "Grok sandbox merge: malformed profiles keep ~ expansion" \
+      "$grok_sandbox_grant" \
+      "$(
+        python3 - "$grok_sandbox_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(",".join(data["profiles"]["workspace-agent-state"]["read_write"]))
+PY
+      )"
+    : >"$grok_sandbox_dst"
+
+    # An empty or comment-only sandbox layer (yq reads it as null) is a
+    # no-op, not a failed merge.
+    printf '# placeholder\n' >"$grok_sandbox_family/00-empty.toml"
+    grok_sandbox_empty_status=0
+    _run_grok_config_merge >/dev/null 2>&1 || grok_sandbox_empty_status=$?
+    rm -f "$grok_sandbox_family/00-empty.toml"
+    _assert_exit "Grok sandbox merge: comment-only layer is a no-op" \
+      0 "$grok_sandbox_empty_status"
+    _assert_eq "Grok sandbox merge: comment-only layer keeps the profile" \
+      "workspace-agent-state|workspace|$grok_sandbox_grant" \
+      "$(_grok_sandbox_probe)"
+    : >"$grok_sandbox_dst"
+
+    # A non-table `sandbox` value must not empty the whole layer.
+    _grok_config_seed_toml
+    cat >"$grok_config_family/99-scalar-sandbox.toml" <<'TOML'
+sandbox = "x"
+
+[relay]
+enabled = true
+TOML
+    _run_grok_config_merge >/dev/null 2>&1
+    rm -f "$grok_config_family/99-scalar-sandbox.toml"
+    _assert_eq "Grok config merge: scalar sandbox keeps the rest of its layer" \
+      "true" \
+      "$(
+        python3 - "$grok_config_dst" <<'PY'
+import sys, tomllib
+from pathlib import Path
+data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(str(data.get("relay", {}).get("enabled", "<unset>")).lower())
+PY
+      )"
+    unset -f _grok_sandbox_probe
 
     # Native hooks make the gated layer non-empty so dest is parsed. With
     # no ungated tables, an empty gated layer would skip without seeing

@@ -446,8 +446,9 @@ def toml_strings(node):
         yield node
 
 
-# grok-config layers are local policy (Claude-compat switches, sandbox, status
-# line). Grok hooks belong in AgentGuard's own ~/.grok/hooks fragment, so no
+# grok-config layers (config.d and sandbox.d) are local policy (Claude-compat
+# switches, sandbox profiles, status line). Grok hooks belong in AgentGuard's
+# own ~/.grok/hooks fragment, so no
 # layer may declare a hooks table or name AgentGuard commands. This reads the
 # parsed values rather than the text because the layer comments legitimately
 # explain the AgentGuard settings they turn off. A layer that does not parse
@@ -455,6 +456,7 @@ def toml_strings(node):
 grok_layers = family_layers(config_root / "grok-config/config.d")
 if not grok_layers:
     errors.append("grok-config/config.d: no Grok config layers")
+grok_layers += family_layers(config_root / "grok-config/sandbox.d")
 for path in grok_layers:
     try:
         with path.open("rb") as f:
