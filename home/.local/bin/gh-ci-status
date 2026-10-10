@@ -28,10 +28,15 @@ Options:
                         Include archived repositories.
       --no-scheduled    Skip scheduled workflow runs (saves one API call per
                         repository plus one per active workflow).
+      --stale-days <n>  Fail an active workflow whose newest scheduled run is
+                        older than this many days (default: 10). Workflows that
+                        run less often need a higher value; 45 or higher
+                        disables stale detection.
       --color <mode>    Color auto (default), always, or never. NO_COLOR disables
                         color; porcelain output is always plain.
       --porcelain       Print stable key=value summary fields followed by
-                        tab-separated repo, sched, pr, and truncated records.
+                        tab-separated repo, sched, stale, pr, and truncated
+                        records.
   -w, --watch           Poll until nothing is pending, then summarize.
                         Checks that have not registered yet read as none.
   -i, --interval <sec>  Poll interval for --watch (default: 30).
@@ -40,6 +45,8 @@ Options:
 
 Repositories without CI report "none" and never fail the run. Scheduled runs
 older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
+A run older than --stale-days from an active workflow fails as stale, so a
+schedule that suddenly stops cannot keep reporting its last pass as ok.
 
 Exit status:
   0  Nothing failed. Checks still running do not count as failures.
@@ -72,15 +79,17 @@ _watch=0
 _scheduled=1
 _interval=30
 _timeout=1800
+_stale_days=10
 
 while (($#)); do
   case "$1" in
-    -o | --owner | -i | --interval | -t | --timeout | --color)
+    -o | --owner | -i | --interval | -t | --timeout | --color | --stale-days)
       (($# >= 2)) || _usage_error "$1 requires a value"
       case "$1" in
         -o | --owner) _owner=$2 _owner_given=1 ;;
         -i | --interval) _interval=$2 ;;
         --color) _color=$2 ;;
+        --stale-days) _stale_days=$2 ;;
         *) _timeout=$2 ;;
       esac
       shift 2
@@ -99,6 +108,10 @@ while (($#)); do
       ;;
     --timeout=*)
       _timeout=${1#--timeout=}
+      shift
+      ;;
+    --stale-days=*)
+      _stale_days=${1#--stale-days=}
       shift
       ;;
     -f | --failing)
@@ -146,6 +159,7 @@ _positive() {
 }
 _positive --interval "$_interval"
 _positive --timeout "$_timeout"
+_positive --stale-days "$_stale_days"
 if ((_owner_given == 1)); then
   case "$_owner" in
     '' | *[!A-Za-z0-9-]*) _usage_error "invalid owner: '$_owner'" ;;
@@ -286,7 +300,9 @@ _sched_workflows_jq='.workflows[] | select(.state == "active") | .id'
 
 # A scheduled result older than this is not the latest run of a live
 # schedule: the schedule was removed or paused, and reporting it would pin a
-# stale failure forever. 45 days keeps monthly schedules visible.
+# stale failure forever. 45 days keeps monthly schedules visible. Runs between
+# --stale-days and this age fail as stale instead, so a schedule that suddenly
+# stops cannot keep reporting its last pass as ok.
 _sched_max_age=$((45 * 86400))
 
 # Map a scheduled run's conclusion, or its status while it has none, onto the
@@ -304,13 +320,15 @@ _sched_state() {
 }
 
 # Write repository $1's newest scheduled run for each active workflow on
-# branch $2 to file $3 as sched records, or one schederror record when any
-# part cannot be read. The per-workflow queries run concurrently: each is
-# dominated by API latency rather than payload, so asking for a few runs per
-# workflow, for _sched_run_jq to pick the newest, costs no extra requests;
-# the responses are only larger.
+# branch $2 to file $3 as sched records, or stale records when the newest run
+# is older than --stale-days, or one schederror record when any part cannot
+# be read. The per-workflow queries run concurrently: each is dominated by API
+# latency rather than payload, so asking for a few runs per workflow, for
+# _sched_run_jq to pick the newest, costs no extra requests; the responses are
+# only larger.
 _fetch_scheduled_one() {
   local repo=$1 branch=$2 out=$3 ids id line name raw created epoch url now cutoff
+  local stale_cutoff
   local failed=0
   # -X GET is required: gh switches to POST whenever fields are passed.
   if ! ids=$(gh api -X GET --paginate "repos/$_owner/$repo/actions/workflows" \
@@ -334,6 +352,7 @@ _fetch_scheduled_one() {
     return 0
   fi
   cutoff=$((now - _sched_max_age))
+  stale_cutoff=$((now - 10#$_stale_days * 86400))
   : >"$out"
   for id in $ids; do
     [[ $id =~ ^[0-9]+$ ]] || continue
@@ -345,6 +364,15 @@ _fetch_scheduled_one() {
     IFS= read -r line <"$out.$id"
     IFS=$_sep read -r id name raw created epoch url <<<"$line"
     if [[ ! $epoch =~ ^[0-9]+$ ]] || ((epoch < cutoff)); then
+      continue
+    fi
+    # Cancelled and skipped runs stay ignored at any age: they were superseded
+    # rather than actionable, so only runs with a real result can go stale.
+    # A threshold at or above 45 days leaves no age that is both fresh enough
+    # to report and old enough to be stale, which disables stale detection.
+    _sched_state "$raw"
+    if [[ $REPLY != none ]] && ((epoch < stale_cutoff)); then
+      printf '%s\n' "stale$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url" >>"$out"
       continue
     fi
     printf '%s\n' "sched$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url" >>"$out"
@@ -446,6 +474,7 @@ _summarize() {
   _sched_pending=0
   _sched_pending_repos=''
   _sched_errors=0
+  _stale_count=0
   _width=4
   while IFS= read -r line; do
     [[ -n $line ]] || continue
@@ -476,8 +505,9 @@ _summarize() {
   done <<<"$_records"
 }
 
-# Append repository $1's scheduled-run rows (sched, or schederror when they
-# could not be read) and count them, so they print right under its branch.
+# Append repository $1's scheduled-run rows (sched, stale when the newest run
+# is older than --stale-days, or schederror when they could not be read) and
+# count them, so they print right under its branch.
 _summarize_scheduled() {
   local want=$1 line kind repo name raw created url
   [[ -n ${_sched_records:-} ]] || return 0
@@ -488,6 +518,13 @@ _summarize_scheduled() {
     if [[ $kind == schederror ]]; then
       _sched_errors=$((_sched_errors + 1))
       _rows+=("schederror${_sep}none$_sep$repo")
+      continue
+    fi
+    if [[ $kind == stale ]]; then
+      _sched_count=$((_sched_count + 1))
+      _stale_count=$((_stale_count + 1))
+      _count fail
+      _rows+=("stale${_sep}fail$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url")
       continue
     fi
     _sched_state "$raw"
@@ -560,8 +597,9 @@ _print_porcelain() {
   _overall
   printf 'state=%s\nowner=%s\nrepositories=%s\npull_requests=%s\n' \
     "$REPLY" "$_owner" "$_repos" "$_prs"
-  printf 'pass=%s\nfail=%s\npending=%s\nnone=%s\ntruncated=%s\nscheduled=%s\nsched_errors=%s\n' \
-    "$_pass" "$_fail" "$_pending" "$_none" "$_truncated" "$_sched_count" "$_sched_errors"
+  printf 'pass=%s\nfail=%s\npending=%s\nnone=%s\ntruncated=%s\nscheduled=%s\nsched_errors=%s\nstale=%s\n' \
+    "$_pass" "$_fail" "$_pending" "$_none" "$_truncated" "$_sched_count" "$_sched_errors" \
+    "$_stale_count"
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
     _visible "$kind" "$state" "$repo" || continue
@@ -630,6 +668,14 @@ _print_human() {
         printf '  '
         _badge "$state"
         printf ' scheduled %s: %s (%s)\n' "$name" "$raw" "${created%:*}Z"
+        printf '             %s\n' "$url"
+        ;;
+      stale)
+        IFS=$_sep read -r kind state repo name raw created url <<<"$row"
+        created=${created/T/ }
+        printf '  '
+        _badge "$state"
+        printf ' scheduled %s: stale (last %s %s)\n' "$name" "$raw" "${created%:*}Z"
         printf '             %s\n' "$url"
         ;;
       schederror)
