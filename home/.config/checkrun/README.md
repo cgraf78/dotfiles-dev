@@ -112,6 +112,61 @@ the payload in that dependency repo and add `"dependency": "owner/repo"` beside
 the repo-relative `"schema"` path. The shared interpreter resolves that through
 `shdeps dep-file`, so dotfiles only owns the association policy.
 
+## Adding a Schema Association
+
+Every association reaches four consumers: `checkrun lint` and Sley read
+`associations.json` directly, VS Code regenerates its `json.schemas`,
+`yaml.schemas`, and `evenBetterToml.schema.associations` settings from it on
+`dot update`, and Neovim reads the checked-in projection
+`.config/nvim/checkrun-editor-metadata.json`. Work through every step so none
+of them is left behind.
+
+1. Find the schema owner. Use an official, SchemaStore, first-party, or
+   shdeps dependency schema. If none exists, stop and leave the file
+   unassociated.
+2. Add one entry to `associations.json`, placed beside related entries and
+   written in the existing layout: a single-line `matches` array when it fits,
+   otherwise one pattern per line. Use generic convention names or
+   family-wide merge-layer patterns.
+   - A public schema gets `"source"` with its canonical URL and a stable
+     `"schema"` payload filename.
+   - A dependency's public schema gets `"dependency"` and its repo-relative
+     path, and no payload here; refresh skips it.
+   - A project-level variant of an existing fallback entry, such as
+     `typos.toml` beside `.config/checkrun/typos.toml`, gets its own
+     `"... project config"` entry that reuses the fallback's `"schema"` without
+     a `"source"`, so one refresh keeps both current.
+3. Choose `"enforce"` from real files. Validate the files you track and a
+   deliberately invalid sample. Use `false` when the schema rejects valid
+   local usage, such as custom values outside a published catalog, or when
+   other repositories may target older tool versions, and say why in
+   `"note"`.
+4. Fetch a new public payload exactly as the scheduled refresh does, from the
+   checkout under change:
+
+   ```sh
+   HOME="$PWD/home" \
+     CHECKRUN_SCHEMA_ASSOCIATIONS="$PWD/home/.config/checkrun/associations.json" \
+     checkrun schema refresh --association "NAME"
+   ```
+
+   The daily `Refresh Checkrun schemas` workflow then refreshes every
+   association with a `"source"`, so no workflow change is needed.
+5. Regenerate the Neovim projection from the same policy and confirm its diff
+   only adds the new patterns:
+
+   ```sh
+   CHECKRUN_SCHEMA_ASSOCIATIONS="$PWD/home/.config/checkrun/associations.json" \
+     checkrun editor-metadata --json >home/.config/nvim/checkrun-editor-metadata.json
+   ```
+
+6. Confirm the VS Code projection lists the new patterns:
+   `schema_policy.py --lsp-schemas --editor-sources` (resolved with
+   `shdeps dep-file cgraf78/checkrun lib/checkrun/schemas/schema_policy.py`)
+   under the same `CHECKRUN_SCHEMA_ASSOCIATIONS`.
+7. Add the entry's expected fields, and any new payload filename, to
+   `.local/lib/dotfiles/tests/schema-associations-test`, then run `dot test`.
+
 ## Matching Policy
 
 Patterns in `associations.json` may be written as home-relative dotfiles paths
