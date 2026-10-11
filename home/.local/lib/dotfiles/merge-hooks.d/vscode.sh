@@ -506,30 +506,37 @@ _vscode_checkrun_settings() {
   rm -f "$cap" "$schemas" "$tmp"
 }
 
-_remove_vscode_generated_checkrun_settings() {
+# The settings that carry the Checkrun schema projection. Their values name
+# host-local file:// schema paths, so every writer and remover shares this list.
+_vscode_schema_setting_keys='["json.schemas","yaml.schemas","evenBetterToml.schema.associations"]'
+
+# Drop the schema projection settings from a settings file. They are complete
+# projections from Checkrun schema policy, so the hook owns them outright.
+# Recursive settings merges preserve unknown nested object keys, which is right
+# for hand-written user settings but wrong for generated machine-local
+# fileMatch and file:// schema paths: Settings Sync could leave a trail of
+# /Users, /home, and /root entries behind, and json.schemas, an array with no
+# identity, would let profile-state record a stale projection as user-owned.
+_remove_vscode_schema_settings() {
   local settings="$1"
   [[ -f "$settings" ]] || return 0
 
   local tmp
   tmp=$(mktemp)
-  if jq --indent 4 --sort-keys '
-    # These settings are complete projections from Checkrun schema policy.
-    # Recursive settings merges preserve unknown nested object keys, which is
-    # right for hand-written user settings but wrong for generated machine-local
-    # fileMatch and file:// schema paths. Drop the old projection before writing
-    # the current machine projection so VS Code Settings Sync cannot leave a
-    # trail of /Users, /home, and /root entries behind.
-    del(.["json.schemas"])
-    | del(.["yaml.schemas"])
-    | del(.["evenBetterToml.schema.associations"])
+  if jq --indent 4 --sort-keys --argjson keys "$_vscode_schema_setting_keys" '
+    reduce $keys[] as $key (.; del(.[$key]))
   ' "$settings" >"$tmp"; then
     _vscode_commit_tmp "$tmp" "$settings"
   else
     rm -f "$tmp"
     return 1
   fi
+}
 
-  _remove_vscode_sley_settings "$settings"
+_remove_vscode_generated_checkrun_settings() {
+  _remove_vscode_schema_settings "$1" || return 1
+  [[ -f "$1" ]] || return 0
+  _remove_vscode_sley_settings "$1"
 }
 
 _vscode_host_label() {
@@ -989,7 +996,12 @@ _merge_vscode_config_tracked() {
   fi
   baseline=$REPLY
   work=$managed_dir/working-settings.json
-  if ! cp "$baseline" "$work" ||
+  # The schema settings are hook-owned outright, so strip them from the staged
+  # baseline that becomes the receipt's user-owned `before`: otherwise a
+  # hand-edited json.schemas array (no entry identity) is captured whole,
+  # generated entries included, and deactivation would restore stale paths.
+  if ! _remove_vscode_schema_settings "$baseline" ||
+    ! cp "$baseline" "$work" ||
     ! _vscode_apply_settings_projection \
       "$managed_dir/settings.json" "$work" "$opts" ||
     ! dev_profile_state_publish_final "$work" ||
@@ -1402,13 +1414,43 @@ _vscode_remote_settings_dirs() {
   done
 }
 
+# Render this host's schema settings for remote windows into $1. A remote
+# window runs the JSON, YAML, and TOML language servers on this host, so they
+# resolve file:// schema URLs here, but the client's user settings carry the
+# client's own paths (/Users/... from a Mac), which this host lacks. Remote
+# machine settings take precedence over user settings, so they get this host's
+# projection. Array settings replace the client value outright, and the TOML
+# associations share regex keys with it; yaml.schemas is keyed by schema URL
+# and merges, so the policy gives clang-format, its only file:// YAML schema,
+# an https editor source. Without a usable Checkrun this writes {} and no key,
+# so the client's own schema settings apply unchanged: emptying json.schemas
+# would also drop its https entries, which do load here. Remote hosts that run
+# VS Code servers carry the dev overlay, which installs Checkrun.
+_vscode_remote_schema_settings() {
+  local out=$1 full
+  full=$(mktemp) || return 1
+  _vscode_checkrun_settings "$full" 0
+  if ! jq --indent 4 --sort-keys --argjson keys "$_vscode_schema_setting_keys" \
+    'with_entries(select(.key as $key | $keys | index($key)))' "$full" >"$out"; then
+    rm -f "$full"
+    return 1
+  fi
+  rm -f "$full"
+}
+
 _merge_vscode_remote_settings_tracked() {
   local cfg_dir=$1 managed_dir publisher
   local destination=$cfg_dir/settings.json
-  local baseline work
+  local baseline work schemas
   _dev_profile_state_tempdir || return 1
   managed_dir=$REPLY
+  schemas=$managed_dir/schema-settings.json
   printf '{}\n' >"$managed_dir/settings.json"
+  if ! _vscode_remote_schema_settings "$schemas" ||
+    ! _merge_vscode_settings "$schemas" "$managed_dir/settings.json"; then
+    _dev_profile_state_tempdir_remove "$managed_dir" || true
+    return 1
+  fi
   if ! _merge_vscode_window_title "$managed_dir/settings.json"; then
     _dev_profile_state_tempdir_remove "$managed_dir" || true
     return 1
@@ -1431,7 +1473,11 @@ _merge_vscode_remote_settings_tracked() {
   fi
   baseline=$REPLY
   work=$managed_dir/working-settings.json
-  if ! cp "$baseline" "$work" ||
+  # Same ownership rule as _merge_vscode_config_tracked: the schema settings
+  # never belong to the user-owned baseline.
+  if ! _remove_vscode_schema_settings "$baseline" ||
+    ! cp "$baseline" "$work" ||
+    ! _merge_vscode_settings "$schemas" "$work" ||
     ! _merge_vscode_window_title "$work" ||
     { _vscode_mcp_auth_applicable "$destination" &&
       ! _merge_vscode_mcp_auth "$work"; } ||
@@ -1979,7 +2025,7 @@ _vscode_signature_entries() {
 # merge() already resolved, as `variants`, `config_variants`, and
 # `local_extensions` arrays in the caller's scope.
 _vscode_signature_inputs() {
-  local file family_root record
+  local file family_root record remote_dirs=0
   local -a code=() sources=()
 
   printf 'version\t%s\n' vscode-merge-signature-v1
@@ -2002,6 +2048,7 @@ _vscode_signature_inputs() {
   done
   while IFS= read -r record; do
     printf 'remote\t%s\n' "$record"
+    remote_dirs=1
   done < <(_vscode_remote_settings_dirs)
   for record in ${local_extensions[@]+"${local_extensions[@]}"}; do
     printf 'local-extension\t%s\n' "$record"
@@ -2022,10 +2069,12 @@ _vscode_signature_inputs() {
   printf 'sources\t%s\n' "$family_root"
   _vscode_signature_files ${sources[@]+"${sources[@]}"} || return 1
 
-  # Only config-bearing variants consume the Checkrun projections. Hash the
-  # public CLI outputs rather than Checkrun internals so the signature follows
-  # the same boundary the merge consumes; the memo lets the merge reuse them.
-  if ((${#config_variants[@]} > 0)) && command -v checkrun >/dev/null 2>&1; then
+  # Config-bearing variants and remote machine settings consume the Checkrun
+  # projections. Hash the public CLI outputs rather than Checkrun internals so
+  # the signature follows the same boundary the merge consumes; the memo lets
+  # the merge reuse them.
+  if ((${#config_variants[@]} > 0 || remote_dirs)) &&
+    command -v checkrun >/dev/null 2>&1; then
     _vscode_checkrun_projection capabilities || return 1
     file=$REPLY
     _vscode_checkrun_projection schemas || return 1

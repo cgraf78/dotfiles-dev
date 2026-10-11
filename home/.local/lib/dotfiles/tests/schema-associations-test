@@ -47,6 +47,7 @@ expected = {
     "clang-format project config": {
         "format": "yaml",
         "schema": "clang-format-21.schema.json",
+        "editorSource": "https://www.schemastore.org/clang-format-21.x.json",
         "matches": [".clang-format", "_clang-format"],
         "enforce": False,
     },

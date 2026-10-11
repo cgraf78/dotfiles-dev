@@ -387,9 +387,10 @@
       "name": "clang-format project config",
       "format": "yaml",
       "schema": "clang-format-21.schema.json",
+      "editorSource": "https://www.schemastore.org/clang-format-21.x.json",
       "matches": [".clang-format", "_clang-format"],
       "enforce": false,
-      "note": "Expose schema feedback for project configs without enforcing LLVM 21 options on repositories that intentionally target another formatter version."
+      "note": "Expose schema feedback for project configs without enforcing LLVM 21 options on repositories that intentionally target another formatter version. The https editorSource keeps host paths out of VS Code's yaml.schemas, which is keyed by schema URL and merges across settings scopes, so a remote window would otherwise also try the client's unloadable file:// path."
     },
     {
       "name": "clang-tidy project config",
