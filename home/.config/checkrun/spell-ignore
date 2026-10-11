@@ -4,3 +4,5 @@
 # Pinned public schema payloads use upstream vocabulary and third-party setting
 # names that should not become personal dictionary policy.
 */.local/share/checkrun/schemas/*.schema.json
+# Their remote $ref targets, vendored by `checkrun schema refresh`.
+*/.local/share/checkrun/schemas/refs/*

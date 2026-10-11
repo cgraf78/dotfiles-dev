@@ -16,6 +16,7 @@
 # Pinned public schema payloads are vendored runtime data. Keep schema/parser
 # validation available, but avoid reformatting upstream payloads.
 */.local/share/checkrun/schemas/*.schema.json
+*/.local/share/checkrun/schemas/refs/*
 
 # iTerm2 dynamic-profile file — iTerm reads this to configure the terminal.
 # Reformatting could change key order in ways iTerm doesn't like.

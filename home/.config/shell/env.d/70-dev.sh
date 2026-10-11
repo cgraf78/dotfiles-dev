@@ -11,6 +11,13 @@ if [ -d "$HOME/.bun/bin" ]; then
   _shell_env_set BUN_INSTALL "$HOME/.bun"
 fi
 
+# This overlay ships the Checkrun schema policy, so its absence means a broken
+# install, not "no schemas". Requiring it makes Checkrun exit 2 when the policy
+# is missing or its validator cannot run (uv, installed on every platform here,
+# normally bootstraps one), and Sley's commit gate fails on that exit 2 instead
+# of passing a commit with no schema enforced.
+_shell_env_set CHECKRUN_SCHEMA_POLICY_REQUIRED 1
+
 # The Sley and agentguard blocks already yield to any inherited setting in
 # every mode, so a caller or test can point them at another repository. The
 # agentguard values are read by hook processes, whose environment comes from

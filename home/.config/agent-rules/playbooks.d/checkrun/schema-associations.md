@@ -23,5 +23,7 @@ in dotfiles, consider whether the file should be associated with a schema in
   without the schema.
 - Decide `enforce` by validating the real tracked files and a deliberately
   invalid sample, not by assuming the published schema fits local usage.
-- If no proper schema exists, leave the file unassociated and rely on parser,
-  formatter, linter, or native validation tools.
+- If no proper schema exists, add a row with the reason to
+  `~/.config/checkrun/schema-exemptions.tsv` and rely on parser, formatter,
+  linter, or native validation tools; `schema-coverage-test` fails on any
+  tracked structured config file with neither an association nor an exemption.
