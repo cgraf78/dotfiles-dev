@@ -136,10 +136,11 @@
       "matches": [
         ".config/dot/merge-hooks.d/claude/settings.d/*.json",
         ".config/dot/merge-hooks.d/claude/settings.d/*.replace/*.json",
+        ".claude/settings.json",
         ".claude/settings.local.json"
       ],
       "enforce": true,
-      "note": "Merge-hook source layers are valid Claude settings documents before they are merged into the generated destination config. settings.local.json shares that format, but SchemaStore matches only settings.json, so it is listed here."
+      "note": "Merge-hook source layers are valid Claude settings documents before they are merged into the generated destination config. The generated settings.json and settings.local.json share that format; listing them lets checkrun lint and agent post-edit validation check them, not only SchemaStore-aware editors."
     },
     {
       "name": "Claude Code plugin manifest",
@@ -166,10 +167,11 @@
       "source": "https://raw.githubusercontent.com/google-gemini/gemini-cli/refs/heads/main/schemas/settings.schema.json",
       "matches": [
         ".config/dot/merge-hooks.d/gemini/settings.d/*.json",
-        ".config/dot/merge-hooks.d/gemini/settings.d/*.replace/*.json"
+        ".config/dot/merge-hooks.d/gemini/settings.d/*.replace/*.json",
+        ".gemini/settings.json"
       ],
       "enforce": true,
-      "note": "Merge-hook source layers are valid Gemini settings documents before they are merged into the generated destination config."
+      "note": "Merge-hook source layers are valid Gemini settings documents before they are merged into the generated destination config. The generated settings.json is listed too so checkrun lint and agent post-edit validation check it, not only SchemaStore-aware editors."
     },
     {
       "name": "OpenCode config layers",
@@ -185,6 +187,15 @@
       ],
       "enforce": false,
       "note": "Merge-hook source layers are valid partial OpenCode configs before they are merged into the generated client config, which must stay strict JSON. Advisory because the schema restricts agent models to the public models.dev catalog, which rejects custom provider models such as the homelab local LLM. Project opencode.jsonc files may contain comments, so only strict-JSON project names are matched."
+    },
+    {
+      "name": "OpenCode CLI config",
+      "format": "json",
+      "schema": "opencode-cli.schema.json",
+      "source": "https://opencode.ai/v2/cli.json",
+      "matches": [".config/opencode/cli.json"],
+      "enforce": true,
+      "note": "OpenCode writes this TUI config itself and names this schema in its $schema key, which editors follow; the association adds checkrun lint and agent post-edit validation, which ignore $schema."
     },
     {
       "name": "VS Code settings layers",
@@ -550,7 +561,7 @@
         ".codex/*.config.toml"
       ],
       "enforce": true,
-      "note": "Merge-hook source layers are valid partial Codex configs before they are merged into the generated config and profile overlays, which are matched too: taplo has no SchemaStore catalog fallback in Neovim, so without them the generated files get no editor validation."
+      "note": "Merge-hook source layers are valid partial Codex configs before they are merged into the generated config and profile overlays, which are matched too: taplo 0.10 cannot load the current SchemaStore catalog, so without them Neovim gives the generated files no schema at all."
     }
   ]
 }

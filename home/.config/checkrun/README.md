@@ -195,11 +195,14 @@ dotfiles-specific names so merge hooks can compose personal, work, and
 host-specific layers. If each layer is valid by itself, associate the layer
 directly with the target's public schema.
 
-Also list the generated target when editors would otherwise leave it
-unvalidated: taplo has no SchemaStore catalog fallback, so a TOML target such
-as `.codex/config.toml` needs its own match, and SchemaStore covers Claude's
-`settings.json` but not `settings.local.json`. JSON and YAML targets that
-SchemaStore already matches need no entry.
+Also list each agent's main generated or self-written config, such as
+`.claude/settings.json`, `.codex/config.toml`, `.gemini/settings.json`, and
+OpenCode's `cli.json`, even when SchemaStore or an in-file `$schema` already
+covers it in editors. Editors are the only consumers of those sources:
+`checkrun lint` and agent post-edit validation read only this policy, so an
+unlisted file is checked in an editor and nowhere else. These generated files
+are untracked, so the commit hook never sees them; it applies only to tracked
+copies, such as a project's `.claude/settings.json`.
 
 When a layer cannot yet satisfy a public schema, keep the association with
 `"enforce": false`. That preserves editor help and documents the intended
