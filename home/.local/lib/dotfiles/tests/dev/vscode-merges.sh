@@ -2979,10 +2979,22 @@ JSON
     ln -s "$vscode_bin/shdeps" "$vscode_no_checkrun_bin/shdeps"
     ln -s "$vscode_bin/mv" "$vscode_no_checkrun_bin/mv"
     vscode_no_checkrun_path=$vscode_no_checkrun_bin
-    # Drop any real checkrun the host PATH provides, so the projection is empty.
+    # Hide any real checkrun the host PATH provides so the projection is empty.
+    # A directory holding checkrun can also hold tools the merge needs (the
+    # provider-compatibility lane links jq, git, and checkrun into one
+    # controlled bin), so mirror such a directory without checkrun instead of
+    # dropping it.
     while IFS= read -r vscode_path_dir; do
-      [[ -n $vscode_path_dir && ! -x $vscode_path_dir/checkrun ]] &&
-        vscode_no_checkrun_path+=":$vscode_path_dir"
+      [[ -n $vscode_path_dir ]] || continue
+      if [[ -x $vscode_path_dir/checkrun ]]; then
+        vscode_path_mirror=$(_tmpdir)
+        for vscode_path_entry in "$vscode_path_dir"/*; do
+          [[ ${vscode_path_entry##*/} != checkrun ]] || continue
+          ln -s "$vscode_path_entry" "$vscode_path_mirror/${vscode_path_entry##*/}"
+        done
+        vscode_path_dir=$vscode_path_mirror
+      fi
+      vscode_no_checkrun_path+=":$vscode_path_dir"
     done < <(tr ':' '\n' <<<"$PATH")
     _vscode_server_only_merge "$vscode_no_checkrun_path"
     _assert_eq "vscode remote schemas: withdrawn when Checkrun is unavailable" \
