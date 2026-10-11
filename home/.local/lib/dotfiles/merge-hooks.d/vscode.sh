@@ -510,19 +510,20 @@ _vscode_checkrun_settings() {
 # host-local file:// schema paths, so every writer and remover shares this list.
 _vscode_schema_setting_keys='["json.schemas","yaml.schemas","evenBetterToml.schema.associations"]'
 
-_remove_vscode_generated_checkrun_settings() {
+# Drop the schema projection settings from a settings file. They are complete
+# projections from Checkrun schema policy, so the hook owns them outright.
+# Recursive settings merges preserve unknown nested object keys, which is right
+# for hand-written user settings but wrong for generated machine-local
+# fileMatch and file:// schema paths: Settings Sync could leave a trail of
+# /Users, /home, and /root entries behind, and json.schemas, an array with no
+# identity, would let profile-state record a stale projection as user-owned.
+_remove_vscode_schema_settings() {
   local settings="$1"
   [[ -f "$settings" ]] || return 0
 
   local tmp
   tmp=$(mktemp)
   if jq --indent 4 --sort-keys --argjson keys "$_vscode_schema_setting_keys" '
-    # These settings are complete projections from Checkrun schema policy.
-    # Recursive settings merges preserve unknown nested object keys, which is
-    # right for hand-written user settings but wrong for generated machine-local
-    # fileMatch and file:// schema paths. Drop the old projection before writing
-    # the current machine projection so VS Code Settings Sync cannot leave a
-    # trail of /Users, /home, and /root entries behind.
     reduce $keys[] as $key (.; del(.[$key]))
   ' "$settings" >"$tmp"; then
     _vscode_commit_tmp "$tmp" "$settings"
@@ -530,8 +531,12 @@ _remove_vscode_generated_checkrun_settings() {
     rm -f "$tmp"
     return 1
   fi
+}
 
-  _remove_vscode_sley_settings "$settings"
+_remove_vscode_generated_checkrun_settings() {
+  _remove_vscode_schema_settings "$1" || return 1
+  [[ -f "$1" ]] || return 0
+  _remove_vscode_sley_settings "$1"
 }
 
 _vscode_host_label() {
@@ -991,7 +996,12 @@ _merge_vscode_config_tracked() {
   fi
   baseline=$REPLY
   work=$managed_dir/working-settings.json
-  if ! cp "$baseline" "$work" ||
+  # The schema settings are hook-owned outright, so strip them from the staged
+  # baseline that becomes the receipt's user-owned `before`: otherwise a
+  # hand-edited json.schemas array (no entry identity) is captured whole,
+  # generated entries included, and deactivation would restore stale paths.
+  if ! _remove_vscode_schema_settings "$baseline" ||
+    ! cp "$baseline" "$work" ||
     ! _vscode_apply_settings_projection \
       "$managed_dir/settings.json" "$work" "$opts" ||
     ! dev_profile_state_publish_final "$work" ||
@@ -1460,7 +1470,10 @@ _merge_vscode_remote_settings_tracked() {
   fi
   baseline=$REPLY
   work=$managed_dir/working-settings.json
-  if ! cp "$baseline" "$work" ||
+  # Same ownership rule as _merge_vscode_config_tracked: the schema settings
+  # never belong to the user-owned baseline.
+  if ! _remove_vscode_schema_settings "$baseline" ||
+    ! cp "$baseline" "$work" ||
     ! _merge_vscode_settings "$schemas" "$work" ||
     ! _merge_vscode_window_title "$work" ||
     { _vscode_mcp_auth_applicable "$destination" &&

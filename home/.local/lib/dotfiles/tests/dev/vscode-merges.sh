@@ -2060,6 +2060,13 @@ JSON
       'stale.yml' "$vscode_settings"
     _assert_not_contains "vscode schemas: stale synced TOML schemas are pruned" \
       'stale.toml' "$vscode_settings"
+    # The fixture seeds stale generated schema settings as if a user wrote
+    # them; the receipt's user-owned baseline must not adopt them, or profile
+    # deactivation would restore the stale paths.
+    _assert_eq "vscode schemas: receipt baseline holds no schema settings" \
+      '[]' \
+      "$(jq -c '.before | [keys[] | select(. == "json.schemas" or . == "yaml.schemas" or . == "evenBetterToml.schema.associations")]' \
+        "$vscode_receipt_root/$vscode_settings_key.json")"
     _assert_not_contains "vscode schemas: generated settings omit absolute home paths" \
       '/Users/chris' "$vscode_settings"
     _assert_contains "vscode settings: C/C++ comment continuation is durable" \
@@ -2991,9 +2998,50 @@ JSON
     _assert_eq "vscode remote schemas: restoration keeps the user's machine key" \
       '13' "$(jq -c '.["editor.fontSize"]' "$vscode_server_only_settings")"
     vscode_remote_schema_bytes=$(<"$vscode_server_only_settings")
-    _vscode_server_only_merge "$vscode_bin:$PATH"
-    _assert_eq "vscode remote schemas: an unchanged merge rewrites nothing" \
+    # Force the full merge: the signature fast path would skip it entirely.
+    DOT_FORCE=1 _vscode_server_only_merge "$vscode_bin:$PATH"
+    _assert_eq "vscode remote schemas: an unchanged full merge rewrites nothing" \
       "$vscode_remote_schema_bytes" "$(<"$vscode_server_only_settings")"
+
+    # The schema keys are generated outright. json.schemas is an array with no
+    # entry identity, so a hand-added entry cannot be kept beside the
+    # projection; the hook replaces the whole value, and must never record the
+    # generated entries as user-owned, or withdrawal would restore stale paths.
+    jq '.["json.schemas"] += [{"name":"hand-added","url":"file:///hand.schema.json","fileMatch":["hand.json"]}]' \
+      "$vscode_server_only_settings" >"$vscode_server_only_settings.tmp"
+    mv "$vscode_server_only_settings.tmp" "$vscode_server_only_settings"
+    DOT_FORCE=1 _vscode_server_only_merge "$vscode_bin:$PATH"
+    _assert_vscode_remote_schemas "after a hand edit:"
+    DOT_FORCE=1 _vscode_server_only_merge "$vscode_bin:$PATH"
+    # A receipt's `before` is the user-owned baseline that deactivation and
+    # withdrawal restore; it must hold the hand-made value at most, never the
+    # generated projection.
+    vscode_remote_receipts=$(find "$vscode_server_only_home/.local/state/dot/overlays/dev/merge-receipts-v1" \
+      -name '*.json' -type f -exec jq -c --arg path "$vscode_server_only_settings" \
+      'select(.path == $path)' {} + 2>/dev/null)
+    _assert_eq "vscode remote schemas: one receipt tracks the remote settings" \
+      '1' "$(jq -s 'length' <<<"$vscode_remote_receipts")"
+    vscode_remote_receipt_before=$(jq -c '.before' <<<"$vscode_remote_receipts")
+    _assert_not_contains "vscode remote schemas: receipts never record generated schema paths as user-owned" \
+      'file:///mock/sley/verify.schema.json' "$vscode_remote_receipt_before"
+    _vscode_server_only_merge "$vscode_no_checkrun_path"
+    _assert_eq "vscode remote schemas: withdrawal after a hand edit restores no schema paths" \
+      '[]' \
+      "$(jq -c '[keys[] | select(. == "json.schemas" or . == "yaml.schemas" or . == "evenBetterToml.schema.associations")]' "$vscode_server_only_settings")"
+
+    # A YAML schema dropped from the projection must not linger: yaml.schemas
+    # is an object, which recursive merges would otherwise keep key by key.
+    _vscode_server_only_merge "$vscode_bin:$PATH"
+    sed 's|"https://example.invalid/docker-compose.schema.json"|"https://example.invalid/compose-v2.schema.json"|' \
+      "$vscode_server_only_home/checkrun-schema-policy.py" \
+      >"$vscode_server_only_home/checkrun-schema-policy.py.new"
+    mv "$vscode_server_only_home/checkrun-schema-policy.py.new" \
+      "$vscode_server_only_home/checkrun-schema-policy.py"
+    chmod +x "$vscode_server_only_home/checkrun-schema-policy.py"
+    _vscode_server_only_merge "$vscode_bin:$PATH"
+    _assert_eq "vscode remote schemas: a dropped YAML schema key does not linger" \
+      '["https://example.invalid/compose-v2.schema.json"]' \
+      "$(jq -c '.["yaml.schemas"] | keys' "$vscode_server_only_settings")"
 
     vscode_inaccessible_remote_home=$(_tmpdir)
     mkdir -p "$vscode_inaccessible_remote_home/.cursor-server"
