@@ -217,6 +217,45 @@ dot_dev_vscode_signature_merges_test() {
       "1" "$(_vscode_signature_full_merges "$vscode_signature_count")"
     chmod 600 "$vscode_receipt_root/$vscode_settings_key.json"
     _vscode_signature_merge "$vscode_signature_count" DOT_FORCE=1 >/dev/null 2>&1
+
+    # Remote machine settings consume the Checkrun schema projection too, so a
+    # host with only a VS Code server must re-merge when the projection changes
+    # even though no local config variant exists to pull it into the signature.
+    vscode_remote_signature_home=$(_tmpdir)
+    mkdir -p "$vscode_remote_signature_home/.vscode-server"
+    cp "$vscode_home/checkrun-schema-policy.py" "$vscode_remote_signature_home/"
+    vscode_remote_signature_settings=$vscode_remote_signature_home/.vscode-server/data/Machine/settings.json
+    _vscode_remote_signature_merge() {
+      # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+      env HOME="$vscode_remote_signature_home" REAL_HOME="$REAL_HOME" \
+        PATH="$vscode_bin:$PATH" DOT_TEST_MV_LOG="$vscode_mv_log" \
+        DOT_TEST_VSCODE_HOSTNAME="remote-signature-host" bash -c '
+        set -uo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        dot_hook_platform_match() { return 1; }
+        uname() { printf "Linux\n"; }
+        _log() { :; }
+        _warn() { printf "%s\n" "$*" >&2; }
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        merge
+      ' >/dev/null 2>&1
+    }
+    _vscode_remote_signature_merge
+    _vscode_remote_signature_merge
+    _assert_eq "vscode signature: remote-only host converges on the schema projection" \
+      "file:///mock/sley/verify.schema.json" \
+      "$(jq -r '.["json.schemas"][0].url // empty' "$vscode_remote_signature_settings")"
+    sed 's|/mock/sley/verify.schema.json|/mock/sley/verify-v2.schema.json|' \
+      "$vscode_remote_signature_home/checkrun-schema-policy.py" \
+      >"$vscode_remote_signature_home/checkrun-schema-policy.py.new"
+    mv "$vscode_remote_signature_home/checkrun-schema-policy.py.new" \
+      "$vscode_remote_signature_home/checkrun-schema-policy.py"
+    chmod +x "$vscode_remote_signature_home/checkrun-schema-policy.py"
+    _vscode_remote_signature_merge
+    _assert_eq "vscode signature: changed schema projection reaches a remote-only host" \
+      "file:///mock/sley/verify-v2.schema.json" \
+      "$(jq -r '.["json.schemas"][0].url // empty' "$vscode_remote_signature_settings")"
   else
     echo "  SKIP: VS Code merge signature assertions (jq unavailable)"
   fi

@@ -2904,6 +2904,8 @@ JSON
 
     vscode_server_only_home=$(_tmpdir)
     mkdir -p "$vscode_server_only_home/.vscode-server"
+    # The mock shdeps resolves Checkrun's schema policy under $HOME.
+    cp "$vscode_home/checkrun-schema-policy.py" "$vscode_server_only_home/"
     # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
     env HOME="$vscode_server_only_home" REAL_HOME="$REAL_HOME" PATH="$vscode_bin:$PATH" \
       DOT_TEST_MV_LOG="$vscode_mv_log" \
@@ -2922,6 +2924,76 @@ JSON
     _assert_eq "vscode remote settings: server root works without detected variants" \
       "$vscode_server_only_title_expected" \
       "$(jq -r '.["window.title"]' "$vscode_server_only_home/.vscode-server/data/Machine/settings.json")"
+
+    # Remote windows run the schema language servers on this host, so its
+    # machine settings must carry this host's schema projection: the client's
+    # user settings name client paths (/Users/... from a Mac) that are absent here.
+    vscode_server_only_settings="$vscode_server_only_home/.vscode-server/data/Machine/settings.json"
+    _vscode_server_only_merge() {
+      # shellcheck disable=SC2016 # The inner shell expands fixture env variables.
+      env HOME="$vscode_server_only_home" REAL_HOME="$REAL_HOME" PATH="$1" \
+        DOT_TEST_MV_LOG="$vscode_mv_log" \
+        DOT_TEST_VSCODE_HOSTNAME="server-only-host" bash -c '
+        set -euo pipefail
+        . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+        dot_hook_platform_match() { return 1; }
+        uname() { printf "Linux\n"; }
+        _log() { :; }
+        _warn() { printf "%s\n" "$*" >&2; }
+        # shellcheck source=/dev/null
+        . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
+        merge
+      '
+    }
+    _assert_vscode_remote_schemas() {
+      _assert_eq "vscode remote schemas: $1 JSON schemas use this host's projection" \
+        '[{"fileMatch":[".sley/verify.json","**/.sley/verify.json"],"name":"Sley verify registry","url":"file:///mock/sley/verify.schema.json"}]' \
+        "$(jq -c '.["json.schemas"]' "$vscode_server_only_settings")"
+      _assert_eq "vscode remote schemas: $1 YAML schemas use this host's projection" \
+        '{"https://example.invalid/docker-compose.schema.json":["docker-compose.yml","**/docker-compose.yml"]}' \
+        "$(jq -c '.["yaml.schemas"]' "$vscode_server_only_settings")"
+      _assert_eq "vscode remote schemas: $1 TOML schemas use this host's projection" \
+        '{".*/pyproject\\.toml$":"https://example.invalid/pyproject.schema.json"}' \
+        "$(jq -c '.["evenBetterToml.schema.associations"]' "$vscode_server_only_settings")"
+    }
+    _assert_vscode_remote_schemas "server-only host:"
+    # Language associations and Sley formatter defaults are host-independent,
+    # so they stay in the client's user settings.
+    _assert_eq "vscode remote schemas: machine settings take only schema keys" \
+      '[]' \
+      "$(jq -c '[keys[] | select(. == "files.associations" or startswith("["))]' "$vscode_server_only_settings")"
+
+    # A key set in the Remote settings tab is user-owned. Without Checkrun the
+    # projection is empty, so the generated keys are withdrawn while user keys
+    # and the window title stay; Checkrun's return restores the projection.
+    jq '. + {"editor.fontSize": 13}' "$vscode_server_only_settings" >"$vscode_server_only_settings.tmp"
+    mv "$vscode_server_only_settings.tmp" "$vscode_server_only_settings"
+    vscode_no_checkrun_bin=$(_tmpdir)
+    ln -s "$vscode_bin/shdeps" "$vscode_no_checkrun_bin/shdeps"
+    ln -s "$vscode_bin/mv" "$vscode_no_checkrun_bin/mv"
+    vscode_no_checkrun_path=$vscode_no_checkrun_bin
+    # Drop any real checkrun the host PATH provides, so the projection is empty.
+    while IFS= read -r vscode_path_dir; do
+      [[ -n $vscode_path_dir && ! -x $vscode_path_dir/checkrun ]] &&
+        vscode_no_checkrun_path+=":$vscode_path_dir"
+    done < <(tr ':' '\n' <<<"$PATH")
+    _vscode_server_only_merge "$vscode_no_checkrun_path"
+    _assert_eq "vscode remote schemas: withdrawn when Checkrun is unavailable" \
+      '[]' \
+      "$(jq -c '[keys[] | select(. == "json.schemas" or . == "yaml.schemas" or . == "evenBetterToml.schema.associations")]' "$vscode_server_only_settings")"
+    _assert_eq "vscode remote schemas: withdrawal keeps the user's machine key" \
+      '13' "$(jq -c '.["editor.fontSize"]' "$vscode_server_only_settings")"
+    _assert_eq "vscode remote schemas: withdrawal keeps the window title" \
+      "$vscode_server_only_title_expected" \
+      "$(jq -r '.["window.title"]' "$vscode_server_only_settings")"
+    _vscode_server_only_merge "$vscode_bin:$PATH"
+    _assert_vscode_remote_schemas "restored:"
+    _assert_eq "vscode remote schemas: restoration keeps the user's machine key" \
+      '13' "$(jq -c '.["editor.fontSize"]' "$vscode_server_only_settings")"
+    vscode_remote_schema_bytes=$(<"$vscode_server_only_settings")
+    _vscode_server_only_merge "$vscode_bin:$PATH"
+    _assert_eq "vscode remote schemas: an unchanged merge rewrites nothing" \
+      "$vscode_remote_schema_bytes" "$(<"$vscode_server_only_settings")"
 
     vscode_inaccessible_remote_home=$(_tmpdir)
     mkdir -p "$vscode_inaccessible_remote_home/.cursor-server"
