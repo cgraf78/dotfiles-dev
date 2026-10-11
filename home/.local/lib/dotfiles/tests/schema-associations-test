@@ -109,9 +109,9 @@ expected = {
         ],
         "enforce": False,
     },
-    # Generated outputs are matched alongside their layers where no editor
-    # covers them otherwise: taplo has no SchemaStore catalog fallback, and
-    # SchemaStore matches Claude's settings.json but not settings.local.json.
+    # Each agent's main config is matched alongside its layers, because
+    # checkrun lint, the commit hook, and agent post-edit validation read only
+    # this policy, never SchemaStore or an in-file $schema.
     "Claude Code settings layers": {
         "format": "json",
         "schema": "claude-code-settings.schema.json",
@@ -119,8 +119,26 @@ expected = {
         "matches": [
             ".config/dot/merge-hooks.d/claude/settings.d/*.json",
             ".config/dot/merge-hooks.d/claude/settings.d/*.replace/*.json",
+            ".claude/settings.json",
             ".claude/settings.local.json",
         ],
+        "enforce": True,
+    },
+    "Gemini CLI settings layers": {
+        "format": "json",
+        "schema": "gemini-cli-settings.schema.json",
+        "matches": [
+            ".config/dot/merge-hooks.d/gemini/settings.d/*.json",
+            ".config/dot/merge-hooks.d/gemini/settings.d/*.replace/*.json",
+            ".gemini/settings.json",
+        ],
+        "enforce": True,
+    },
+    "OpenCode CLI config": {
+        "format": "json",
+        "schema": "opencode-cli.schema.json",
+        "source": "https://opencode.ai/v2/cli.json",
+        "matches": [".config/opencode/cli.json"],
         "enforce": True,
     },
     "Codex config layers": {
@@ -179,6 +197,8 @@ for filename in (
     "opencode.schema.json",
     "claude-code-settings.schema.json",
     "codex-config.schema.json",
+    "gemini-cli-settings.schema.json",
+    "opencode-cli.schema.json",
 ):
     assert (schema_dir / filename).is_file(), f"missing pinned payload: {filename}"
 
