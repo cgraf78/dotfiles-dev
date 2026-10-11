@@ -195,6 +195,12 @@ dotfiles-specific names so merge hooks can compose personal, work, and
 host-specific layers. If each layer is valid by itself, associate the layer
 directly with the target's public schema.
 
+Also list the generated target when editors would otherwise leave it
+unvalidated: taplo has no SchemaStore catalog fallback, so a TOML target such
+as `.codex/config.toml` needs its own match, and SchemaStore covers Claude's
+`settings.json` but not `settings.local.json`. JSON and YAML targets that
+SchemaStore already matches need no entry.
+
 When a layer cannot yet satisfy a public schema, keep the association with
 `"enforce": false`. That preserves editor help and documents the intended
 schema without blocking `autolint`.
