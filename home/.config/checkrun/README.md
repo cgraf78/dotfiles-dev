@@ -166,7 +166,9 @@ is left behind.
    `shdeps dep-file cgraf78/checkrun lib/checkrun/schemas/schema_policy.py`)
    under the same `CHECKRUN_SCHEMA_ASSOCIATIONS`.
 7. Add the entry's expected fields, and any new payload filename, to
-   `.local/lib/dotfiles/tests/schema-associations-test`, then run `dot test`.
+   `.local/lib/dotfiles/tests/schema-associations-test`, then run `test/run`
+   from the dotfiles-dev checkout under change. `dot test` there runs the
+   installed suites, not the checkout's.
 
 ## Matching Policy
 
