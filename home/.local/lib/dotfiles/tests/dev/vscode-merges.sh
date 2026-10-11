@@ -2975,29 +2975,19 @@ JSON
     # and the window title stay; Checkrun's return restores the projection.
     jq '. + {"editor.fontSize": 13}' "$vscode_server_only_settings" >"$vscode_server_only_settings.tmp"
     mv "$vscode_server_only_settings.tmp" "$vscode_server_only_settings"
+    # Shadow checkrun with a stub that fails like an unusable install: its
+    # capabilities projection is then empty, exactly as when checkrun is
+    # absent. Removing PATH directories instead would also drop tools the merge
+    # needs, and mirroring them breaks launchers that load helpers relative to
+    # their own location.
     vscode_no_checkrun_bin=$(_tmpdir)
+    printf '#!/bin/sh\nexit 127\n' >"$vscode_no_checkrun_bin/checkrun"
+    chmod +x "$vscode_no_checkrun_bin/checkrun"
     ln -s "$vscode_bin/shdeps" "$vscode_no_checkrun_bin/shdeps"
     ln -s "$vscode_bin/mv" "$vscode_no_checkrun_bin/mv"
-    vscode_no_checkrun_path=$vscode_no_checkrun_bin
-    # Hide any real checkrun the host PATH provides so the projection is empty.
-    # A directory holding checkrun can also hold tools the merge needs (the
-    # provider-compatibility lane links jq, git, and checkrun into one
-    # controlled bin), so mirror such a directory without checkrun instead of
-    # dropping it.
-    while IFS= read -r vscode_path_dir; do
-      [[ -n $vscode_path_dir ]] || continue
-      if [[ -x $vscode_path_dir/checkrun ]]; then
-        vscode_path_mirror=$(_tmpdir)
-        for vscode_path_entry in "$vscode_path_dir"/*; do
-          [[ ${vscode_path_entry##*/} != checkrun ]] || continue
-          ln -s "$vscode_path_entry" "$vscode_path_mirror/${vscode_path_entry##*/}"
-        done
-        vscode_path_dir=$vscode_path_mirror
-      fi
-      vscode_no_checkrun_path+=":$vscode_path_dir"
-    done < <(tr ':' '\n' <<<"$PATH")
+    vscode_no_checkrun_path=$vscode_no_checkrun_bin:$PATH
     _vscode_server_only_merge "$vscode_no_checkrun_path"
-    _assert_eq "vscode remote schemas: withdrawn when Checkrun is unavailable" \
+    _assert_eq "vscode remote schemas: withdrawn when Checkrun is unusable" \
       '[]' \
       "$(jq -c '[keys[] | select(. == "json.schemas" or . == "yaml.schemas" or . == "evenBetterToml.schema.associations")]' "$vscode_server_only_settings")"
     _assert_eq "vscode remote schemas: withdrawal keeps the user's machine key" \
@@ -3011,9 +3001,14 @@ JSON
       '13' "$(jq -c '.["editor.fontSize"]' "$vscode_server_only_settings")"
     vscode_remote_schema_bytes=$(<"$vscode_server_only_settings")
     # Force the full merge: the signature fast path would skip it entirely.
+    # Compare bytes and also check the mv log, since an atomic rewrite with
+    # identical bytes would still reach VS Code's file watcher.
+    : >"$vscode_mv_log"
     DOT_FORCE=1 _vscode_server_only_merge "$vscode_bin:$PATH"
-    _assert_eq "vscode remote schemas: an unchanged full merge rewrites nothing" \
+    _assert_eq "vscode remote schemas: an unchanged full merge keeps the bytes" \
       "$vscode_remote_schema_bytes" "$(<"$vscode_server_only_settings")"
+    _assert_not_contains "vscode remote schemas: an unchanged full merge rewrites nothing" \
+      "$vscode_server_only_settings" "$(<"$vscode_mv_log")"
 
     # The schema keys are generated outright. json.schemas is an array with no
     # entry identity, so a hand-added entry cannot be kept beside the

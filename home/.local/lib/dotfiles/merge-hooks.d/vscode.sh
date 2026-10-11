@@ -1422,7 +1422,10 @@ _vscode_remote_settings_dirs() {
 # projection. Array settings replace the client value outright, and the TOML
 # associations share regex keys with it; yaml.schemas is keyed by schema URL
 # and merges, so the policy gives clang-format, its only file:// YAML schema,
-# an https editor source. Without Checkrun this writes {} and no key.
+# an https editor source. Without a usable Checkrun this writes {} and no key,
+# so the client's own schema settings apply unchanged: emptying json.schemas
+# would also drop its https entries, which do load here. Remote hosts that run
+# VS Code servers carry the dev overlay, which installs Checkrun.
 _vscode_remote_schema_settings() {
   local out=$1 full
   full=$(mktemp) || return 1
