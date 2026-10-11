@@ -2183,6 +2183,7 @@ GH
 
   local checkrun_nvim_hook checkrun_nvim_bin checkrun_nvim_state
   local checkrun_nvim_target checkrun_nvim_output checkrun_nvim_before
+  # shellcheck disable=SC2031 # Earlier fixture assignments cannot escape their subshells.
   checkrun_nvim_hook="$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/checkrun-nvim.sh"
   checkrun_nvim_bin=$(_mock_bin)
   checkrun_nvim_state=$(_tmpdir)/state
