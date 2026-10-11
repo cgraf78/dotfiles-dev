@@ -109,6 +109,34 @@ expected = {
         ],
         "enforce": False,
     },
+    # Generated outputs are matched alongside their layers where no editor
+    # covers them otherwise: taplo has no SchemaStore catalog fallback, and
+    # SchemaStore matches Claude's settings.json but not settings.local.json.
+    "Claude Code settings layers": {
+        "format": "json",
+        "schema": "claude-code-settings.schema.json",
+        "source": "https://www.schemastore.org/claude-code-settings.json",
+        "matches": [
+            ".config/dot/merge-hooks.d/claude/settings.d/*.json",
+            ".config/dot/merge-hooks.d/claude/settings.d/*.replace/*.json",
+            ".claude/settings.local.json",
+        ],
+        "enforce": True,
+    },
+    "Codex config layers": {
+        "format": "toml",
+        "schema": "codex-config.schema.json",
+        "source": "https://developers.openai.com/codex/config-schema.json",
+        "matches": [
+            ".config/dot/merge-hooks.d/codex/config.d/*.toml",
+            ".config/dot/merge-hooks.d/codex/config.d/*.replace/*.toml",
+            ".config/dot/merge-hooks.d/codex/profiles/*.d/*.toml",
+            ".config/dot/merge-hooks.d/codex/profiles/*.d/*.replace/*.toml",
+            ".codex/config.toml",
+            ".codex/*.config.toml",
+        ],
+        "enforce": True,
+    },
 }
 
 # Project-level configs reuse their fallback's pinned payload, and carry no
@@ -149,6 +177,8 @@ for filename in (
     "clang-tidy.schema.json",
     "clangd.schema.json",
     "opencode.schema.json",
+    "claude-code-settings.schema.json",
+    "codex-config.schema.json",
 ):
     assert (schema_dir / filename).is_file(), f"missing pinned payload: {filename}"
 
