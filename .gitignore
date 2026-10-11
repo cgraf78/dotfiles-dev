@@ -1,1 +1,5 @@
 .worktrees/
+# Runtime state, never tracked. Commands run with HOME pointed at home/, such
+# as the Checkrun schema refresh in home/.config/checkrun/README.md, let tools
+# like mise write host-specific state links here.
+home/.local/state/
