@@ -199,8 +199,10 @@ Also list each agent's main generated or self-written config, such as
 `.claude/settings.json`, `.codex/config.toml`, `.gemini/settings.json`, and
 OpenCode's `cli.json`, even when SchemaStore or an in-file `$schema` already
 covers it in editors. Editors are the only consumers of those sources:
-`checkrun lint`, the commit hook, and agent post-edit validation read only this
-policy, so an unlisted file is checked in an editor and nowhere else.
+`checkrun lint` and agent post-edit validation read only this policy, so an
+unlisted file is checked in an editor and nowhere else. These generated files
+are untracked, so the commit hook never sees them; it applies only to tracked
+copies, such as a project's `.claude/settings.json`.
 
 When a layer cannot yet satisfy a public schema, keep the association with
 `"enforce": false`. That preserves editor help and documents the intended
