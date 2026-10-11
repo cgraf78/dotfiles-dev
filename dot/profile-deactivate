@@ -15,6 +15,9 @@ _DEV_PROFILE_STATE_TOML_RENDERER=$REPLY
 dot_retiring_overlay_file \
   home/.local/lib/dotfiles/merge-hooks.d/lib/agentguard.sh || return
 _DEV_DEACTIVATE_AGENTGUARD_LIBRARY=$REPLY
+dot_retiring_overlay_file \
+  home/.local/lib/dotfiles/merge-hooks.d/lib/checkrun-nvim.sh || return
+_DEV_DEACTIVATE_CHECKRUN_NVIM_LIBRARY=$REPLY
 # shellcheck source=/dev/null
 . "$_DEV_DEACTIVATE_PROFILE_STATE_LIBRARY" ||
   return
@@ -22,6 +25,10 @@ _DEV_DEACTIVATE_AGENTGUARD_LIBRARY=$REPLY
 # AgentGuard adapter, which is no longer linked once the profile retires.
 # shellcheck source=/dev/null
 . "$_DEV_DEACTIVATE_AGENTGUARD_LIBRARY" ||
+  return
+# The generated Neovim metadata belongs to dev's checkrun-nvim merge hook.
+# shellcheck source=/dev/null
+. "$_DEV_DEACTIVATE_CHECKRUN_NVIM_LIBRARY" ||
   return
 
 # Resolve provider assets against the retiring overlay's declaration set. By
@@ -203,6 +210,14 @@ _dev_deactivate_codex() {
   _dev_deactivate_codex_cache
 }
 
+# Neovim only reads this projection through dev's Lua adapter, which retires
+# with the profile, so the generated file would otherwise linger unused.
+_dev_deactivate_checkrun_nvim() {
+  checkrun_nvim_metadata_path || return 0
+  checkrun_nvim_remove_staging "$REPLY"
+  rm -f -- "$REPLY"
+}
+
 _dev_deactivate_gstack() {
   command -v gstack-register >/dev/null 2>&1 || return 0
   gstack-register uninstall
@@ -218,6 +233,7 @@ deactivate() {
   _dev_deactivate_sapling || status=1
   _dev_deactivate_opencode || status=1
   _dev_deactivate_gstack || status=1
+  _dev_deactivate_checkrun_nvim || status=1
   _dev_deactivate_agent_json claude "$HOME/.claude/settings.json" || status=1
   _dev_deactivate_agent_json gemini "$HOME/.gemini/settings.json" || status=1
   _dev_deactivate_agent_json grok "$HOME/.grok/hooks/agentguard.json" || status=1

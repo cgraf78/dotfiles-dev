@@ -15,14 +15,23 @@ local function dep_file(dependency, asset)
   return require("config.dot-runtime").dep_file(dependency, asset)
 end
 
-local function source_path()
-  local info = debug.getinfo(1, "S")
-  return ((info and info.source) or ""):gsub("^@", "")
-end
+-- The checkrun-nvim merge hook generates this projection on every
+-- `dot update`. Resolve its state directory the way Dot's dot_xdg_path does:
+-- only an absolute XDG_STATE_HOME counts, otherwise $HOME/.local/state. Until
+-- the first update writes it, the adapter finds no file and Neovim runs
+-- without Checkrun schemas rather than failing.
+local metadata_suffix = "dot/overlays/dev/checkrun-editor-metadata.json"
 
 local function metadata_path()
-  local root = source_path():match("^(.*)/lua/config/checkrun%-nvim%.lua$")
-  return root and (root .. "/checkrun-editor-metadata.json") or nil
+  local state = vim.env.XDG_STATE_HOME
+  if state == nil or state:sub(1, 1) ~= "/" then
+    local home = vim.env.HOME
+    if home == nil or home:sub(1, 1) ~= "/" then
+      return nil
+    end
+    state = (home == "/" and "" or home) .. "/.local/state"
+  end
+  return state .. "/" .. metadata_suffix
 end
 
 function M.module()

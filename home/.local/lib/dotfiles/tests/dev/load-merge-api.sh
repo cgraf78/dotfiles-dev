@@ -468,12 +468,14 @@ if ! dot_hook_source merge-hooks.d/lib/compat.sh || [[ $_dot_test_api_overlay_st
 
   # Hooks source the same base-owned compatibility layer after this standalone
   # fixture has installed its equivalent functions. The dev-owned reversible
-  # state and AgentGuard helpers are sourced from this checkout; all other
+  # state, AgentGuard, and Checkrun Neovim helpers are sourced from this
+  # checkout; all other
   # extension lookup still belongs to the public Dot API.
   dot_hook_source() {
     case ${1:-} in
       merge-hooks.d/lib/compat.sh) return 0 ;;
-      merge-hooks.d/lib/profile-state.sh | merge-hooks.d/lib/agentguard.sh)
+      merge-hooks.d/lib/profile-state.sh | merge-hooks.d/lib/agentguard.sh | \
+        merge-hooks.d/lib/checkrun-nvim.sh)
         # shellcheck source=/dev/null
         . "$DOT_EXTENSIONS_DIR/$1"
         ;;

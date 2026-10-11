@@ -98,6 +98,8 @@ dot_retiring_overlay_file() {
 }
 dot_hook_warn() { printf '%s\n' "$*" >&2; }
 _dot_tool_any_command() { command -v "$1" >/dev/null 2>&1; }
+# Dot's resolver for an absolute XDG_STATE_HOME, which this fixture sets.
+dot_xdg_path() { REPLY=$XDG_STATE_HOME/$2; }
 dot_sibling_tmp_for() { REPLY=$(mktemp "$1.tmp.XXXXXX"); }
 dot_commit_tmp() { mv "$1" "$2"; }
 # shellcheck disable=SC2329 # Invoked indirectly by the deactivation hook.
@@ -358,6 +360,27 @@ if [[ ! -e $HOME/.codex/.dotfiles-config-merge-cache-v1 ]]; then
 else
   _fail 'Codex retirement retained stale cache without a config file'
 fi
+
+# The checkrun-nvim hook's generated Neovim metadata retires with the
+# profile; sibling dev state such as merge receipts is left to its owner.
+checkrun_nvim_metadata=$XDG_STATE_HOME/dot/overlays/dev/checkrun-editor-metadata.json
+mkdir -p "${checkrun_nvim_metadata%/*}/merge-receipts-v1"
+printf '{}\n' >"$checkrun_nvim_metadata"
+printf 'partial' >"$checkrun_nvim_metadata.tmp.XyZ789"
+_dev_deactivate_checkrun_nvim
+_assert_file_missing 'Checkrun Neovim metadata retires with the dev profile' \
+  "$checkrun_nvim_metadata"
+_assert_file_missing 'Checkrun Neovim staging leftovers retire with the dev profile' \
+  "$checkrun_nvim_metadata.tmp.XyZ789"
+if [[ -d ${checkrun_nvim_metadata%/*}/merge-receipts-v1 ]]; then
+  _pass 'Checkrun Neovim retirement leaves other dev state alone'
+else
+  _fail 'Checkrun Neovim retirement leaves other dev state alone'
+fi
+_dev_deactivate_checkrun_nvim
+_assert_exit 'Checkrun Neovim retirement is idempotent' 0 "$?"
+_assert_contains 'Dev deactivation retires the Checkrun Neovim metadata' \
+  '_dev_deactivate_checkrun_nvim || status=1' "$(declare -f deactivate)"
 
 receipt_root=$XDG_STATE_HOME/dot/overlays/dev/merge-receipts-v1
 mkdir -p "$receipt_root"
