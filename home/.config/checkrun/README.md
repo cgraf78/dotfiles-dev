@@ -220,7 +220,9 @@ parser/linter/native validation instead.
 
 `schema-coverage-test` checks every tracked file that Checkrun types as JSON,
 JSONC, YAML, or TOML, in this checkout and, on hosts that have them, in the
-base repository and the other overlay checkouts. Each file must match an
+base repository and the other required overlays. Optional private overlays are
+out of scope, as in the base profile ownership gate, so their files never need
+rows in this public list. Each file must match an
 association (enforced or advisory) or a `schema-exemptions.tsv` row, Checkrun
 must give each associated file a filetype compatible with the association's
 format so editors attach, and every enforced association must validate. A new
