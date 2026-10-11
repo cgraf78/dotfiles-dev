@@ -561,7 +561,7 @@
         ".codex/*.config.toml"
       ],
       "enforce": true,
-      "note": "Merge-hook source layers are valid partial Codex configs before they are merged into the generated config and profile overlays, which are matched too: taplo has no SchemaStore catalog fallback in Neovim, so without them the generated files get no editor validation."
+      "note": "Merge-hook source layers are valid partial Codex configs before they are merged into the generated config and profile overlays, which are matched too: taplo 0.10 cannot load the current SchemaStore catalog, so without them Neovim gives the generated files no schema at all."
     }
   ]
 }
