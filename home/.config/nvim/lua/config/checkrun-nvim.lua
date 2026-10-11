@@ -2,8 +2,8 @@
 --
 -- Checkrun owns the portable editor-metadata contract and all host
 -- materialization rules. Dotfiles owns only two deployment choices: where its
--- checked metadata projection lives and how dependency assets resolve through
--- shdeps. Keeping those callbacks here prevents consumer policy from leaking
+-- generated metadata projection lives and how dependency assets resolve
+-- through shdeps. Keeping those callbacks here prevents consumer policy from leaking
 -- into Checkrun while avoiding a second implementation of its schema protocol.
 
 local M = {}
