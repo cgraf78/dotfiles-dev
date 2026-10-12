@@ -15,7 +15,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["re"],
+          "required": [
+            "re"
+          ],
           "description": "Regular expression"
         }
       ]
@@ -57,7 +59,9 @@
       "properties": {
         "legacyWatch": {}
       },
-      "required": ["legacyWatch"]
+      "required": [
+        "legacyWatch"
+      ]
     },
     "nodeArgs": {
       "properties": {
@@ -65,7 +69,9 @@
           "type": "string"
         }
       },
-      "required": ["exec"]
+      "required": [
+        "exec"
+      ]
     }
   },
   "properties": {
@@ -90,7 +96,10 @@
     },
     "exec": {
       "description": "execute script with \"app\", ie. -x \"python -v\".  May use variables.",
-      "examples": ["{{pwd}}/index.js --some-arg", "{{filename}}"],
+      "examples": [
+        "{{pwd}}/index.js --some-arg",
+        "{{filename}}"
+      ],
       "oneOf": [
         {
           "type": "string"
@@ -127,7 +136,13 @@
           "items": {
             "$ref": "#/definitions/pathPattern",
             "description": "Path or pattern of file or directory to ignore.  Can also use regular expressions wrapped in an object with a single property named \"re\".",
-            "examples": [".gitignore", ".vscode", "__tests__/*", "__*__/*.js", "*.test.js"]
+            "examples": [
+              ".gitignore",
+              ".vscode",
+              "__tests__/*",
+              "__*__/*.js",
+              "*.test.js"
+            ]
           }
         }
       ]
@@ -199,7 +214,12 @@
           "items": {
             "$ref": "#/definitions/pathPattern",
             "description": "Path or pattern of file or directory to watch.  Can also use regular expressions wrapped in an object with a single property named \"re\".",
-            "examples": ["src/index.js", "src", "src/*.js", "*.js"]
+            "examples": [
+              "src/index.js",
+              "src",
+              "src/*.js",
+              "*.js"
+            ]
           }
         }
       ]

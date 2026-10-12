@@ -33,7 +33,11 @@
       "title": "Optional Style",
       "description": "The style for reporting issues in optional sections.",
       "type": "string",
-      "enum": ["silent", "validate", "strict"],
+      "enum": [
+        "silent",
+        "validate",
+        "strict"
+      ],
       "default": "validate"
     },
     "sections": {
@@ -43,7 +47,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "type"],
+        "required": [
+          "name",
+          "type"
+        ],
         "properties": {
           "name": {
             "title": "Name",
@@ -54,12 +61,20 @@
             "title": "Type",
             "description": "Type of the section content.",
             "type": "string",
-            "enum": ["free_text", "list_name", "list_type", "list_name_and_type"]
+            "enum": [
+              "free_text",
+              "list_name",
+              "list_type",
+              "list_name_and_type"
+            ]
           },
           "order": {
             "title": "Order",
             "description": "Order of the section in the docstring.",
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "default": null
           },
           "admonition": {
@@ -68,7 +83,9 @@
             "oneOf": [
               {
                 "type": "boolean",
-                "enum": [false]
+                "enum": [
+                  false
+                ]
               },
               {
                 "type": "string"

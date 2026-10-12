@@ -13,7 +13,11 @@
     "ruleString": {
       "description": "ESLint rule\n\n\"off\" - turns the rule off\n\"warn\" - turn the rule on as a warning (doesn't affect exit code)\n\"error\" - turn the rule on as an error (exit code is 1 when triggered)\n",
       "type": "string",
-      "enum": ["off", "warn", "error"]
+      "enum": [
+        "off",
+        "warn",
+        "error"
+      ]
     },
     "pluginNames": {
       "type": "array",
@@ -220,7 +224,10 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["element", "attribute"]
+                        "enum": [
+                          "element",
+                          "attribute"
+                        ]
                       }
                     }
                   ]
@@ -237,7 +244,10 @@
                 },
                 "style": {
                   "type": "string",
-                  "enum": ["camelCase", "kebab-case"]
+                  "enum": [
+                    "camelCase",
+                    "kebab-case"
+                  ]
                 }
               }
             }
@@ -361,7 +371,10 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["element", "attribute"]
+                        "enum": [
+                          "element",
+                          "attribute"
+                        ]
                       }
                     }
                   ]
@@ -378,7 +391,10 @@
                 },
                 "style": {
                   "type": "string",
-                  "enum": ["camelCase", "kebab-case"]
+                  "enum": [
+                    "camelCase",
+                    "kebab-case"
+                  ]
                 }
               }
             }
@@ -1239,7 +1255,9 @@
                       "minimum": 1
                     },
                     {
-                      "enum": ["∞"],
+                      "enum": [
+                        "∞"
+                      ],
                       "type": "string"
                     }
                   ]
@@ -1777,15 +1795,26 @@
                       },
                       "position": {
                         "type": "string",
-                        "enum": ["after", "before"]
+                        "enum": [
+                          "after",
+                          "before"
+                        ]
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["pattern", "group"]
+                    "required": [
+                      "pattern",
+                      "group"
+                    ]
                   }
                 },
                 "newlines-between": {
-                  "enum": ["ignore", "always", "always-and-inside-groups", "never"]
+                  "enum": [
+                    "ignore",
+                    "always",
+                    "always-and-inside-groups",
+                    "never"
+                  ]
                 },
                 "alphabetize": {
                   "type": "object",
@@ -1795,11 +1824,19 @@
                       "default": false
                     },
                     "order": {
-                      "enum": ["ignore", "asc", "desc"],
+                      "enum": [
+                        "ignore",
+                        "asc",
+                        "desc"
+                      ],
                       "default": "ignore"
                     },
                     "orderImportKind": {
-                      "enum": ["ignore", "asc", "desc"],
+                      "enum": [
+                        "ignore",
+                        "asc",
+                        "desc"
+                      ],
                       "default": "ignore"
                     }
                   },
@@ -1889,7 +1926,10 @@
               "properties": {
                 "target": {
                   "type": "string",
-                  "enum": ["single", "any"],
+                  "enum": [
+                    "single",
+                    "any"
+                  ],
                   "default": "single"
                 }
               }
@@ -2400,7 +2440,10 @@
               "additionalProperties": true,
               "properties": {
                 "non-zero": {
-                  "enum": ["greater-than", "not-equal"],
+                  "enum": [
+                    "greater-than",
+                    "not-equal"
+                  ],
                   "default": "greater-than"
                 }
               }
@@ -3426,7 +3469,11 @@
                   "default": 3
                 },
                 "emptyDefaultCase": {
-                  "enum": ["no-default-comment", "do-nothing-comment", "no-default-case"],
+                  "enum": [
+                    "no-default-comment",
+                    "do-nothing-comment",
+                    "no-default-case"
+                  ],
                   "default": "no-default-comment"
                 }
               }
@@ -3556,7 +3603,9 @@
                       },
                       {
                         "type": "object",
-                        "required": ["suggest"],
+                        "required": [
+                          "suggest"
+                        ],
                         "properties": {
                           "suggest": {
                             "type": "string"
@@ -4120,10 +4169,20 @@
               "additionalProperties": true,
               "properties": {
                 "singleline": {
-                  "enum": ["always", "never", "consistent", "ignore"]
+                  "enum": [
+                    "always",
+                    "never",
+                    "consistent",
+                    "ignore"
+                  ]
                 },
                 "multiline": {
-                  "enum": ["always", "never", "consistent", "ignore"]
+                  "enum": [
+                    "always",
+                    "never",
+                    "consistent",
+                    "ignore"
+                  ]
                 },
                 "maxEmptyLines": {
                   "type": "number",
@@ -4136,10 +4195,20 @@
                       "type": "object",
                       "properties": {
                         "singleline": {
-                          "enum": ["always", "never", "consistent", "ignore"]
+                          "enum": [
+                            "always",
+                            "never",
+                            "consistent",
+                            "ignore"
+                          ]
                         },
                         "multiline": {
-                          "enum": ["always", "never", "consistent", "ignore"]
+                          "enum": [
+                            "always",
+                            "never",
+                            "consistent",
+                            "ignore"
+                          ]
                         },
                         "maxEmptyLines": {
                           "type": "number",
@@ -4231,7 +4300,10 @@
                   "default": false
                 },
                 "properties": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "allow": {
                   "type": "array",
@@ -4774,7 +4846,11 @@
                   "uniqueItems": true,
                   "items": {
                     "type": "string",
-                    "enum": ["plain", "scoped", "module"]
+                    "enum": [
+                      "plain",
+                      "scoped",
+                      "module"
+                    ]
                   }
                 }
               }
@@ -4815,10 +4891,18 @@
               "additionalProperties": true,
               "properties": {
                 "multiline": {
-                  "enum": ["below", "beside", "ignore"]
+                  "enum": [
+                    "below",
+                    "beside",
+                    "ignore"
+                  ]
                 },
                 "singleline": {
-                  "enum": ["below", "beside", "ignore"]
+                  "enum": [
+                    "below",
+                    "beside",
+                    "ignore"
+                  ]
                 }
               }
             }
@@ -4904,19 +4988,31 @@
               "additionalProperties": true,
               "properties": {
                 "singleline": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "multiline": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "selfClosingTag": {
                   "type": "object",
                   "properties": {
                     "singleline": {
-                      "enum": ["always", "never"]
+                      "enum": [
+                        "always",
+                        "never"
+                      ]
                     },
                     "multiline": {
-                      "enum": ["always", "never"]
+                      "enum": [
+                        "always",
+                        "never"
+                      ]
                     }
                   },
                   "additionalProperties": false,
@@ -4957,13 +5053,22 @@
               "additionalProperties": true,
               "properties": {
                 "startTag": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "endTag": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "selfClosingTag": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 }
               }
             }
@@ -7360,7 +7465,12 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["all", "vue", "vue-router", "nuxt"]
+                    "enum": [
+                      "all",
+                      "vue",
+                      "vue-router",
+                      "nuxt"
+                    ]
                   },
                   "uniqueItems": true,
                   "minItems": 0
@@ -7538,7 +7648,10 @@
               "additionalProperties": true,
               "properties": {
                 "vueVersion": {
-                  "enum": [2, 3]
+                  "enum": [
+                    2,
+                    3
+                  ]
                 }
               }
             }
@@ -7716,7 +7829,10 @@
                   "type": "boolean"
                 },
                 "enforceDynamicLinks": {
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 }
               }
             }
@@ -7940,7 +8056,14 @@
                 "groups": {
                   "type": "array",
                   "items": {
-                    "enum": ["props", "data", "asyncData", "computed", "methods", "setup"]
+                    "enum": [
+                      "props",
+                      "data",
+                      "asyncData",
+                      "computed",
+                      "methods",
+                      "setup"
+                    ]
                   },
                   "uniqueItems": true
                 },
@@ -7953,7 +8076,10 @@
                 "unreferencedOptions": {
                   "type": "array",
                   "items": {
-                    "enum": ["unknownMemberAsUnreferenced", "returnAsUnreferenced"]
+                    "enum": [
+                      "unknownMemberAsUnreferenced",
+                      "returnAsUnreferenced"
+                    ]
                   },
                   "uniqueItems": true
                 }
@@ -8733,7 +8859,12 @@
               "additionalProperties": true,
               "properties": {
                 "type": {
-                  "enum": ["JSDoc", "line", "block", "any"]
+                  "enum": [
+                    "JSDoc",
+                    "line",
+                    "block",
+                    "any"
+                  ]
                 }
               }
             }
@@ -9779,7 +9910,9 @@
                     },
                     {
                       "type": "string",
-                      "enum": ["public-fields"],
+                      "enum": [
+                        "public-fields"
+                      ],
                       "description": "Ignore only the public fields of classes that implement an interface"
                     }
                   ],
@@ -9895,7 +10028,10 @@
             },
             {
               "type": "string",
-              "enum": ["record", "index-signature"],
+              "enum": [
+                "record",
+                "index-signature"
+              ],
               "description": "Whether to only allow the `Record` type or only allow index signatures"
             }
           ]
@@ -10000,7 +10136,10 @@
             {
               "type": "string",
               "description": "This rule accepts the following options: \"interface\" (default): enforce using interfaces for object type definitions. \"type\": enforce using types for object type definitions.",
-              "enum": ["interface", "type"]
+              "enum": [
+                "interface",
+                "type"
+              ]
             }
           ]
         }
@@ -10076,11 +10215,17 @@
                 },
                 "fixStyle": {
                   "type": "string",
-                  "enum": ["separate-type-imports", "inline-type-imports"]
+                  "enum": [
+                    "separate-type-imports",
+                    "inline-type-imports"
+                  ]
                 },
                 "prefer": {
                   "type": "string",
-                  "enum": ["type-imports", "no-type-imports"]
+                  "enum": [
+                    "type-imports",
+                    "no-type-imports"
+                  ]
                 }
               }
             }
@@ -11513,7 +11658,10 @@
                 },
                 "multilineDetection": {
                   "type": "string",
-                  "enum": ["brackets", "last-member"]
+                  "enum": [
+                    "brackets",
+                    "last-member"
+                  ]
                 }
               }
             }
@@ -11978,7 +12126,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["file"]
+                            "enum": [
+                              "file"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -11999,7 +12149,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["from", "name"]
+                        "required": [
+                          "from",
+                          "name"
+                        ]
                       },
                       {
                         "type": "object",
@@ -12007,7 +12160,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["lib"]
+                            "enum": [
+                              "lib"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -12025,7 +12180,10 @@
                             ]
                           }
                         },
-                        "required": ["from", "name"]
+                        "required": [
+                          "from",
+                          "name"
+                        ]
                       },
                       {
                         "type": "object",
@@ -12033,7 +12191,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["package"]
+                            "enum": [
+                              "package"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -12054,7 +12214,11 @@
                             "type": "string"
                           }
                         },
-                        "required": ["from", "name", "package"]
+                        "required": [
+                          "from",
+                          "name",
+                          "package"
+                        ]
                       }
                     ]
                   }
@@ -12573,7 +12737,11 @@
                 },
                 "hoist": {
                   "type": "string",
-                  "enum": ["all", "functions", "never"]
+                  "enum": [
+                    "all",
+                    "functions",
+                    "never"
+                  ]
                 },
                 "allow": {
                   "type": "array",
@@ -13179,7 +13347,10 @@
                 },
                 "prefer": {
                   "type": "string",
-                  "enum": ["class-property", "parameter-property"]
+                  "enum": [
+                    "class-property",
+                    "parameter-property"
+                  ]
                 }
               }
             }
@@ -13336,7 +13507,9 @@
                     },
                     {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     }
                   ]
                 },
@@ -13530,7 +13703,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["file"]
+                            "enum": [
+                              "file"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -13551,7 +13726,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["from", "name"]
+                        "required": [
+                          "from",
+                          "name"
+                        ]
                       },
                       {
                         "type": "object",
@@ -13559,7 +13737,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["lib"]
+                            "enum": [
+                              "lib"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -13577,7 +13757,10 @@
                             ]
                           }
                         },
-                        "required": ["from", "name"]
+                        "required": [
+                          "from",
+                          "name"
+                        ]
                       },
                       {
                         "type": "object",
@@ -13585,7 +13768,9 @@
                         "properties": {
                           "from": {
                             "type": "string",
-                            "enum": ["package"]
+                            "enum": [
+                              "package"
+                            ]
                           },
                           "name": {
                             "oneOf": [
@@ -13606,7 +13791,11 @@
                             "type": "string"
                           }
                         },
-                        "required": ["from", "name", "package"]
+                        "required": [
+                          "from",
+                          "name",
+                          "package"
+                        ]
                       }
                     ]
                   }
@@ -13665,7 +13854,10 @@
               "properties": {
                 "allowSingleElementEquality": {
                   "description": "Whether to allow equality checks against the first or last element of a string.",
-                  "enum": ["always", "never"],
+                  "enum": [
+                    "always",
+                    "never"
+                  ],
                   "type": "string"
                 }
               }
@@ -13763,7 +13955,11 @@
                 {
                   "description": "String option: \"double\" (default) requires the use of double quotes wherever possible; \"single\" requires the use of single quotes wherever possible; \"backtick\" requires the use of backticks wherever possible",
                   "type": "string",
-                  "enum": ["double", "single", "backtick"]
+                  "enum": [
+                    "double",
+                    "single",
+                    "backtick"
+                  ]
                 }
               ]
             },
@@ -13785,7 +13981,11 @@
                 {
                   "description": "String option: \"double\" (default) requires the use of double quotes wherever possible; \"single\" requires the use of single quotes wherever possible; \"backtick\" requires the use of backticks wherever possible",
                   "type": "string",
-                  "enum": ["double", "single", "backtick"]
+                  "enum": [
+                    "double",
+                    "single",
+                    "backtick"
+                  ]
                 },
                 {
                   "type": "object",
@@ -14328,15 +14528,25 @@
               "properties": {
                 "lib": {
                   "type": "string",
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "path": {
                   "type": "string",
-                  "enum": ["always", "never"]
+                  "enum": [
+                    "always",
+                    "never"
+                  ]
                 },
                 "types": {
                   "type": "string",
-                  "enum": ["always", "never", "prefer-import"]
+                  "enum": [
+                    "always",
+                    "never",
+                    "prefer-import"
+                  ]
                 }
               }
             }

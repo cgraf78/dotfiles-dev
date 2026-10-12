@@ -36,7 +36,9 @@
         "minLength": 1,
         "pattern": "^[^.]+$"
       },
-      "default": ["js"]
+      "default": [
+        "js"
+      ]
     },
     "excludeRegExp": {
       "description": "Regular expression strings used to exclude modules, or false to disable exclusions.\nhttps://github.com/pahen/madge/blob/v8.0.0/README.md#configuration",

@@ -89,7 +89,11 @@
       "anyOf": [
         {
           "type": "string",
-          "enum": ["always", "never", "on_success"],
+          "enum": [
+            "always",
+            "never",
+            "on_success"
+          ],
           "description": "always: close immediately, never: wait for Enter, on_success: close only on success"
         },
         {

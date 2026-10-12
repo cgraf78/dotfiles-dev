@@ -116,7 +116,10 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": ["v1.0.0", "v1.1.0"]
+          "enum": [
+            "v1.0.0",
+            "v1.1.0"
+          ]
         },
         {
           "type": "string",
@@ -132,7 +135,9 @@
         "include": {
           "title": "File patterns to include",
           "description": "The file match pattern to include in formatting and linting.\nSupports glob pattern.",
-          "default": ["**/*.toml"],
+          "default": [
+            "**/*.toml"
+          ],
           "anyOf": [
             {
               "type": "array",
@@ -524,7 +529,10 @@
     },
     "IndentStyle": {
       "type": "string",
-      "enum": ["space", "tab"]
+      "enum": [
+        "space",
+        "tab"
+      ]
     },
     "IndentWidth": {
       "type": "integer",
@@ -574,7 +582,10 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": ["lf", "crlf"]
+          "enum": [
+            "lf",
+            "crlf"
+          ]
         },
         {
           "description": "Automatically detects the line ending style from the source file.",
@@ -673,7 +684,11 @@
     },
     "SeverityLevel": {
       "type": "string",
-      "enum": ["off", "warn", "error"]
+      "enum": [
+        "off",
+        "warn",
+        "error"
+      ]
     },
     "LspOptions": {
       "title": "Language Server options",
@@ -1152,7 +1167,10 @@
         }
       },
       "additionalProperties": false,
-      "required": ["path", "include"],
+      "required": [
+        "path",
+        "include"
+      ],
       "x-tombi-table-keys-order": "schema"
     },
     "SchemaFormatOptions": {
@@ -1317,7 +1335,9 @@
         }
       },
       "additionalProperties": false,
-      "required": ["targets"],
+      "required": [
+        "targets"
+      ],
       "x-tombi-table-keys-order": "schema"
     },
     "PatternAccessor": {
@@ -1388,7 +1408,11 @@
     },
     "ArrayValuesOrder": {
       "type": "string",
-      "enum": ["ascending", "descending", "version-sort"]
+      "enum": [
+        "ascending",
+        "descending",
+        "version-sort"
+      ]
     },
     "SchemaOverrideTableKeysOrderRule": {
       "title": "Override table key ordering for matched roots",
@@ -1403,7 +1427,12 @@
     },
     "TableKeysOrder": {
       "type": "string",
-      "enum": ["ascending", "descending", "schema", "version-sort"]
+      "enum": [
+        "ascending",
+        "descending",
+        "schema",
+        "version-sort"
+      ]
     },
     "SchemaOverrideLintOptions": {
       "title": "Schema-specific override lint options",
@@ -1450,7 +1479,10 @@
         "root": {
           "title": "The accessors to apply the sub schema",
           "type": "string",
-          "examples": ["tool.tombi", "items[0].name"],
+          "examples": [
+            "tool.tombi",
+            "items[0].name"
+          ],
           "minLength": 1
         },
         "path": {
@@ -1531,7 +1563,11 @@
         }
       },
       "additionalProperties": false,
-      "required": ["root", "path", "include"],
+      "required": [
+        "root",
+        "path",
+        "include"
+      ],
       "x-tombi-table-keys-order": "schema"
     },
     "OverrideItem": {
@@ -1570,7 +1606,9 @@
         }
       },
       "additionalProperties": false,
-      "required": ["files"],
+      "required": [
+        "files"
+      ],
       "x-tombi-table-keys-order": "schema"
     },
     "OverrideFilesOptions": {
@@ -1603,7 +1641,9 @@
         }
       },
       "additionalProperties": false,
-      "required": ["include"],
+      "required": [
+        "include"
+      ],
       "x-tombi-table-keys-order": "schema"
     },
     "OverrideFormatOptions": {
@@ -1733,7 +1773,9 @@
         }
       },
       "additionalProperties": false,
-      "required": ["enabled"]
+      "required": [
+        "enabled"
+      ]
     },
     "CargoExtensionFeatureTree": {
       "type": "object",

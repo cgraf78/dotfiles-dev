@@ -1449,7 +1449,9 @@
           "items": {
             "type": "string"
           },
-          "examples": ["cfg(foo)"]
+          "examples": [
+            "cfg(foo)"
+          ]
         }
       },
       "x-tombi-table-keys-order": "schema"
@@ -1469,7 +1471,12 @@
       "title": "Lint Level",
       "description": "Specify the [lint level](https://doc.rust-lang.org/rustc/lints/levels.html) for a lint or lint group.",
       "type": "string",
-      "enum": ["forbid", "deny", "warn", "allow"]
+      "enum": [
+        "forbid",
+        "deny",
+        "warn",
+        "allow"
+      ]
     }
   }
 }

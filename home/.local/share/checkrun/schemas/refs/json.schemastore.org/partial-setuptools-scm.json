@@ -90,7 +90,15 @@
               "description": "This command will be used instead of the default `git describe --long` command.",
               "markdownDescription": "This command will be used instead of the default `git describe --long` command.",
               "x-intellij-html-description": "This command will be used instead of the default <code>git describe --long</code> command.",
-              "default": ["git", "describe", "--dirty", "--tags", "--long", "--match", "*[0-9]*"]
+              "default": [
+                "git",
+                "describe",
+                "--dirty",
+                "--tags",
+                "--long",
+                "--match",
+                "*[0-9]*"
+              ]
             },
             "pre_parse": {
               "type": "string",
@@ -117,7 +125,15 @@
       "description": "Deprecated since 8.4.0: use `scm.git.describe_command` instead. This command will be used instead of the default `git describe --long` command.",
       "markdownDescription": "Deprecated since 8.4.0: use `scm.git.describe_command` instead. This command will be used instead of the default `git describe --long` command.",
       "x-intellij-html-description": "Deprecated since 8.4.0: use <code>scm.git.describe_command</code> instead. This command will be used instead of the default <code>git describe --long</code> command.",
-      "default": ["git", "describe", "--dirty", "--tags", "--long", "--match", "*[0-9]*"],
+      "default": [
+        "git",
+        "describe",
+        "--dirty",
+        "--tags",
+        "--long",
+        "--match",
+        "*[0-9]*"
+      ],
       "deprecated": true
     },
     "normalize": {

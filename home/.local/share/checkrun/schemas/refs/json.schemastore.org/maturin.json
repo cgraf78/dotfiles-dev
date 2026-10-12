@@ -112,7 +112,9 @@
           "type": "string"
         }
       },
-      "required": ["name"]
+      "required": [
+        "name"
+      ]
     },
     "CompatibilityTag": {
       "description": "Parsed `--compatibility` / `[tool.maturin] compatibility` value.\n\nAccepts platform tags such as `linux`, `manylinux2014`, `manylinux_2_17`, `musllinux_1_2`, or the `pypi` pseudo-option (PyPI filename validation; not a real platform tag).",
@@ -135,14 +137,22 @@
             },
             "python-implementation": {
               "description": "Python implementation name, e.g. \"cpython\", \"pypy\", \"graalpy\"",
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "python-version": {
               "description": "PEP 440 version specifier for the target Python version, e.g. \">=3.11\"",
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
-          "required": ["feature"]
+          "required": [
+            "feature"
+          ]
         }
       ]
     },
@@ -211,7 +221,10 @@
         },
         "args": {
           "description": "Extra arguments to pass to maturin (applies to all platforms)",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "emscripten": {
           "description": "Emscripten platform configuration",
@@ -259,19 +272,31 @@
         },
         "publishing-environment": {
           "description": "Name of the GitHub Actions environment to use for the release job\n(typically used together with `trusted-publishing = true`)",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "pytest": {
           "description": "Enable pytest",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "skip-attestation": {
           "description": "Skip artifact attestation",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "trusted-publishing": {
           "description": "Use PyPI trusted publishing (OpenID Connect) instead of an API token",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "windows": {
           "description": "Windows platform configuration",
@@ -286,7 +311,10 @@
         },
         "zig": {
           "description": "Use zig for cross compilation",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },
@@ -310,7 +338,10 @@
               "type": "string"
             }
           },
-          "required": ["path", "format"]
+          "required": [
+            "path",
+            "format"
+          ]
         },
         {
           "description": "A glob `path` relative to a crate's OUT_DIR",
@@ -318,7 +349,10 @@
           "properties": {
             "crate_name": {
               "description": "Optional crate name (defaults to the root crate)",
-              "type": ["string", "null"],
+              "type": [
+                "string",
+                "null"
+              ],
               "default": null
             },
             "from": {
@@ -334,7 +368,11 @@
               "type": "string"
             }
           },
-          "required": ["path", "from", "to"]
+          "required": [
+            "path",
+            "from",
+            "to"
+          ]
         }
       ]
     },
@@ -354,46 +392,76 @@
       "properties": {
         "args": {
           "description": "Extra arguments to pass to maturin",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "before-script-linux": {
           "description": "Script to run before build on Linux",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "container": {
           "description": "Container image to use",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "docker-options": {
           "description": "Docker options",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "manylinux": {
           "description": "Manylinux version (e.g. \"auto\", \"2_28\", \"musllinux_1_2\")",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "runner": {
           "description": "Runner override",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "rust-toolchain": {
           "description": "Rust toolchain (e.g. \"nightly\", \"stable\")",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "rustup-components": {
           "description": "Rustup components to install",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "target": {
           "description": "Detailed per-target configuration (mutually exclusive with `targets`)",
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "$ref": "#/$defs/TargetCIConfig"
           }
         },
         "targets": {
           "description": "Simple list of target architectures (mutually exclusive with `target`)",
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
           }
@@ -406,18 +474,27 @@
       "properties": {
         "auditwheel": {
           "description": "Generate a CycloneDX SBOM for external shared libraries grafted during\nauditwheel repair. Defaults to `true` when repair copies libraries.\n\nThe SBOM is written to `<dist-info>/sboms/auditwheel.cdx.json` and\nrecords which OS packages (deb, rpm, apk) provided the grafted\nlibraries, following the same convention as Python's auditwheel.",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "include": {
           "description": "Additional SBOM files to include in the `.dist-info/sboms` directory.",
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
           }
         },
         "rust": {
           "description": "Generate an SBOM for Rust crates. Defaults to `true`.",
-          "type": ["boolean", "null"]
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       }
     },
@@ -446,38 +523,64 @@
         },
         "args": {
           "description": "Extra arguments to pass to maturin",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "before-script-linux": {
           "description": "Script to run before build on Linux",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "container": {
           "description": "Container image to use",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "docker-options": {
           "description": "Docker options",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "manylinux": {
           "description": "Manylinux version (e.g. \"auto\", \"2_28\", \"musllinux_1_2\")",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "runner": {
           "description": "Runner override",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "rust-toolchain": {
           "description": "Rust toolchain (e.g. \"nightly\", \"stable\")",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "rustup-components": {
           "description": "Rustup components to install",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": ["arch"]
+      "required": [
+        "arch"
+      ]
     },
     "TargetConfig": {
       "description": "Target configuration",
@@ -485,7 +588,10 @@
       "properties": {
         "macos-deployment-target": {
           "description": "macOS deployment target version",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }
@@ -497,7 +603,10 @@
   "properties": {
     "all-features": {
       "description": "Activate all available features",
-      "type": ["boolean", "null"]
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "auditwheel": {
       "description": "Audit wheel mode",
@@ -534,36 +643,54 @@
     },
     "config": {
       "description": "Override a configuration value (unstable)",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       }
     },
     "data": {
       "description": "Path to the wheel directory, defaults to `<module_name>.data`",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "editable-profile": {
       "description": "Same as `profile` but for \"editable\" builds",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "exclude": {
       "description": "Exclude files matching the given glob pattern(s).\nPatterns are resolved relative to the directory containing `pyproject.toml`.",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/$defs/GlobPattern"
       }
     },
     "features": {
       "description": "List of features to activate.\nEach entry can be a plain feature name string, or a conditional object\nwith `feature` and `python-version` keys.",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/$defs/FeatureSpec"
       }
     },
     "frozen": {
       "description": "Require Cargo.lock and cache are up to date",
-      "type": ["boolean", "null"]
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "generate-ci": {
       "description": "CI generation configuration",
@@ -578,7 +705,10 @@
     },
     "include": {
       "description": "Include files matching the given glob pattern(s).\nPatterns are resolved relative to the directory containing `pyproject.toml`.\nWhen `python-source` is configured, patterns are also tried relative to\nthat directory if no matches are found.",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/$defs/GlobPattern"
       }
@@ -590,42 +720,69 @@
     },
     "locked": {
       "description": "Require Cargo.lock is up to date",
-      "type": ["boolean", "null"]
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "manifest-path": {
       "description": "Path to Cargo.toml",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "module-name": {
       "description": "Module name, accepts setuptools style import name like `foo.bar`",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "no-default-features": {
       "description": "Do not activate the `default` feature",
-      "type": ["boolean", "null"]
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "pgo-command": {
       "description": "Command to run for PGO profile generation.\nExecuted in a temporary virtualenv with the instrumented wheel installed.\nExample: `python -m pytest tests/benchmarks`",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "profile": {
       "description": "Build artifacts with the specified Cargo profile",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "python-packages": {
       "description": "Python packages to include",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       }
     },
     "python-source": {
       "description": "The directory with python module, contains `<module_name>/__init__.py`",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "rustc-args": {
       "description": "Additional rustc arguments",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       }
@@ -666,14 +823,20 @@
     },
     "targets": {
       "description": "Cargo compile targets",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "$ref": "#/$defs/CargoTarget"
       }
     },
     "unstable-flags": {
       "description": "Unstable (nightly-only) flags to Cargo, see 'cargo -Z help' for details",
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       }

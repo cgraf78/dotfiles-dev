@@ -95,15 +95,24 @@
           "type": "object",
           "patternProperties": {
             "^(c|m)?js$": {
-              "enum": [true]
+              "enum": [
+                true
+              ]
             }
           },
           "additionalProperties": {
-            "enum": ["commonjs", "module"]
+            "enum": [
+              "commonjs",
+              "module"
+            ]
           }
         }
       ],
-      "default": ["cjs", "mjs", "js"],
+      "default": [
+        "cjs",
+        "mjs",
+        "js"
+      ],
       "description": "Extensions of test files. Setting this overrides the default `[\"cjs\", \"mjs\", \"js\"]` value, so make sure to include those extensions in the list. Experimentally you can configure how files are loaded"
     },
     "require": {
@@ -140,7 +149,9 @@
       "properties": {
         "extensions": {
           "$ref": "#/definitions/array-of-paths",
-          "default": ["ts"],
+          "default": [
+            "ts"
+          ],
           "description": "You can configure AVA to recognize additional file extensions as TypeScript (e.g., `[\"ts\", \"tsx\"]` to add partial JSX support). Note that the preserve mode for JSX is not (yet) supported. See also AVA's `extensions` object"
         },
         "rewritePaths": {
@@ -155,7 +166,10 @@
           }
         },
         "compile": {
-          "enum": [false, "tsc"],
+          "enum": [
+            false,
+            "tsc"
+          ],
           "default": false,
           "description": "If `false`, AVA will assume you have already compiled your project. If set to `'tsc'`, AVA will run the TypeScript compiler before running your tests. This can be inefficient when using AVA in watch mode"
         }

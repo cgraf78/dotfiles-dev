@@ -3,12 +3,22 @@
   "$id": "https://json.schemastore.org/partial-cibuildwheel.json",
   "$defs": {
     "inherit": {
-      "enum": ["none", "prepend", "append"],
+      "enum": [
+        "none",
+        "prepend",
+        "append"
+      ],
       "default": "none",
       "description": "How to inherit the parent's value."
     },
     "enable": {
-      "enum": ["cpython-prerelease", "graalpy", "pyodide-prerelease", "pypy", "pypy-eol"]
+      "enum": [
+        "cpython-prerelease",
+        "graalpy",
+        "pyodide-prerelease",
+        "pypy",
+        "pypy-eol"
+      ]
     },
     "description": "A Python version or flavor to enable."
   },
@@ -107,7 +117,9 @@
       "title": "CIBW_BEFORE_TEST"
     },
     "build": {
-      "default": ["*"],
+      "default": [
+        "*"
+      ],
       "description": "Choose the Python versions to build.",
       "oneOf": [
         {
@@ -127,7 +139,13 @@
       "description": "Set the tool to use to build, either \"build\" (default), \"build[uv]\", \"uv\", or \"pip\"",
       "oneOf": [
         {
-          "enum": ["pip", "build", "build[uv]", "uv", "default"]
+          "enum": [
+            "pip",
+            "build",
+            "build[uv]",
+            "uv",
+            "default"
+          ]
         },
         {
           "type": "string",
@@ -148,10 +166,17 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name"],
+          "required": [
+            "name"
+          ],
           "properties": {
             "name": {
-              "enum": ["pip", "build", "build[uv]", "uv"]
+              "enum": [
+                "pip",
+                "build",
+                "build[uv]",
+                "uv"
+              ]
             },
             "args": {
               "type": "array",
@@ -203,7 +228,10 @@
     "container-engine": {
       "oneOf": [
         {
-          "enum": ["docker", "podman"]
+          "enum": [
+            "docker",
+            "podman"
+          ]
         },
         {
           "type": "string",
@@ -216,10 +244,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name"],
+          "required": [
+            "name"
+          ],
           "properties": {
             "name": {
-              "enum": ["docker", "podman"]
+              "enum": [
+                "docker",
+                "podman"
+              ]
             },
             "create-args": {
               "type": "array",
@@ -240,13 +273,19 @@
       "description": "Specify how cibuildwheel controls the versions of the tools it uses",
       "oneOf": [
         {
-          "enum": ["pinned", "latest"]
+          "enum": [
+            "pinned",
+            "latest"
+          ]
         },
         {
           "type": "string",
           "description": "Path to a file containing dependency versions, or inline package specifications, starting with \"packages:\"",
           "not": {
-            "enum": ["pinned", "latest"]
+            "enum": [
+              "pinned",
+              "latest"
+            ]
           }
         },
         {
@@ -610,7 +649,9 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["args"],
+          "required": [
+            "args"
+          ],
           "properties": {
             "args": {
               "type": "array",
@@ -628,7 +669,9 @@
       "description": "An overrides array",
       "items": {
         "type": "object",
-        "required": ["select"],
+        "required": [
+          "select"
+        ],
         "minProperties": 2,
         "additionalProperties": false,
         "properties": {
@@ -1164,7 +1207,9 @@
           "description": "On the pyodide platform, the build frontend must be \"pyodide-build\"",
           "oneOf": [
             {
-              "enum": ["pyodide-build"]
+              "enum": [
+                "pyodide-build"
+              ]
             },
             {
               "type": "string",
@@ -1173,10 +1218,14 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["name"],
+              "required": [
+                "name"
+              ],
               "properties": {
                 "name": {
-                  "enum": ["pyodide-build"]
+                  "enum": [
+                    "pyodide-build"
+                  ]
                 },
                 "args": {
                   "type": "array",
