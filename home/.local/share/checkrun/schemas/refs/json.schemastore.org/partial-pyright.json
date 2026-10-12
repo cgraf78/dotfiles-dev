@@ -6,7 +6,14 @@
   "type": "object",
   "definitions": {
     "diagnostic": {
-      "enum": ["none", "information", "warning", "error", true, false]
+      "enum": [
+        "none",
+        "information",
+        "warning",
+        "error",
+        true,
+        false
+      ]
     },
     "extraPaths": {
       "type": "array",
@@ -27,17 +34,28 @@
       "markdownDescription": "Specifies the version of Python that will be used to execute the source code. The version should be specified as a string in the format `M.m` where `M` is the major version and `m` is the minor (e.g. `3.0` or `3.6`). If a version is provided, pyright will generate errors if the source code makes use of language features that are not supported in that version. It will also tailor its use of type stub files, which conditionalizes type definitions based on the version. If no version is specified, pyright will use the version of the current python interpreter, if one is present.",
       "x-intellij-html-description": "Specifies the version of Python that will be used to execute the source code. The version should be specified as a string in the format <code>M.m</code> where <code>M</code> is the major version and <code>m</code> is the minor (e.g. <code>3.0</code> or <code>3.6</code>). If a version is provided, pyright will generate errors if the source code makes use of language features that are not supported in that version. It will also tailor its use of type stub files, which conditionalizes type definitions based on the version. If no version is specified, pyright will use the version of the current python interpreter, if one is present.",
       "default": "",
-      "examples": ["3.7"],
+      "examples": [
+        "3.7"
+      ],
       "pattern": "^3\\.[0-9]+$"
     },
     "pythonPlatform": {
-      "enum": ["Windows", "Darwin", "Linux", "iOS", "Android", "All"],
+      "enum": [
+        "Windows",
+        "Darwin",
+        "Linux",
+        "iOS",
+        "Android",
+        "All"
+      ],
       "title": "Python platform to assume during type analysis",
       "description": "Specifies the target platform that will be used to execute the source code. Should be one of `Windows`, `Darwin`, `Linux`, `iOS`, `Android`, or `All`. If specified, pyright will tailor its use of type stub files, which conditionalize type definitions based on the platform. If no platform is specified, pyright will use the current platform.",
       "markdownDescription": "Specifies the target platform that will be used to execute the source code. Should be one of `Windows`, `Darwin`, `Linux`, `iOS`, `Android`, or `All`. If specified, pyright will tailor its use of type stub files, which conditionalize type definitions based on the platform. If no platform is specified, pyright will use the current platform.",
       "x-intellij-html-description": "Specifies the target platform that will be used to execute the source code. Should be one of <code>Windows</code>, <code>Darwin</code>, <code>Linux</code>, <code>iOS</code>, <code>Android</code>, or <code>All</code>. If specified, pyright will tailor its use of type stub files, which conditionalize type definitions based on the platform. If no platform is specified, pyright will use the current platform.",
       "default": "",
-      "examples": ["Linux"]
+      "examples": [
+        "Linux"
+      ]
     },
     "disableBytesTypePromotions": {
       "type": "boolean",
@@ -735,7 +753,12 @@
       }
     },
     "typeCheckingMode": {
-      "enum": ["off", "basic", "standard", "strict"],
+      "enum": [
+        "off",
+        "basic",
+        "standard",
+        "strict"
+      ],
       "title": "Specifies the default rule set to use for type checking",
       "description": "Specifies the default rule set to use. Some rules can be overridden using additional configuration flags documented below. If set to `off`, all type-checking rules are disabled, but Python syntax and semantic errors are still reported.",
       "markdownDescription": "Specifies the default rule set to use. Some rules can be overridden using additional configuration flags documented below. If set to `off`, all type-checking rules are disabled, but Python syntax and semantic errors are still reported.",
@@ -762,7 +785,9 @@
       "description": "Path to a directory that contains custom type stubs. Each package's type stub file(s) are expected to be in its own subdirectory.",
       "x-intellij-html-description": "Path to a directory that contains custom type stubs. Each package&#39;s type stub file(s) are expected to be in its own subdirectory.",
       "default": "./typings",
-      "examples": ["src/typestubs"]
+      "examples": [
+        "src/typestubs"
+      ]
     },
     "disableBytesTypePromotions": {
       "$ref": "#/definitions/disableBytesTypePromotions"
@@ -1061,7 +1086,9 @@
       "markdownDescription": "Used in conjunction with the `venvPath`, specifies the virtual environment to use.",
       "x-intellij-html-description": "Used in conjunction with the <code>venvPath</code>, specifies the virtual environment to use.",
       "default": "",
-      "examples": ["python37"]
+      "examples": [
+        "python37"
+      ]
     },
     "verboseOutput": {
       "type": "boolean",
@@ -1076,7 +1103,9 @@
       "items": {
         "type": "object",
         "title": "Analysis settings to use for specified subdirectories of code",
-        "required": ["root"],
+        "required": [
+          "root"
+        ],
         "properties": {
           "root": {
             "type": "string",

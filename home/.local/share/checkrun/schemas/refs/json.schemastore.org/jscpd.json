@@ -389,7 +389,11 @@
       "description": "ignore code blocks matching these regular expressions"
     },
     "mode": {
-      "enum": ["mild", "strict", "weak"],
+      "enum": [
+        "mild",
+        "strict",
+        "weak"
+      ],
       "default": "mild",
       "description": "mode of detection quality; see https://github.com/kucherenko/jscpd/blob/master/packages/jscpd/README.md#mode"
     },
@@ -418,7 +422,10 @@
     "store": {
       "anyOf": [
         {
-          "enum": ["leveldb", "redis"]
+          "enum": [
+            "leveldb",
+            "redis"
+          ]
         },
         {
           "type": "string",
@@ -432,7 +439,9 @@
       "items": {
         "$ref": "#/definitions/reporter"
       },
-      "default": ["console"],
+      "default": [
+        "console"
+      ],
       "description": "a list of reporters to use to output information about duplication; built-ins include console, consoleFull/console-full, json, xml, csv, html, markdown, badge, sarif, ai, xcode, threshold, and silent; third-party reporters are also supported"
     },
     "blame": {
@@ -507,7 +516,10 @@
               "description": "badge color (name or RGB code without #, default: green if beneath threshold, red if above threshold, grey if threshold not set); see https://github.com/badgen/badgen/blob/master/src/color-presets.ts"
             },
             "style": {
-              "enum": ["flat", "classic"],
+              "enum": [
+                "flat",
+                "classic"
+              ],
               "default": "classic",
               "description": "badge look: flat or classic"
             },

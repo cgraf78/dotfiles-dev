@@ -91,7 +91,11 @@
       }
     },
     "inherit": {
-      "enum": ["none", "append", "prepend"],
+      "enum": [
+        "none",
+        "append",
+        "prepend"
+      ],
       "default": "none"
     }
   },
@@ -137,7 +141,9 @@
                 {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["env"],
+                  "required": [
+                    "env"
+                  ],
                   "properties": {
                     "env": {
                       "type": "string",
@@ -211,7 +217,14 @@
       "additionalProperties": false,
       "properties": {
         "level": {
-          "enum": ["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+          "enum": [
+            "NOTSET",
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL"
+          ],
           "default": "WARNING",
           "description": "The logging level to display, \"DEBUG\", \"INFO\", \"WARNING\", and \"ERROR\" are possible options."
         }
@@ -331,7 +344,10 @@
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "enum": ["redirect", "inplace"],
+          "enum": [
+            "redirect",
+            "inplace"
+          ],
           "default": "redirect",
           "description": "Select the editable mode to use. Can be \"redirect\" (default) or \"inplace\"."
         },
@@ -396,7 +412,10 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "template"],
+            "required": [
+              "path",
+              "template"
+            ],
             "properties": {
               "path": {
                 "type": "string",
@@ -409,7 +428,11 @@
                 "minLength": 1
               },
               "location": {
-                "enum": ["install", "build", "source"],
+                "enum": [
+                  "install",
+                  "build",
+                  "source"
+                ],
                 "default": "install",
                 "description": "The place to put the generated file. The \"build\" directory is useful for CMake files, and the \"install\" directory is useful for Python files, usually. You can also write directly to the \"source\" directory, will overwrite existing files & remember to gitignore the file."
               }
@@ -418,7 +441,10 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "template-path"],
+            "required": [
+              "path",
+              "template-path"
+            ],
             "properties": {
               "path": {
                 "type": "string",
@@ -431,7 +457,11 @@
                 "minLength": 1
               },
               "location": {
-                "enum": ["install", "build", "source"],
+                "enum": [
+                  "install",
+                  "build",
+                  "source"
+                ],
                 "default": "install",
                 "description": "The place to put the generated file. The \"build\" directory is useful for CMake files, and the \"install\" directory is useful for Python files, usually. You can also write directly to the \"source\" directory, will overwrite existing files & remember to gitignore the file."
               }
@@ -537,7 +567,9 @@
       "description": "A list of overrides to apply to the settings, based on the `if` selector.",
       "items": {
         "type": "object",
-        "required": ["if"],
+        "required": [
+          "if"
+        ],
         "minProperties": 2,
         "additionalProperties": false,
         "properties": {
@@ -553,7 +585,9 @@
                     "$ref": "#/$defs/if_overrides"
                   }
                 },
-                "required": ["any"],
+                "required": [
+                  "any"
+                ],
                 "additionalProperties": false
               }
             ]

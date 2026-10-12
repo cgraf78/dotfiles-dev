@@ -107,7 +107,12 @@
       "title": "Lint Level",
       "description": "Specify the lint level for a lint or lint group.",
       "type": "string",
-      "enum": ["forbid", "deny", "warn", "allow"]
+      "enum": [
+        "forbid",
+        "deny",
+        "warn",
+        "allow"
+      ]
     }
   }
 }

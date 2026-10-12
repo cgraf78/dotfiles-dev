@@ -371,7 +371,9 @@
           "description": "Provide a list of patterns to override prettier configuration.",
           "items": {
             "type": "object",
-            "required": ["files"],
+            "required": [
+              "files"
+            ],
             "properties": {
               "files": {
                 "description": "Include these files in this override.",

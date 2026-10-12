@@ -6,7 +6,12 @@
     "fnmatch-filter": {
       "type": "string",
       "description": "A Unix filename pattern filter",
-      "examples": ["filename", "filename.*", "*.ext", "script?/*-[!-_].sh"],
+      "examples": [
+        "filename",
+        "filename.*",
+        "*.ext",
+        "script?/*-[!-_].sh"
+      ],
       "x-taplo": {
         "links": {
           "key": "https://docs.python.org/3/library/fnmatch.html"

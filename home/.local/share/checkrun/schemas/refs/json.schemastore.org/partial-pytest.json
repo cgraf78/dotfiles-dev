@@ -28,7 +28,9 @@
           "description": "Use `[tool.pytest.ini_options]` for INI-style pytest configuration in `pyproject.toml` (supported since pytest 6.0). `pytest.ini` takes precedence over `[tool.pytest.ini_options]` in `pyproject.toml`."
         }
       },
-      "required": ["ini_options"],
+      "required": [
+        "ini_options"
+      ],
       "additionalProperties": true,
       "x-tombi-table-keys-order": "schema"
     },
@@ -58,7 +60,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -71,7 +76,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -82,7 +90,13 @@
         },
         "console_output_style": {
           "type": "string",
-          "enum": ["classic", "progress", "progress-even-when-capture-no", "count", "times"],
+          "enum": [
+            "classic",
+            "progress",
+            "progress-even-when-capture-no",
+            "count",
+            "times"
+          ],
           "description": "Sets console output style during test execution.",
           "default": "progress"
         },
@@ -90,7 +104,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -120,7 +137,11 @@
         },
         "empty_parameter_set_mark": {
           "type": "string",
-          "enum": ["skip", "xfail", "fail_at_collect"],
+          "enum": [
+            "skip",
+            "xfail",
+            "fail_at_collect"
+          ],
           "description": "Allows to pick the action for empty parametersets in parameterization.",
           "default": "skip"
         },
@@ -128,7 +149,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -141,7 +165,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -180,13 +207,20 @@
         },
         "junit_duration_report": {
           "type": "string",
-          "enum": ["total", "call"],
+          "enum": [
+            "total",
+            "call"
+          ],
           "description": "Configures how durations are recorded into the JUnit XML report:",
           "default": "total"
         },
         "junit_family": {
           "type": "string",
-          "enum": ["legacy", "xunit1", "xunit2"],
+          "enum": [
+            "legacy",
+            "xunit1",
+            "xunit2"
+          ],
           "description": "Configures the format of the generated JUnit XML file.",
           "default": "xunit2"
         },
@@ -194,7 +228,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -205,7 +242,14 @@
         },
         "junit_logging": {
           "type": "string",
-          "enum": ["no", "log", "system-out", "system-err", "out-err", "all"],
+          "enum": [
+            "no",
+            "log",
+            "system-out",
+            "system-err",
+            "out-err",
+            "all"
+          ],
           "description": "Configures if captured output should be written to the JUnit XML file.",
           "default": "no"
         },
@@ -218,7 +262,12 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false", "On", "Off"]
+              "enum": [
+                "true",
+                "false",
+                "On",
+                "Off"
+              ]
             },
             {
               "type": "string",
@@ -234,7 +283,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -277,7 +329,10 @@
         },
         "log_file_mode": {
           "type": "string",
-          "enum": ["a", "w"],
+          "enum": [
+            "a",
+            "w"
+          ],
           "description": "Sets the mode that the logging file is opened with. The options are 'w' to recreate the file (the default) or 'a' to append to the file.",
           "default": "a"
         },
@@ -352,7 +407,10 @@
             }
           ],
           "description": "One or more Glob-style file patterns determining which python files are considered as test modules.",
-          "default": ["test_*.py", "*_test.py"],
+          "default": [
+            "test_*.py",
+            "*_test.py"
+          ],
           "x-tombi-array-values-order": "ascending"
         },
         "python_functions": {
@@ -368,7 +426,9 @@
             }
           ],
           "description": "One or more name prefixes or glob-patterns determining which test functions and methods are considered tests. Search for multiple glob patterns by adding a space between patterns. By default, pytest will consider any function prefixed with test as a test.",
-          "default": ["test_*"],
+          "default": [
+            "test_*"
+          ],
           "x-tombi-array-values-order": "ascending"
         },
         "pythonpath": {
@@ -405,7 +465,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -418,7 +481,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -431,7 +497,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -444,7 +513,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -457,7 +529,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -497,7 +572,11 @@
         },
         "tmp_path_retention_policy": {
           "type": "string",
-          "enum": ["all", "failed", "none"],
+          "enum": [
+            "all",
+            "failed",
+            "none"
+          ],
           "description": "Controls which directories created by the tmp_path fixture are kept around, based on test outcome.",
           "default": "all"
         },
@@ -556,7 +635,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set a verbosity level specifically for assertion related output, overriding the application wide level."
@@ -573,7 +654,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set the verbosity level specifically for passed subtests. A value of 1 or higher will show output for passed subtests (failed subtests are always reported). Passed subtests output can be suppressed with the value 0, which overwrites the -v command-line option."
@@ -590,7 +673,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set a verbosity level specifically for test case execution related output, overriding the application wide level."
@@ -599,7 +684,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -632,7 +720,10 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["true", "false"]
+              "enum": [
+                "true",
+                "false"
+              ]
             },
             {
               "type": "boolean"
@@ -662,7 +753,13 @@
     },
     "AsyncioScope": {
       "type": "string",
-      "enum": ["function", "class", "module", "package", "session"]
+      "enum": [
+        "function",
+        "class",
+        "module",
+        "package",
+        "session"
+      ]
     },
     "LogLevel": {
       "description": "A minimum log level. Can be level name or integer value.",
@@ -673,12 +770,22 @@
         },
         {
           "type": "string",
-          "enum": ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"]
+          "enum": [
+            "CRITICAL",
+            "ERROR",
+            "WARNING",
+            "INFO",
+            "DEBUG",
+            "NOTSET"
+          ]
         },
         {
           "type": "string",
           "deprecated": true,
-          "enum": ["FATAL", "WARN"]
+          "enum": [
+            "FATAL",
+            "WARN"
+          ]
         }
       ]
     },
@@ -698,7 +805,9 @@
           "ini_options": {}
         },
         "additionalProperties": true,
-        "required": ["ini_options"]
+        "required": [
+          "ini_options"
+        ]
       }
     },
     "ConfigOptionsPytest": {
@@ -728,7 +837,13 @@
         },
         "console_output_style": {
           "type": "string",
-          "enum": ["classic", "progress", "progress-even-when-capture-no", "count", "times"],
+          "enum": [
+            "classic",
+            "progress",
+            "progress-even-when-capture-no",
+            "count",
+            "times"
+          ],
           "description": "Sets console output style during test execution.",
           "default": "progress"
         },
@@ -751,7 +866,11 @@
         },
         "empty_parameter_set_mark": {
           "type": "string",
-          "enum": ["skip", "xfail", "fail_at_collect"],
+          "enum": [
+            "skip",
+            "xfail",
+            "fail_at_collect"
+          ],
           "description": "Allows to pick the action for empty parametersets in parameterization.",
           "default": "skip"
         },
@@ -779,13 +898,20 @@
         },
         "junit_duration_report": {
           "type": "string",
-          "enum": ["total", "call"],
+          "enum": [
+            "total",
+            "call"
+          ],
           "description": "Configures how durations are recorded into the JUnit XML report:",
           "default": "total"
         },
         "junit_family": {
           "type": "string",
-          "enum": ["legacy", "xunit1", "xunit2"],
+          "enum": [
+            "legacy",
+            "xunit1",
+            "xunit2"
+          ],
           "description": "Configures the format of the generated JUnit XML file.",
           "default": "xunit2"
         },
@@ -796,7 +922,14 @@
         },
         "junit_logging": {
           "type": "string",
-          "enum": ["no", "log", "system-out", "system-err", "out-err", "all"],
+          "enum": [
+            "no",
+            "log",
+            "system-out",
+            "system-err",
+            "out-err",
+            "all"
+          ],
           "description": "Configures if captured output should be written to the JUnit XML file.",
           "default": "no"
         },
@@ -817,7 +950,10 @@
             },
             {
               "type": "string",
-              "enum": ["On", "Off"]
+              "enum": [
+                "On",
+                "Off"
+              ]
             }
           ]
         },
@@ -860,7 +996,10 @@
         },
         "log_file_mode": {
           "type": "string",
-          "enum": ["a", "w"],
+          "enum": [
+            "a",
+            "w"
+          ],
           "description": "Sets the mode that the logging file is opened with. The options are 'w' to recreate the file (the default) or 'a' to append to the file.",
           "default": "a"
         },
@@ -917,7 +1056,10 @@
             "type": "string"
           },
           "description": "One or more Glob-style file patterns determining which python files are considered as test modules.",
-          "default": ["test_*.py", "*_test.py"],
+          "default": [
+            "test_*.py",
+            "*_test.py"
+          ],
           "x-tombi-array-values-order": "ascending"
         },
         "python_functions": {
@@ -926,7 +1068,9 @@
             "type": "string"
           },
           "description": "One or more name prefixes or glob-patterns determining which test functions and methods are considered tests. Search for multiple glob patterns by adding a space between patterns. By default, pytest will consider any function prefixed with test as a test.",
-          "default": ["test_*"],
+          "default": [
+            "test_*"
+          ],
           "x-tombi-array-values-order": "ascending"
         },
         "pythonpath": {
@@ -985,7 +1129,11 @@
         },
         "tmp_path_retention_policy": {
           "type": "string",
-          "enum": ["all", "failed", "none"],
+          "enum": [
+            "all",
+            "failed",
+            "none"
+          ],
           "description": "Controls which directories created by the tmp_path fixture are kept around, based on test outcome.",
           "default": "all"
         },
@@ -1015,7 +1163,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set a verbosity level specifically for assertion related output, overriding the application wide level."
@@ -1028,7 +1178,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set the verbosity level specifically for passed subtests. A value of 1 or higher will show output for passed subtests (failed subtests are always reported). Passed subtests output can be suppressed with the value 0, which overwrites the -v command-line option."
@@ -1041,7 +1193,9 @@
             },
             {
               "type": "string",
-              "enum": ["auto"]
+              "enum": [
+                "auto"
+              ]
             }
           ],
           "description": "Set a verbosity level specifically for test case execution related output, overriding the application wide level."

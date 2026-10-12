@@ -112,7 +112,12 @@
       "title": "Lint Level",
       "description": "Specify the [lint level](https://doc.rust-lang.org/rustc/lints/levels.html) for a lint or lint group.",
       "type": "string",
-      "enum": ["forbid", "deny", "warn", "allow"]
+      "enum": [
+        "forbid",
+        "deny",
+        "warn",
+        "allow"
+      ]
     }
   }
 }

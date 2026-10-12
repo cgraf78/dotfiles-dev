@@ -4,7 +4,11 @@
   "additionalProperties": false,
   "definitions": {
     "Platform": {
-      "enum": ["linux", "windows", "macos"]
+      "enum": [
+        "linux",
+        "windows",
+        "macos"
+      ]
     },
     "Format": {
       "title": "Format",
@@ -1050,7 +1054,9 @@
       }
     },
     {
-      "required": ["version"],
+      "required": [
+        "version"
+      ],
       "properties": {
         "version": {
           "x-taplo": {
@@ -1059,7 +1065,9 @@
             }
           },
           "type": "object",
-          "required": ["path"],
+          "required": [
+            "path"
+          ],
           "properties": {
             "source": false,
             "path": {
@@ -1073,7 +1081,9 @@
       }
     },
     {
-      "required": ["version"],
+      "required": [
+        "version"
+      ],
       "properties": {
         "version": {
           "x-taplo": {
@@ -1082,13 +1092,18 @@
             }
           },
           "type": "object",
-          "required": ["source"],
+          "required": [
+            "source"
+          ],
           "properties": {
             "path": false,
             "source": {
               "type": "string",
               "not": {
-                "enum": ["code", "regex"]
+                "enum": [
+                  "code",
+                  "regex"
+                ]
               }
             }
           }
@@ -1096,7 +1111,9 @@
       }
     },
     {
-      "required": ["version"],
+      "required": [
+        "version"
+      ],
       "properties": {
         "version": {
           "x-taplo": {
@@ -1105,7 +1122,10 @@
             }
           },
           "type": "object",
-          "required": ["path", "source"],
+          "required": [
+            "path",
+            "source"
+          ],
           "properties": {
             "source": {
               "const": "regex"
@@ -1121,7 +1141,9 @@
       }
     },
     {
-      "required": ["version"],
+      "required": [
+        "version"
+      ],
       "properties": {
         "version": {
           "x-taplo": {
@@ -1130,7 +1152,10 @@
             }
           },
           "type": "object",
-          "required": ["path", "source"],
+          "required": [
+            "path",
+            "source"
+          ],
           "properties": {
             "source": {
               "const": "code"
@@ -1179,6 +1204,8 @@
       "flying-sheep (https://github.com/flying-sheep)",
       "Chaojie (https://github.com/ischaojie)"
     ],
-    "pattern": ["^(.*(/|\\\\)hatch\\.toml|hatch\\.toml)$"]
+    "pattern": [
+      "^(.*(/|\\\\)hatch\\.toml|hatch\\.toml)$"
+    ]
   }
 }

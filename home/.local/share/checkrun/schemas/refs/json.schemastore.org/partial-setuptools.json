@@ -250,7 +250,9 @@
               "additionalProperties": false
             }
           ],
-          "required": ["file"]
+          "required": [
+            "file"
+          ]
         }
       }
     }
@@ -291,7 +293,9 @@
           ]
         }
       },
-      "required": ["file"]
+      "required": [
+        "file"
+      ]
     },
     "file-directive-for-dependencies": {
       "title": "'file:' directive for dependencies",
@@ -314,14 +318,19 @@
           "format": "python-qualified-identifier"
         }
       },
-      "required": ["attr"],
+      "required": [
+        "attr"
+      ],
       "description": "Value is read from a module attribute. Supports callables and iterables; unsupported types are cast via ``str()``"
     },
     "ext-module": {
       "title": "Extension module",
       "description": "Parameters to construct a :class:`setuptools.Extension` object",
       "type": "object",
-      "required": ["name", "sources"],
+      "required": [
+        "name",
+        "sources"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {

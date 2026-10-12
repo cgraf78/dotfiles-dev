@@ -14,7 +14,9 @@
                 "const": "boolean"
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           },
           "then": {
             "properties": {
@@ -122,11 +124,18 @@
         "type": {
           "default": "string",
           "description": "The type of the argument.",
-          "enum": ["string", "float", "integer", "boolean"],
+          "enum": [
+            "string",
+            "float",
+            "integer",
+            "boolean"
+          ],
           "type": "string"
         }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "type": "object"
     },
     "args_item_no_name": {
@@ -139,7 +148,9 @@
                 "const": "boolean"
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           },
           "then": {
             "properties": {
@@ -243,7 +254,12 @@
         "type": {
           "default": "string",
           "description": "The type of the argument.",
-          "enum": ["string", "float", "integer", "boolean"],
+          "enum": [
+            "string",
+            "float",
+            "integer",
+            "boolean"
+          ],
           "type": "string"
         }
       },
@@ -281,7 +297,9 @@
             "const": true
           }
         },
-        "required": ["use_exec"]
+        "required": [
+          "use_exec"
+        ]
       },
       "properties": {
         "args": {
@@ -293,7 +311,11 @@
         },
         "cmd": {
           "description": "Executes a single command as a subprocess without a shell. Supports glob\npatterns for filesystem paths, parameter expansion of environment variable\nor private variables.",
-          "examples": ["rm -rf ./**/*.pyc", "echo Hello ${USER}", "echo Hello \\${USER}"],
+          "examples": [
+            "rm -rf ./**/*.pyc",
+            "echo Hello ${USER}",
+            "echo Hello \\${USER}"
+          ],
           "title": "Command to execute",
           "type": "string"
         },
@@ -312,7 +334,11 @@
         "empty_glob": {
           "default": "pass",
           "description": "Determines how to handle glob patterns with no matches. The default is\n'pass', which causes unmatched patterns to be passed through to the command\n(just like in bash). Setting it to 'null' will replace an unmatched pattern\nwith nothing, and setting it to 'fail' will cause the task to fail with an\nerror if there are no matches.",
-          "enum": ["pass", "null", "fail"],
+          "enum": [
+            "pass",
+            "null",
+            "fail"
+          ],
           "type": "string"
         },
         "env": {
@@ -357,11 +383,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["cmd"],
+      "required": [
+        "cmd"
+      ],
       "then": {
         "properties": {
           "capture_stdout": false
@@ -377,7 +411,9 @@
             "const": true
           }
         },
-        "required": ["use_exec"]
+        "required": [
+          "use_exec"
+        ]
       },
       "properties": {
         "args": {
@@ -422,7 +458,11 @@
         },
         "cmd": {
           "description": "Executes a single command as a subprocess without a shell. Supports glob\npatterns for filesystem paths, parameter expansion of environment variable\nor private variables.",
-          "examples": ["rm -rf ./**/*.pyc", "echo Hello ${USER}", "echo Hello \\${USER}"],
+          "examples": [
+            "rm -rf ./**/*.pyc",
+            "echo Hello ${USER}",
+            "echo Hello \\${USER}"
+          ],
           "title": "Command to execute",
           "type": "string"
         },
@@ -441,7 +481,11 @@
         "empty_glob": {
           "default": "pass",
           "description": "Determines how to handle glob patterns with no matches. The default is\n'pass', which causes unmatched patterns to be passed through to the command\n(just like in bash). Setting it to 'null' will replace an unmatched pattern\nwith nothing, and setting it to 'fail' will cause the task to fail with an\nerror if there are no matches.",
-          "enum": ["pass", "null", "fail"],
+          "enum": [
+            "pass",
+            "null",
+            "fail"
+          ],
           "type": "string"
         },
         "env": {
@@ -486,11 +530,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["cmd"],
+      "required": [
+        "cmd"
+      ],
       "then": {
         "properties": {
           "capture_stdout": false
@@ -506,7 +558,9 @@
           "type": "string"
         }
       },
-      "required": ["default"],
+      "required": [
+        "default"
+      ],
       "type": "object"
     },
     "env_option": {
@@ -584,11 +638,15 @@
       "additionalProperties": false,
       "properties": {
         "type": {
-          "enum": ["auto"],
+          "enum": [
+            "auto"
+          ],
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "executor_auto_partial": {
@@ -599,7 +657,13 @@
     "executor_option": {
       "oneOf": [
         {
-          "enum": ["auto", "poetry", "simple", "uv", "virtualenv"],
+          "enum": [
+            "auto",
+            "poetry",
+            "simple",
+            "uv",
+            "virtualenv"
+          ],
           "type": "string"
         },
         {
@@ -642,11 +706,15 @@
       "additionalProperties": false,
       "properties": {
         "type": {
-          "enum": ["poetry"],
+          "enum": [
+            "poetry"
+          ],
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "executor_poetry_partial": {
@@ -658,11 +726,15 @@
       "additionalProperties": false,
       "properties": {
         "type": {
-          "enum": ["simple"],
+          "enum": [
+            "simple"
+          ],
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "executor_simple_partial": {
@@ -673,7 +745,13 @@
     "executor_task_option": {
       "oneOf": [
         {
-          "enum": ["auto", "poetry", "simple", "uv", "virtualenv"],
+          "enum": [
+            "auto",
+            "poetry",
+            "simple",
+            "uv",
+            "virtualenv"
+          ],
           "type": "string"
         },
         {
@@ -776,7 +854,9 @@
           "type": "string"
         },
         "type": {
-          "enum": ["uv"],
+          "enum": [
+            "uv"
+          ],
           "type": "string"
         },
         "with": {
@@ -794,7 +874,9 @@
           "description": "Run with the given packages installed."
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "executor_uv_partial": {
@@ -901,11 +983,15 @@
           "type": "string"
         },
         "type": {
-          "enum": ["virtualenv"],
+          "enum": [
+            "virtualenv"
+          ],
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "executor_virtualenv_partial": {
@@ -926,7 +1012,9 @@
             "const": true
           }
         },
-        "required": ["use_exec"]
+        "required": [
+          "use_exec"
+        ]
       },
       "properties": {
         "args": {
@@ -1013,11 +1101,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["expr"],
+      "required": [
+        "expr"
+      ],
       "then": {
         "properties": {
           "capture_stdout": false
@@ -1033,7 +1129,9 @@
             "const": true
           }
         },
-        "required": ["use_exec"]
+        "required": [
+          "use_exec"
+        ]
       },
       "properties": {
         "args": {
@@ -1153,11 +1251,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["expr"],
+      "required": [
+        "expr"
+      ],
       "then": {
         "properties": {
           "capture_stdout": false
@@ -1210,7 +1316,9 @@
           "type": "string"
         }
       },
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "type": "object"
     },
     "parallel_task": {
@@ -1251,12 +1359,20 @@
         "ignore_fail": {
           "default": false,
           "description": "If set, the parallel task will continue running even if one of the subtasks\nfails.",
-          "enum": [true, false, "return_zero", "return_non_zero"]
+          "enum": [
+            true,
+            false,
+            "return_zero",
+            "return_non_zero"
+          ]
         },
         "output_mode": {
           "default": "stream",
           "description": "Controls how leaf-task stdout is emitted: either streamed line-by-line\nor buffered output on task completion.",
-          "enum": ["stream", "buffer"],
+          "enum": [
+            "stream",
+            "buffer"
+          ],
           "type": "string"
         },
         "parallel": {
@@ -1287,7 +1403,9 @@
               "type": "string"
             },
             {
-              "enum": [false],
+              "enum": [
+                false
+              ],
               "type": "boolean"
             }
           ],
@@ -1313,11 +1431,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["parallel"],
+      "required": [
+        "parallel"
+      ],
       "type": "object"
     },
     "parallel_task_with_case": {
@@ -1391,12 +1517,20 @@
         "ignore_fail": {
           "default": false,
           "description": "If set, the parallel task will continue running even if one of the subtasks\nfails.",
-          "enum": [true, false, "return_zero", "return_non_zero"]
+          "enum": [
+            true,
+            false,
+            "return_zero",
+            "return_non_zero"
+          ]
         },
         "output_mode": {
           "default": "stream",
           "description": "Controls how leaf-task stdout is emitted: either streamed line-by-line\nor buffered output on task completion.",
-          "enum": ["stream", "buffer"],
+          "enum": [
+            "stream",
+            "buffer"
+          ],
           "type": "string"
         },
         "parallel": {
@@ -1427,7 +1561,9 @@
               "type": "string"
             },
             {
-              "enum": [false],
+              "enum": [
+                false
+              ],
               "type": "boolean"
             }
           ],
@@ -1453,11 +1589,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["parallel"],
+      "required": [
+        "parallel"
+      ],
       "type": "object"
     },
     "ref_task": {
@@ -1510,11 +1654,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["ref"],
+      "required": [
+        "ref"
+      ],
       "type": "object"
     },
     "ref_task_with_case": {
@@ -1600,11 +1752,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["ref"],
+      "required": [
+        "ref"
+      ],
       "type": "object"
     },
     "script_task": {
@@ -1617,7 +1777,9 @@
                 "const": true
               }
             },
-            "required": ["use_exec"]
+            "required": [
+              "use_exec"
+            ]
           },
           "then": {
             "properties": {
@@ -1633,7 +1795,9 @@
                 "type": "string"
               }
             },
-            "required": ["script"]
+            "required": [
+              "script"
+            ]
           },
           "then": {
             "properties": {
@@ -1718,11 +1882,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "type": "object"
     },
     "script_task_with_case": {
@@ -1735,7 +1907,9 @@
                 "const": true
               }
             },
-            "required": ["use_exec"]
+            "required": [
+              "use_exec"
+            ]
           },
           "then": {
             "properties": {
@@ -1751,7 +1925,9 @@
                 "type": "string"
               }
             },
-            "required": ["script"]
+            "required": [
+              "script"
+            ]
           },
           "then": {
             "properties": {
@@ -1869,11 +2045,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "type": "object"
     },
     "sequence_task": {
@@ -1914,7 +2098,12 @@
         "ignore_fail": {
           "default": false,
           "description": "If set, the sequence will continue running even if one of the tasks fails.",
-          "enum": [true, false, "return_zero", "return_non_zero"]
+          "enum": [
+            true,
+            false,
+            "return_zero",
+            "return_non_zero"
+          ]
         },
         "sequence": {
           "description": "Runs an array of subtasks one after the other. Items may be inline task\ndefinitions, task references by name. Nested arrays are run as parallel\ntasks.",
@@ -1947,11 +2136,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["sequence"],
+      "required": [
+        "sequence"
+      ],
       "type": "object"
     },
     "sequence_task_with_case": {
@@ -2025,7 +2222,12 @@
         "ignore_fail": {
           "default": false,
           "description": "If set, the sequence will continue running even if one of the tasks fails.",
-          "enum": [true, false, "return_zero", "return_non_zero"]
+          "enum": [
+            true,
+            false,
+            "return_zero",
+            "return_non_zero"
+          ]
         },
         "sequence": {
           "description": "Runs an array of subtasks one after the other. Items may be inline task\ndefinitions, task references by name. Nested arrays are run as parallel\ntasks.",
@@ -2058,11 +2260,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["sequence"],
+      "required": [
+        "sequence"
+      ],
       "type": "object"
     },
     "shell_task": {
@@ -2118,12 +2328,30 @@
         "interpreter": {
           "anyOf": [
             {
-              "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+              "enum": [
+                "posix",
+                "sh",
+                "bash",
+                "zsh",
+                "fish",
+                "pwsh",
+                "powershell",
+                "python"
+              ],
               "type": "string"
             },
             {
               "items": {
-                "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+                "enum": [
+                  "posix",
+                  "sh",
+                  "bash",
+                  "zsh",
+                  "fish",
+                  "pwsh",
+                  "powershell",
+                  "python"
+                ],
                 "type": "string"
               },
               "minItems": 1,
@@ -2150,11 +2378,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["shell"],
+      "required": [
+        "shell"
+      ],
       "type": "object"
     },
     "shell_task_with_case": {
@@ -2243,12 +2479,30 @@
         "interpreter": {
           "anyOf": [
             {
-              "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+              "enum": [
+                "posix",
+                "sh",
+                "bash",
+                "zsh",
+                "fish",
+                "pwsh",
+                "powershell",
+                "python"
+              ],
               "type": "string"
             },
             {
               "items": {
-                "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+                "enum": [
+                  "posix",
+                  "sh",
+                  "bash",
+                  "zsh",
+                  "fish",
+                  "pwsh",
+                  "powershell",
+                  "python"
+                ],
                 "type": "string"
               },
               "minItems": 1,
@@ -2275,11 +2529,19 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["shell"],
+      "required": [
+        "shell"
+      ],
       "type": "object"
     },
     "switch_task": {
@@ -2317,7 +2579,10 @@
         "default": {
           "default": "fail",
           "description": "Defines the default behavior if no cases are matched. Can either pass or\nfail.",
-          "enum": ["pass", "fail"],
+          "enum": [
+            "pass",
+            "fail"
+          ],
           "type": "string"
         },
         "deps": {
@@ -2393,11 +2658,20 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["control", "switch"],
+      "required": [
+        "control",
+        "switch"
+      ],
       "type": "object"
     },
     "switch_task_with_case": {
@@ -2468,7 +2742,10 @@
         "default": {
           "default": "fail",
           "description": "Defines the default behavior if no cases are matched. Can either pass or\nfail.",
-          "enum": ["pass", "fail"],
+          "enum": [
+            "pass",
+            "fail"
+          ],
           "type": "string"
         },
         "deps": {
@@ -2544,11 +2821,20 @@
         },
         "verbosity": {
           "description": "Specify the verbosity level for this task, from -2 (least verbose) to 2\n(most verbose), overriding the project level verbosity setting, which\ndefaults to 0.",
-          "enum": [-2, -1, 0, 1, 2],
+          "enum": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
           "type": "integer"
         }
       },
-      "required": ["control", "switch"],
+      "required": [
+        "control",
+        "switch"
+      ],
       "type": "object"
     },
     "task_def": {
@@ -2676,19 +2962,34 @@
     "default_array_item_task_type": {
       "default": "ref",
       "description": "When a task is declared as a string inside an array (e.g. inline in a\nsequence task), then it is interpreted as the default array item task type,\nwhich will be 'ref' unless otherwise specified.",
-      "enum": ["cmd", "expr", "ref", "script", "shell"],
+      "enum": [
+        "cmd",
+        "expr",
+        "ref",
+        "script",
+        "shell"
+      ],
       "type": "string"
     },
     "default_array_task_type": {
       "default": "sequence",
       "description": "When a task is declared as an array (instead of a table), then it is\ninterpreted as the default array task type, which will be 'sequence' unless\notherwise specified.",
-      "enum": ["parallel", "sequence"],
+      "enum": [
+        "parallel",
+        "sequence"
+      ],
       "type": "string"
     },
     "default_task_type": {
       "default": "cmd",
       "description": "Sets the default task type for tasks defined as strings. By default, tasks\nare interpreted as shell commands ('cmd'). This can be overridden to\n'script' or other supported types.",
-      "enum": ["cmd", "expr", "ref", "script", "shell"],
+      "enum": [
+        "cmd",
+        "expr",
+        "ref",
+        "script",
+        "shell"
+      ],
       "type": "string"
     },
     "env": {
@@ -2735,7 +3036,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "type": "object"
               }
             ]
@@ -2764,12 +3067,30 @@
     "shell_interpreter": {
       "anyOf": [
         {
-          "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+          "enum": [
+            "posix",
+            "sh",
+            "bash",
+            "zsh",
+            "fish",
+            "pwsh",
+            "powershell",
+            "python"
+          ],
           "type": "string"
         },
         {
           "items": {
-            "enum": ["posix", "sh", "bash", "zsh", "fish", "pwsh", "powershell", "python"],
+            "enum": [
+              "posix",
+              "sh",
+              "bash",
+              "zsh",
+              "fish",
+              "pwsh",
+              "powershell",
+              "python"
+            ],
             "type": "string"
           },
           "type": "array"
@@ -2785,7 +3106,13 @@
     "verbosity": {
       "default": 0,
       "description": "Sets the default verbosity level for all commands. '-1' is quieter, '0' is\nthe default level, and '1' is more verbose. The command line arguments are\nincremental, with '--quiet' or '-q' decreasing verbosity, and '--verbose'\nor '-v' increasing it.",
-      "enum": [-2, -1, 0, 1, 2],
+      "enum": [
+        -2,
+        -1,
+        0,
+        1,
+        2
+      ],
       "type": "integer"
     }
   },

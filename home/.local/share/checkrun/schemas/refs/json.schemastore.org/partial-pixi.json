@@ -37,14 +37,19 @@
             "type": "string",
             "minLength": 1
           },
-          "examples": ["activate.sh", "activate.bat"]
+          "examples": [
+            "activate.sh",
+            "activate.bat"
+          ]
         }
       }
     },
     "Build": {
       "title": "Build",
       "type": "object",
-      "required": ["backend"],
+      "required": [
+        "backend"
+      ],
       "additionalProperties": false,
       "properties": {
         "additional-dependencies": {
@@ -117,7 +122,12 @@
             "type": "string",
             "pattern": "^[a-z0-9_]+(:[a-z0-9_]+)?$"
           },
-          "examples": [["cuda", "blas_openblas"]]
+          "examples": [
+            [
+              "cuda",
+              "blas_openblas"
+            ]
+          ]
         },
         "secrets": {
           "title": "Secrets",
@@ -205,7 +215,11 @@
           "description": "The channel the packages needs to be fetched from",
           "type": "string",
           "minLength": 1,
-          "examples": ["conda-forge", "pytorch", "https://prefix.dev/conda-forge"]
+          "examples": [
+            "conda-forge",
+            "pytorch",
+            "https://prefix.dev/conda-forge"
+          ]
         },
         "channels": {
           "title": "Channels",
@@ -336,7 +350,9 @@
       "title": "ChannelInlineTable",
       "description": "A precise description of a `conda` channel, with an optional priority.",
       "type": "object",
-      "required": ["channel"],
+      "required": [
+        "channel"
+      ],
       "additionalProperties": false,
       "properties": {
         "channel": {
@@ -371,7 +387,11 @@
       "title": "ChannelPriority",
       "description": "The priority of the channel.",
       "type": "string",
-      "enum": ["disabled", "flexible", "strict"]
+      "enum": [
+        "disabled",
+        "flexible",
+        "strict"
+      ]
     },
     "CondaPypiMapTable": {
       "title": "CondaPypiMapTable",
@@ -425,7 +445,10 @@
           "title": "Mapping-Mode",
           "description": "How the project mapping interacts with Pixi's default mapping data: `overlay` (default) applies it on top, `replace` uses it instead",
           "type": "string",
-          "enum": ["overlay", "replace"]
+          "enum": [
+            "overlay",
+            "replace"
+          ]
         },
         "same-name-heuristic": {
           "title": "Same-Name-Heuristic",
@@ -438,7 +461,9 @@
       "title": "CudaTable",
       "description": "The grouped CUDA virtual-package table: `cuda = { driver, arch }`.\n\n`driver` maps to `__cuda` (equivalent to the bare `cuda = \"12.0\"` form);\n`arch` maps to `__cuda_arch` (GPU compute capability) and requires `driver`.",
       "type": "object",
-      "required": ["driver"],
+      "required": [
+        "driver"
+      ],
       "additionalProperties": false,
       "properties": {
         "arch": {
@@ -459,7 +484,9 @@
       "title": "DependsOn",
       "description": "The dependencies of a task.",
       "type": "object",
-      "required": ["task"],
+      "required": [
+        "task"
+      ],
       "additionalProperties": false,
       "properties": {
         "args": {
@@ -484,7 +511,9 @@
                 "propertyNames": {
                   "description": "A valid task argument name; may not be any of: pixi",
                   "not": {
-                    "enum": ["pixi"]
+                    "enum": [
+                      "pixi"
+                    ]
                   }
                 }
               }
@@ -519,7 +548,11 @@
         "channel-priority": {
           "$ref": "#/$defs/ChannelPriority",
           "description": "The type of channel priority that is used in the solve.\n- 'strict': only take the package from the channel it exist in first.\n- 'flexible': exhaust the candidates of higher-priority channels before falling back to the next channel, regardless of the version.\n- 'disabled': group all dependencies together as if there is no channel difference.",
-          "examples": ["strict", "flexible", "disabled"]
+          "examples": [
+            "strict",
+            "flexible",
+            "disabled"
+          ]
         },
         "channels": {
           "title": "Channels",
@@ -670,7 +703,11 @@
         "solve-strategy": {
           "$ref": "#/$defs/SolveStrategy",
           "description": "The strategy that is used in the solve.\n- 'highest': solve all packages to the highest compatible version.\n- 'lowest': solve all packages to the lowest compatible version.\n- 'lowest-direct': solve direct dependencies to the lowest compatible version and transitive ones to the highest compatible version.",
-          "examples": ["lowest", "lowest-direct", "highest"]
+          "examples": [
+            "lowest",
+            "lowest-direct",
+            "highest"
+          ]
         },
         "target": {
           "title": "Target",
@@ -754,7 +791,11 @@
         "channel-priority": {
           "$ref": "#/$defs/ChannelPriority",
           "description": "The type of channel priority that is used in the solve.\n- 'strict': only take the package from the channel it exist in first.\n- 'flexible': exhaust the candidates of higher-priority channels before falling back to the next channel, regardless of the version.\n- 'disabled': group all dependencies together as if there is no channel difference.",
-          "examples": ["strict", "flexible", "disabled"]
+          "examples": [
+            "strict",
+            "flexible",
+            "disabled"
+          ]
         },
         "channels": {
           "title": "Channels",
@@ -908,7 +949,11 @@
         "solve-strategy": {
           "$ref": "#/$defs/SolveStrategy",
           "description": "The strategy that is used in the solve.\n- 'highest': solve all packages to the highest compatible version.\n- 'lowest': solve all packages to the lowest compatible version.\n- 'lowest-direct': solve direct dependencies to the lowest compatible version and transitive ones to the highest compatible version.",
-          "examples": ["lowest", "lowest-direct", "highest"]
+          "examples": [
+            "lowest",
+            "lowest-direct",
+            "highest"
+          ]
         },
         "system-requirements": {
           "$ref": "#/$defs/SystemRequirements",
@@ -975,7 +1020,9 @@
           "description": "Path to the directory of packages",
           "type": "string",
           "minLength": 1,
-          "examples": ["./links"]
+          "examples": [
+            "./links"
+          ]
         }
       }
     },
@@ -990,7 +1037,9 @@
           "description": "URL to html file with href-links to packages",
           "type": "string",
           "minLength": 1,
-          "examples": ["https://simple-index-is-here.com"]
+          "examples": [
+            "https://simple-index-is-here.com"
+          ]
         }
       }
     },
@@ -1023,7 +1072,11 @@
           "description": "The channel the packages needs to be fetched from",
           "type": "string",
           "minLength": 1,
-          "examples": ["conda-forge", "pytorch", "https://prefix.dev/conda-forge"]
+          "examples": [
+            "conda-forge",
+            "pytorch",
+            "https://prefix.dev/conda-forge"
+          ]
         },
         "extras": {
           "title": "Extras",
@@ -1185,7 +1238,10 @@
           "description": "The family of the `libc`",
           "type": "string",
           "minLength": 1,
-          "examples": ["glibc", "musl"]
+          "examples": [
+            "glibc",
+            "musl"
+          ]
         },
         "version": {
           "title": "Version",
@@ -1231,7 +1287,11 @@
           "description": "The channel the packages needs to be fetched from",
           "type": "string",
           "minLength": 1,
-          "examples": ["conda-forge", "pytorch", "https://prefix.dev/conda-forge"]
+          "examples": [
+            "conda-forge",
+            "pytorch",
+            "https://prefix.dev/conda-forge"
+          ]
         },
         "extras": {
           "title": "Extras",
@@ -1381,7 +1441,9 @@
       "title": "Package",
       "description": "The package's metadata information.",
       "type": "object",
-      "required": ["build"],
+      "required": [
+        "build"
+      ],
       "additionalProperties": false,
       "properties": {
         "authors": {
@@ -1400,7 +1462,9 @@
             }
           ],
           "examples": [
-            ["John Doe <j.doe@prefix.dev>"],
+            [
+              "John Doe <j.doe@prefix.dev>"
+            ],
             {
               "workspace": true
             }
@@ -1768,7 +1832,9 @@
       "title": "PinCompatibleSpec",
       "description": "Pin to a version compatible with the one resolved in the previous environment.\n\nMirrors rattler-build's `pin_compatible()`: a `pin-compatible` entry in\n`run-dependencies` resolves against the host environment, one in\n`host-dependencies` against the build environment.",
       "type": "object",
-      "required": ["pin-compatible"],
+      "required": [
+        "pin-compatible"
+      ],
       "additionalProperties": false,
       "properties": {
         "pin-compatible": {
@@ -1790,7 +1856,9 @@
       "title": "PinSubpackageSpec",
       "description": "Pin the package itself for its consumers.\n\nMirrors rattler-build's `pin_subpackage()`. Only valid in the\n`run-exports` tables, on an entry named after the package itself.",
       "type": "object",
-      "required": ["pin-subpackage"],
+      "required": [
+        "pin-subpackage"
+      ],
       "additionalProperties": false,
       "properties": {
         "pin-subpackage": {
@@ -1830,14 +1898,20 @@
           "description": "Lower bound of the pinned range: a pin expression like `x.x` (number of version segments to keep) or a literal version.",
           "type": "string",
           "minLength": 1,
-          "examples": ["x.x", "1.2.3"]
+          "examples": [
+            "x.x",
+            "1.2.3"
+          ]
         },
         "upper-bound": {
           "title": "Upper-Bound",
           "description": "Upper bound of the pinned range: a pin expression like `x` (the segment to bump, exclusive) or a literal version.",
           "type": "string",
           "minLength": 1,
-          "examples": ["x", "9.9"]
+          "examples": [
+            "x",
+            "9.9"
+          ]
         }
       }
     },
@@ -2038,7 +2112,11 @@
             "type": "string",
             "minLength": 1
           },
-          "examples": [["https://pypi.org/simple"]]
+          "examples": [
+            [
+              "https://pypi.org/simple"
+            ]
+          ]
         },
         "find-links": {
           "title": "Find-Links",
@@ -2054,21 +2132,35 @@
               }
             ]
           },
-          "examples": [["https://pypi.org/simple"]]
+          "examples": [
+            [
+              "https://pypi.org/simple"
+            ]
+          ]
         },
         "index-strategy": {
           "title": "Index-Strategy",
           "description": "The strategy to use when resolving packages from multiple indexes",
           "type": "string",
-          "enum": ["first-index", "unsafe-first-match", "unsafe-best-match"],
-          "examples": ["first-index", "unsafe-first-match", "unsafe-best-match"]
+          "enum": [
+            "first-index",
+            "unsafe-first-match",
+            "unsafe-best-match"
+          ],
+          "examples": [
+            "first-index",
+            "unsafe-first-match",
+            "unsafe-best-match"
+          ]
         },
         "index-url": {
           "title": "Index-Url",
           "description": "PyPI registry that should be used as the primary index",
           "type": "string",
           "minLength": 1,
-          "examples": ["https://pypi.org/simple"]
+          "examples": [
+            "https://pypi.org/simple"
+          ]
         },
         "no-binary": {
           "title": "No-Binary",
@@ -2085,7 +2177,10 @@
               }
             }
           ],
-          "examples": ["true", "false"]
+          "examples": [
+            "true",
+            "false"
+          ]
         },
         "no-build": {
           "title": "No-Build",
@@ -2102,7 +2197,10 @@
               }
             }
           ],
-          "examples": ["true", "false"]
+          "examples": [
+            "true",
+            "false"
+          ]
         },
         "no-build-isolation": {
           "title": "No-Build-Isolation",
@@ -2119,20 +2217,40 @@
               }
             }
           ],
-          "examples": [["numpy"], true]
+          "examples": [
+            [
+              "numpy"
+            ],
+            true
+          ]
         },
         "prerelease-mode": {
           "title": "Prerelease-Mode",
           "description": "The strategy to use when considering pre-release versions",
           "type": "string",
-          "enum": ["disallow", "allow", "if-necessary", "explicit", "if-necessary-or-explicit"],
-          "examples": ["disallow", "allow", "if-necessary", "explicit", "if-necessary-or-explicit"]
+          "enum": [
+            "disallow",
+            "allow",
+            "if-necessary",
+            "explicit",
+            "if-necessary-or-explicit"
+          ],
+          "examples": [
+            "disallow",
+            "allow",
+            "if-necessary",
+            "explicit",
+            "if-necessary-or-explicit"
+          ]
         },
         "skip-wheel-filename-check": {
           "title": "Skip-Wheel-Filename-Check",
           "description": "Skip wheel filename validation, allowing installation of wheels with version mismatches between filename and metadata",
           "type": "boolean",
-          "examples": [true, false]
+          "examples": [
+            true,
+            false
+          ]
         }
       }
     },
@@ -2471,7 +2589,11 @@
       "title": "S3Options",
       "description": "Options related to S3 for this project",
       "type": "object",
-      "required": ["endpoint-url", "region", "force-path-style"],
+      "required": [
+        "endpoint-url",
+        "region",
+        "force-path-style"
+      ],
       "additionalProperties": false,
       "properties": {
         "endpoint-url": {
@@ -2479,7 +2601,9 @@
           "description": "The endpoint URL to use for the S3 client",
           "type": "string",
           "minLength": 1,
-          "examples": ["https://s3.eu-central-1.amazonaws.com"]
+          "examples": [
+            "https://s3.eu-central-1.amazonaws.com"
+          ]
         },
         "force-path-style": {
           "title": "Force-Path-Style",
@@ -2491,7 +2615,9 @@
           "description": "The region to use for the S3 client",
           "type": "string",
           "minLength": 1,
-          "examples": ["eu-central-1"]
+          "examples": [
+            "eu-central-1"
+          ]
         }
       }
     },
@@ -2499,7 +2625,11 @@
       "title": "SolveStrategy",
       "description": "The strategy used to solve packages.",
       "type": "string",
-      "enum": ["highest", "lowest", "lowest-direct"]
+      "enum": [
+        "highest",
+        "lowest",
+        "lowest-direct"
+      ]
     },
     "SourceLocation": {
       "title": "SourceLocation",
@@ -2688,7 +2818,9 @@
               "minLength": 1
             }
           ],
-          "examples": ["true"]
+          "examples": [
+            "true"
+          ]
         }
       }
     },
@@ -2862,7 +2994,9 @@
       "title": "TaskArgs",
       "description": "The arguments of a task.",
       "type": "object",
-      "required": ["arg"],
+      "required": [
+        "arg"
+      ],
       "additionalProperties": false,
       "properties": {
         "arg": {
@@ -2870,7 +3004,9 @@
           "description": "The name of the argument",
           "type": "string",
           "not": {
-            "enum": ["pixi"]
+            "enum": [
+              "pixi"
+            ]
           },
           "pattern": "^[a-zA-Z_][a-zA-Z\\d_]*$"
         },
@@ -2909,14 +3045,19 @@
                 "description": "A valid task argument name; may not be any of: pixi",
                 "type": "string",
                 "not": {
-                  "enum": ["pixi"]
+                  "enum": [
+                    "pixi"
+                  ]
                 },
                 "pattern": "^[a-zA-Z_][a-zA-Z\\d_]*$"
               }
             ]
           },
           "examples": [
-            ["arg1", "arg2"],
+            [
+              "arg1",
+              "arg2"
+            ],
             [
               "arg",
               {
@@ -2928,7 +3069,11 @@
               "arg",
               {
                 "arg": "arg2",
-                "choices": ["1", "2", "4"],
+                "choices": [
+                  "1",
+                  "2",
+                  "4"
+                ],
                 "default": "2"
               }
             ]
@@ -3070,7 +3215,9 @@
       "title": "WhenAll",
       "description": "All conditions must apply.",
       "type": "object",
-      "required": ["all"],
+      "required": [
+        "all"
+      ],
       "additionalProperties": false,
       "properties": {
         "all": {
@@ -3102,7 +3249,9 @@
       "title": "WhenAny",
       "description": "Any condition may apply.",
       "type": "object",
-      "required": ["any"],
+      "required": [
+        "any"
+      ],
       "additionalProperties": false,
       "properties": {
         "any": {
@@ -3134,7 +3283,9 @@
       "title": "WhenPackage",
       "description": "Expanded package condition syntax.\n\nAccepts the same matchspec fields as a regular package dependency except\nfor `when` itself, `channel`, and source-location fields (`url`, `git`,\n`path`, `md5`, `sha256`, ...).",
       "type": "object",
-      "required": ["package"],
+      "required": [
+        "package"
+      ],
       "additionalProperties": false,
       "properties": {
         "build": {
@@ -3218,7 +3369,9 @@
       "title": "Workspace",
       "description": "The project's metadata information.",
       "type": "object",
-      "required": ["channels"],
+      "required": [
+        "channels"
+      ],
       "additionalProperties": false,
       "properties": {
         "authors": {
@@ -3229,7 +3382,9 @@
             "type": "string",
             "minLength": 1
           },
-          "examples": ["John Doe <j.doe@prefix.dev>"]
+          "examples": [
+            "John Doe <j.doe@prefix.dev>"
+          ]
         },
         "build-variants": {
           "title": "Build-Variants",
@@ -3257,7 +3412,11 @@
         "channel-priority": {
           "$ref": "#/$defs/ChannelPriority",
           "description": "The type of channel priority that is used in the solve.\n- 'strict': only take the package from the channel it exist in first.\n- 'flexible': exhaust the candidates of higher-priority channels before falling back to the next channel, regardless of the version.\n- 'disabled': group all dependencies together as if there is no channel difference.",
-          "examples": ["strict", "flexible", "disabled"]
+          "examples": [
+            "strict",
+            "flexible",
+            "disabled"
+          ]
         },
         "channels": {
           "title": "Channels",
@@ -3463,7 +3622,9 @@
           "description": "The required version spec for pixi itself to resolve and build the project.",
           "type": "string",
           "minLength": 1,
-          "examples": [">=0.40"]
+          "examples": [
+            ">=0.40"
+          ]
         },
         "s3-options": {
           "title": "S3-Options",
@@ -3476,7 +3637,11 @@
         "solve-strategy": {
           "$ref": "#/$defs/SolveStrategy",
           "description": "The strategy that is used in the solve.\n- 'highest': solve all packages to the highest compatible version.\n- 'lowest': solve all packages to the lowest compatible version.\n- 'lowest-direct': solve direct dependencies to the lowest compatible version and transitive ones to the highest compatible version.",
-          "examples": ["lowest", "lowest-direct", "highest"]
+          "examples": [
+            "lowest",
+            "lowest-direct",
+            "highest"
+          ]
         },
         "target": {
           "title": "Target",
@@ -3494,7 +3659,9 @@
           "description": "The version of the project; we advise use of [SemVer](https://semver.org)",
           "type": "string",
           "minLength": 1,
-          "examples": ["1.2.3"]
+          "examples": [
+            "1.2.3"
+          ]
         }
       }
     },
@@ -3502,7 +3669,9 @@
       "title": "WorkspaceInheritance",
       "description": "Indicates that a field should inherit its value from the workspace.",
       "type": "object",
-      "required": ["workspace"],
+      "required": [
+        "workspace"
+      ],
       "additionalProperties": false,
       "properties": {
         "workspace": {
@@ -3561,7 +3730,13 @@
           "description": "The workspace-scoped name features reference this platform by. Defaults to a name auto-derived from `platform` plus the declared virtual packages when omitted.",
           "type": "string",
           "not": {
-            "enum": ["linux", "macos", "osx", "unix", "win"]
+            "enum": [
+              "linux",
+              "macos",
+              "osx",
+              "unix",
+              "win"
+            ]
           },
           "maxLength": 64,
           "pattern": "^[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z0-9]$|^[a-zA-Z]$"
@@ -3588,13 +3763,17 @@
           "properties": {
             "name": true
           },
-          "required": ["name"]
+          "required": [
+            "name"
+          ]
         },
         {
           "properties": {
             "platform": true
           },
-          "required": ["platform"]
+          "required": [
+            "platform"
+          ]
         }
       ]
     },

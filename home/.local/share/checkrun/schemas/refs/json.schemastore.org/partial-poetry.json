@@ -40,7 +40,10 @@
     },
     "poetry-package-format": {
       "type": "string",
-      "enum": ["sdist", "wheel"],
+      "enum": [
+        "sdist",
+        "wheel"
+      ],
       "description": "A Python packaging format."
     },
     "poetry-package-formats": {
@@ -136,7 +139,9 @@
     },
     "poetry-git-dependency": {
       "type": "object",
-      "required": ["git"],
+      "required": [
+        "git"
+      ],
       "additionalProperties": false,
       "properties": {
         "git": {
@@ -207,7 +212,9 @@
     },
     "poetry-file-dependency": {
       "type": "object",
-      "required": ["file"],
+      "required": [
+        "file"
+      ],
       "additionalProperties": false,
       "properties": {
         "file": {
@@ -241,7 +248,9 @@
     },
     "poetry-path-dependency": {
       "type": "object",
-      "required": ["path"],
+      "required": [
+        "path"
+      ],
       "additionalProperties": false,
       "properties": {
         "path": {
@@ -279,7 +288,9 @@
     },
     "poetry-url-dependency": {
       "type": "object",
-      "required": ["url"],
+      "required": [
+        "url"
+      ],
       "additionalProperties": false,
       "properties": {
         "url": {
@@ -363,7 +374,10 @@
         "type": {
           "description": "Value can be either file or console.",
           "type": "string",
-          "enum": ["file", "console"]
+          "enum": [
+            "file",
+            "console"
+          ]
         },
         "extras": {
           "type": "array",
@@ -373,7 +387,10 @@
           }
         }
       },
-      "required": ["reference", "type"]
+      "required": [
+        "reference",
+        "type"
+      ]
     },
     "poetry-extra-script-legacy": {
       "type": "object",
@@ -423,7 +440,13 @@
       ]
     },
     "poetry-priority": {
-      "enum": ["default", "primary", "secondary", "supplemental", "explicit"]
+      "enum": [
+        "default",
+        "primary",
+        "secondary",
+        "supplemental",
+        "explicit"
+      ]
     }
   },
   "type": "object",
@@ -504,7 +527,9 @@
         "type": "object",
         "description": "Information about where the package resides.",
         "additionalProperties": false,
-        "required": ["include"],
+        "required": [
+          "include"
+        ],
         "properties": {
           "include": {
             "$ref": "#/definitions/poetry-include-path"
@@ -534,7 +559,9 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path"],
+            "required": [
+              "path"
+            ],
             "properties": {
               "path": {
                 "$ref": "#/definitions/poetry-include-path"
@@ -599,7 +626,9 @@
         "^[a-zA-Z-_.0-9]+$": {
           "type": "object",
           "description": "This represents a single dependency group",
-          "required": ["dependencies"],
+          "required": [
+            "dependencies"
+          ],
           "properties": {
             "optional": {
               "type": "boolean",
@@ -695,7 +724,9 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "properties": {
               "name": {
                 "const": "pypi",
@@ -710,7 +741,10 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "url"],
+            "required": [
+              "name",
+              "url"
+            ],
             "properties": {
               "name": {
                 "allOf": [
