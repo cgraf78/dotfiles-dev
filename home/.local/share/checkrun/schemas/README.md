@@ -13,6 +13,11 @@ access.
   dependency repo.
 - Pinned public schema payloads and dotfiles-owned local schemas live here.
 
+Payloads that reference other documents remotely (`$ref` to another URL) carry
+those documents under `refs/<host>/<path>`, vendored by the same refresh, so
+validation never fetches. Do not edit or prune them by hand; refresh rewrites
+them.
+
 When refreshing a public schema, keep the filename stable when the association
 still means the same schema. Use a new filename only when the schema identity or
 major compatibility contract changes.

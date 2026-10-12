@@ -99,6 +99,7 @@ program	home/.local/lib/dotfiles/tests/nvim-dev-test
 program	home/.local/lib/dotfiles/tests/profile-deactivate-test
 program	home/.local/lib/dotfiles/tests/profile-state-test
 program	home/.local/lib/dotfiles/tests/schema-associations-test
+program	home/.local/lib/dotfiles/tests/schema-coverage-test
 program	home/.local/lib/dotfiles/tests/schema-refresh-workflow-test
 program	home/.local/lib/dotfiles/tests/validate-commit-msg-test
 program	home/.local/lib/dotfiles/tests/vscode-extensions-test

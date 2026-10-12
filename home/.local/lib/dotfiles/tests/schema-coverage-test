@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# schema-coverage-test - every tracked structured config has a schema decision.
+#
+# Drift guard for the Checkrun schema policy. For every tracked file Checkrun
+# types as JSON, JSONC, YAML, or TOML, it proves:
+#   1. the file matches an association (enforced or advisory) or a row in
+#      schema-exemptions.tsv, so no config appears without a schema decision;
+#   2. Checkrun gives each associated file a filetype compatible with the
+#      association's format, so editors attach a language server to it;
+#   3. every enforced association validates, so a stricter upstream payload
+#      from the refresh workflow cannot silently break a tracked file.
+# The corpus is this checkout, plus the base repository and the other required
+# (public) overlay checkouts on hosts that have them; CI sees only this
+# checkout. Optional private overlays are out of scope, as in the base profile
+# ownership gate.
+set -euo pipefail
+export NO_COLOR=1
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+owner_root=$(_dev_repo_root)
+root=$owner_root/home
+host_home=${DOT_TEST_HOST_HOME:-$HOME}
+work=$(_tmpdir)
+
+# Use the Checkrun under test: the provider checkout in compatibility runs,
+# otherwise the installed one. Hermetic runs have neither and skip.
+if [[ -n ${DOT_TEST_CHECKRUN_ROOT:-} ]]; then
+  checkrun_root=$DOT_TEST_CHECKRUN_ROOT
+  # Dependency-owned schemas resolve through `shdeps dep-file`; answer for the
+  # provider checkouts this run has, and let any other dependency stay missing.
+  mkdir -p "$work/bin"
+  # The stub's own `$1`, `$2`, and `$root` must stay literal in its text.
+  # shellcheck disable=SC2016
+  {
+    printf '%s\n' '#!/usr/bin/env bash' '[[ $1 == dep-file ]] || exit 2' 'case $2 in'
+    printf '  cgraf78/checkrun) root=%q ;;\n' "$DOT_TEST_CHECKRUN_ROOT"
+    printf '  cgraf78/sley) root=%q ;;\n' "${DOT_TEST_SLEY_ROOT:-}"
+    printf '%s\n' '  *) exit 1 ;;' 'esac' '[[ -n $root && -e $root/$3 ]] || exit 1' \
+      'printf "%s\n" "$root/$3"'
+  } >"$work/bin/shdeps"
+  chmod +x "$work/bin/shdeps"
+  PATH=$work/bin:$PATH
+elif command -v checkrun >/dev/null 2>&1 && command -v shdeps >/dev/null 2>&1 &&
+  checkrun_bin=$(shdeps dep-file cgraf78/checkrun bin/checkrun 2>/dev/null); then
+  checkrun_root=${checkrun_bin%/bin/checkrun}
+else
+  _test_skip_suite 'schema coverage needs Checkrun (installed or provider checkout)'
+fi
+
+# Payloads resolve under this checkout, not the host's installed copies, so
+# the run checks the policy and payloads it ships together.
+jq --arg dir "$root/.local/share/checkrun/schemas" '.schemaDataDir = $dir' \
+  "$root/.config/checkrun/associations.json" >"$work/associations.json"
+
+corpus=$work/corpus
+git -C "$owner_root" ls-files -z | while IFS= read -r -d '' path; do
+  printf '%s\n' "$owner_root/$path"
+done >"$corpus"
+# Like the base profile ownership gate, this covers the public checkouts only:
+# the base repository and every required overlay. Optional overlays (the
+# private personal and work ones) are skipped; their files may name private
+# tools that must not appear in this public exemption list. Stale exemptions
+# are only decidable when every public checkout is present.
+complete_corpus=0
+if [[ -d $host_home/.dotfiles ]]; then
+  git --git-dir="$host_home/.dotfiles" ls-files -z 2>/dev/null |
+    while IFS= read -r -d '' path; do printf '%s\n' "$host_home/$path"; done >>"$corpus"
+  complete_corpus=1
+fi
+# Overlays named by overlays.d/<NN>-<name>.conf live at ~/.dotfiles-<name>.
+# This checkout stands in for the dev overlay, so the installed copy is skipped.
+for conf in "$host_home"/.config/dot/overlays.d/*.conf; do
+  [[ -e $conf ]] || continue
+  name=${conf##*/}
+  name=${name%.conf}
+  name=${name#*-}
+  [[ $name != dev ]] || continue
+  if grep -Eq '^[[:space:]]*optional[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$conf"; then
+    continue
+  fi
+  overlay=$host_home/.dotfiles-$name
+  if [[ ! -d $overlay/.git ]]; then
+    complete_corpus=0
+    continue
+  fi
+  git -C "$overlay" ls-files -z | while IFS= read -r -d '' path; do
+    printf '%s\n' "$overlay/$path"
+  done >>"$corpus"
+done
+
+set +e
+output=$(
+  CHECKRUN_SCHEMA_ASSOCIATIONS="$work/associations.json" python3 - \
+    "$checkrun_root" "$corpus" "$root/.config/checkrun/schema-exemptions.tsv" \
+    "$work" "$complete_corpus" <<'PY' 2>&1
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+checkrun_root, corpus_path, exemptions_path, work, complete_corpus = sys.argv[1:]
+sys.path.insert(0, f"{checkrun_root}/lib/checkrun/schemas")
+import schema_policy  # noqa: E402
+
+policy = schema_policy.load_policy()
+assert policy is not None, "schema policy is missing"
+files = [Path(line) for line in Path(corpus_path).read_text().splitlines() if line]
+files = [path for path in files if path.is_file() and not path.is_symlink()]
+
+# Checkrun's registry is the single source of filetype vocabulary, so ask it
+# which files are structured config instead of keeping an extension list here.
+plan = json.loads(
+    subprocess.run(
+        [f"{checkrun_root}/bin/checkrun", "plan", "--json", "--phase", "lint",
+         *map(str, files)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+)
+# Checkrun reports resolved paths, so compare resolved paths: a home or
+# overlay reached through a symlink must not read as an untyped file.
+filetypes = {Path(item["path"]).resolve(): item["filetype"] for item in plan["files"]}
+structured = {"json", "jsonc", "yaml", "toml"}
+compatible = {"json": {"json", "jsonc"}, "yaml": {"yaml"}, "toml": {"toml"}}
+
+# Exemptions reuse the association matcher through a synthetic advisory
+# policy, so their patterns can never mean something different.
+rows = []
+for line in Path(exemptions_path).read_text().splitlines():
+    if not line or line.startswith("#"):
+        continue
+    pattern, _, reason = line.partition("\t")
+    assert reason.strip(), f"schema exemption without a reason: {pattern}"
+    # The policy shape requires a schema name; this synthetic policy only
+    # matches paths and is never validated against anything.
+    rows.append({"name": pattern, "format": "json", "schema": "exemption.schema.json",
+                 "matches": [pattern], "enforce": False})
+exemption_policy = schema_policy.validate_policy({"version": 1, "associations": rows})
+
+failures = []
+used_exemptions = set()
+associated = []
+for path in files:
+    matches = schema_policy.matching_associations(policy, path, include_advisory=True)
+    exempt = schema_policy.matching_associations(exemption_policy, path, include_advisory=True)
+    used_exemptions.update(item["name"] for item in exempt)
+    if matches:
+        associated.append(path)
+        for association in matches:
+            kind = filetypes.get(path.resolve())
+            if kind not in compatible[str(association["format"])]:
+                failures.append(
+                    f"filetype: {path} is {kind!r} to Checkrun but "
+                    f"{association['name']!r} expects {association['format']}"
+                )
+    elif filetypes.get(path.resolve()) in structured and not exempt:
+        failures.append(
+            f"undecided: {path} has no schema association or exemption "
+            "(add one to associations.json or schema-exemptions.tsv)"
+        )
+
+# A stale exemption hides a future file under a decision nobody made. Only a
+# host with every repository checked out can tell which rows are stale.
+if complete_corpus == "1":
+    for row in rows:
+        if row["name"] not in used_exemptions:
+            failures.append(f"stale exemption: {row['name']} matches no tracked file")
+
+# Validate enforced associations against their payloads. A dependency schema
+# this environment cannot resolve is reported, not failed: CI has only the
+# Checkrun and Sley provider checkouts.
+enforced = []
+for association in policy["associations"]:
+    if association.get("enforce") is not True:
+        continue
+    if not schema_policy.schema_path(policy, association).is_file():
+        print(f"SKIP: {association['name']} schema unavailable here")
+        continue
+    enforced.append(association)
+validation_policy = Path(work) / "validation-associations.json"
+validation_policy.write_text(json.dumps({**policy, "associations": enforced}))
+lint = subprocess.run(
+    [sys.executable, f"{checkrun_root}/lib/checkrun/schemas/schema-lint.py",
+     *map(str, associated)],
+    capture_output=True, text=True,
+    # Required mode turns "validator unavailable" (no jsonschema, no uv) into
+    # exit 2 instead of a notice and a pass, so this check cannot go vacuous.
+    env={
+        **os.environ,
+        "CHECKRUN_SCHEMA_ASSOCIATIONS": str(validation_policy),
+        "CHECKRUN_SCHEMA_POLICY_REQUIRED": "1",
+    },
+)
+if lint.returncode != 0:
+    failures.extend(f"invalid: {line}" for line in lint.stdout.splitlines() if line)
+    if lint.returncode != 1:
+        failures.append(f"schema-lint exited {lint.returncode}: {lint.stderr.strip()}")
+
+print(f"checked {len(files)} tracked files, {len(associated)} associated")
+for failure in failures:
+    print(failure)
+raise SystemExit(1 if failures else 0)
+PY
+)
+rc=$?
+set -e
+printf '%s\n' "$output" | sed 's/^/  /'
+_assert_exit "schema coverage: every structured config has a valid schema decision" 0 "$rc"
+
+_test_summary

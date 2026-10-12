@@ -353,6 +353,7 @@ if [[ $mode == --provider-compatibility ]]; then
     dev-vscode-signature-merges
     git-shell-workflows
     nvim-dev
+    schema-coverage
     validate-commit-msg
     vscode-sley
     workflow-consistency

@@ -106,7 +106,9 @@ jobs:
               )
           )
           allowed = re.compile(
-              r"home/\.local/share/checkrun/schemas/[A-Za-z0-9][A-Za-z0-9._-]*\.schema\.json"
+              r"home/\.local/share/checkrun/schemas/"
+              r"(?:[A-Za-z0-9][A-Za-z0-9._-]*\.schema\.json"
+              r"|refs/[A-Za-z0-9][A-Za-z0-9.-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)+\.json)"
           )
           unexpected = [path for path in paths if not allowed.fullmatch(path)]
           if unexpected:
@@ -240,7 +242,9 @@ jobs:
               if item
           ]
           allowed = re.compile(
-              r"home/\.local/share/checkrun/schemas/[A-Za-z0-9][A-Za-z0-9._-]*\.schema\.json"
+              r"home/\.local/share/checkrun/schemas/"
+              r"(?:[A-Za-z0-9][A-Za-z0-9._-]*\.schema\.json"
+              r"|refs/[A-Za-z0-9][A-Za-z0-9.-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)+\.json)"
           )
           if not paths:
               raise SystemExit("schema refresh patch is empty")

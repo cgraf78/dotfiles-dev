@@ -169,6 +169,9 @@ is left behind.
    `.local/lib/dotfiles/tests/schema-associations-test`, then run `test/run`
    from the dotfiles-dev checkout under change. `dot test` there runs the
    installed suites, not the checkout's.
+8. If a file the new entry covered was listed in `schema-exemptions.tsv`,
+   delete that row; `schema-coverage-test` reports exemptions that no longer
+   match anything.
 
 ## Matching Policy
 
@@ -209,8 +212,23 @@ When a layer cannot yet satisfy a public schema, keep the association with
 schema without blocking `autolint`.
 
 Whenever a new merge-hook source layer is added, include schema association
-review in the same change. If no proper schema exists, leave the file
-unassociated and rely on parser/linter/native validation instead.
+review in the same change. If no proper schema exists, record that decision
+as a row in `schema-exemptions.tsv` with the reason, and rely on
+parser/linter/native validation instead.
+
+## Coverage Guard
+
+`schema-coverage-test` checks every tracked file that Checkrun types as JSON,
+JSONC, YAML, or TOML, in this checkout and, on hosts that have them, in the
+base repository and the other required overlays. Optional private overlays are
+out of scope, as in the base profile ownership gate, so their files never need
+rows in this public list. Each file must match an
+association (enforced or advisory) or a `schema-exemptions.tsv` row, Checkrun
+must give each associated file a filetype compatible with the association's
+format so editors attach, and every enforced association must validate. A new
+config file without a decision, a stale exemption, or a refreshed payload that
+newly rejects a tracked file therefore fails the dotfiles-dev CI, including
+the scheduled refresh PR.
 
 ## Boundaries
 

@@ -190,6 +190,10 @@ printf '%s\n' '{"title":"updated"}' \
   >"$fixture/home/.local/share/checkrun/schemas/existing.schema.json"
 printf '%s\n' '{"title":"new"}' \
   >"$fixture/home/.local/share/checkrun/schemas/new.schema.json"
+# Refresh also vendors each payload's remote $ref targets under refs/<host>/.
+mkdir -p "$fixture/home/.local/share/checkrun/schemas/refs/json.example.org/sub"
+printf '%s\n' '{"title":"ref"}' \
+  >"$fixture/home/.local/share/checkrun/schemas/refs/json.example.org/sub/common.json"
 paths=$(_tmpdir)/paths
 set +e
 (cd "$fixture" && "$schema_python" "$validator" "$base" "$paths")
@@ -197,7 +201,7 @@ rc=$?
 set -e
 _assert_exit "schema refresh validator: accepts updated and new payloads" 0 "$rc"
 _assert_file_content "schema refresh validator: inventories tracked and untracked payloads" \
-  $'home/.local/share/checkrun/schemas/existing.schema.json\nhome/.local/share/checkrun/schemas/new.schema.json' \
+  $'home/.local/share/checkrun/schemas/existing.schema.json\nhome/.local/share/checkrun/schemas/new.schema.json\nhome/.local/share/checkrun/schemas/refs/json.example.org/sub/common.json' \
   "$paths"
 
 printf '%s\n' '{"type":"not-a-real-json-schema-type"}' \
@@ -211,6 +215,17 @@ _assert_contains "schema refresh validator: reports meta-schema failure" \
   'invalid schema refresh output' "$invalid_output"
 printf '%s\n' '{"title":"new"}' \
   >"$fixture/home/.local/share/checkrun/schemas/new.schema.json"
+
+printf '%s\n' unexpected \
+  >"$fixture/home/.local/share/checkrun/schemas/refs/json.example.org/notes.txt"
+set +e
+unexpected_output=$(cd "$fixture" && "$schema_python" "$validator" "$base" "$paths" 2>&1)
+rc=$?
+set -e
+_assert_exit "schema refresh validator: rejects non-JSON files under refs" 1 "$rc"
+_assert_contains "schema refresh validator: names the rejected refs path" \
+  'refs/json.example.org/notes.txt' "$unexpected_output"
+rm "$fixture/home/.local/share/checkrun/schemas/refs/json.example.org/notes.txt"
 
 printf '%s\n' unexpected >"$fixture/unexpected.txt"
 set +e

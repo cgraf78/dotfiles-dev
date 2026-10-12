@@ -1,0 +1,21 @@
+# Structured config files deliberately left without a schema association.
+#
+# Read by schema-coverage-test, not by Checkrun. Every tracked JSON, JSONC,
+# YAML, or TOML file in the dotfiles repos must match an association in
+# associations.json or a pattern here, so a new config file cannot appear
+# without someone deciding about its schema. Patterns use the association
+# `matches` syntax and expansion. Each row needs a reason; when a public schema
+# appears, delete the row and add an association instead.
+#
+# pattern	reason
+.config/atuin/config.toml	Atuin publishes no config schema.
+.config/dot/merge-hooks.d/iterm2/profiles.d/*.json	iTerm2 dynamic profiles have no public schema.
+.config/dot/merge-hooks.d/karabiner/profiles.d/*.json	Karabiner-Elements publishes no official schema.
+.config/dot/merge-hooks.d/grok-config/*.toml	Grok publishes no config schema.
+.config/hive-memory/*.toml	Hive Memory publishes no config schema yet.
+.config/nvim/lazyvim.json	LazyVim writes this state file itself.
+selene.toml	Selene publishes no config schema.
+.selene.toml	Selene publishes no config schema.
+vim.yml	A Selene standard-library definition; no schema exists.
+.local/lib/dotfiles/tests/fixtures/*.json	Test fixtures, validated by the tests that read them.
+.local/share/checkrun/schemas/*.json	Pinned JSON Schema payloads and vendored refs; refresh validates them as schemas.
