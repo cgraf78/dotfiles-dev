@@ -64,14 +64,23 @@ jobs:
             --no-compile --only-binary=:all: 'jsonschema==4.25.1'
           python3 -c 'import jsonschema'
 
+          # The refresh below runs with HOME redirected into the workspace, so
+          # Python's user site directory moves away from pip's user install and
+          # the provisioned validator packages disappear from sys.path. Carry
+          # them on PYTHONPATH, resolved from the runner's real HOME before
+          # the override.
+          provisioned_site=$(python3 -m site --user-site)
+
           checkrun="$GITHUB_WORKSPACE/.schema-refresh/checkrun/bin/checkrun"
           if ! HOME="$GITHUB_WORKSPACE/home" CHECKRUN_PYTHON=python3 \
             PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$provisioned_site" \
             "$checkrun" schema refresh; then
             echo "Schema refresh failed; retrying the read-only fetch phase once." >&2
             sleep 10
             HOME="$GITHUB_WORKSPACE/home" CHECKRUN_PYTHON=python3 \
               PYTHONDONTWRITEBYTECODE=1 \
+              PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$provisioned_site" \
               "$checkrun" schema refresh
           fi
           rm -rf .schema-refresh

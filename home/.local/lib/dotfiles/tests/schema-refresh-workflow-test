@@ -73,6 +73,17 @@ _assert_contains "schema refresh: policy comes from the dotfiles checkout" \
   "$refresh_job"
 _assert_contains "schema refresh: overlay HOME is explicit" \
   'HOME="$GITHUB_WORKSPACE/home"' "$refresh_job"
+_assert_contains "schema refresh: provisioned validator site is resolved before the HOME override" \
+  'provisioned_site=$(python3 -m site --user-site)' "$refresh_job"
+_assert_contains "schema refresh: refresh keeps provisioned validators on PYTHONPATH" \
+  'PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$provisioned_site"' "$refresh_job"
+pythonpath_lines=$(grep -c \
+  'PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$provisioned_site"' <<<"$refresh_job")
+if (( pythonpath_lines == 2 )); then
+  _pass "schema refresh: initial and retried refresh both carry the provisioned validators"
+else
+  _fail "schema refresh: expected 2 PYTHONPATH carries in the refresh job, found $pythonpath_lines"
+fi
 _assert_contains "schema refresh: output allowlist is rooted under home" \
   'r"home/\.local/share/checkrun/schemas/' "$content"
 _assert_contains "schema refresh: fetch phase has one bounded retry" \
