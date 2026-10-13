@@ -79,7 +79,8 @@ grep -Fx '      stack: true' "$workflow" >/dev/null ||
 grep -Fx '      shellcheck-inventory-path: .github/shellcheck-files.txt' "$workflow" >/dev/null || fail 'shell CI does not lint the typed ShellCheck inventory'
 grep -Fx '        run: test/workflow-test --remote' "$workflow" >/dev/null || fail 'remote license check is missing'
 grep -F 'uses: cgraf78/actions/.github/actions/infra-retry@' .github/workflows/retry-infrastructure.yml >/dev/null || fail 'retry action ref is missing'
-grep -F 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' "$workflow" >/dev/null || fail 'checkout pin drifted'
+# Require full commit pins, not specific ones, so Dependabot bumps pass.
+grep -E 'actions/checkout@[0-9a-f]{40}( |$)' "$workflow" >/dev/null || fail 'checkout is not commit-pinned'
 grep -F 'android-dev-ci-smoke' test/run >/dev/null || fail 'Termux dev smoke test is not wired into the runner'
 grep -F 'for dependency in difftastic direnv lazygit mise yq watchexec; do' \
   home/.local/lib/dotfiles/tests/android-dev-ci-smoke >/dev/null ||
@@ -115,10 +116,13 @@ grep -F 'provider compatibility did not execute the live retirement-history guar
 # shellcheck disable=SC2016 # Match the literal GitHub Actions expression.
 grep -F 'CAPABILITY_TEST_NODE: ${{ runner.temp }}/node-provider' "$workflow" >/dev/null ||
   fail 'provider compatibility does not receive an explicit Node runtime'
-primary_checkout=$'      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        # Name checkout\'s throwaway initial branch so Git skips its hint.\n        env:\n          GIT_CONFIG_COUNT: "1"\n          GIT_CONFIG_KEY_0: init.defaultBranch\n          GIT_CONFIG_VALUE_0: main\n        with:\n          fetch-depth: 0\n          persist-credentials: false'
+# Normalize the checkout pin (and its version comment) so this block
+# assertion survives Dependabot bumps.
+pinned_workflow=$(sed -E 's|actions/checkout@[0-9a-f]{40}( #.*)?$|actions/checkout@PIN|' "$workflow")
+primary_checkout=$'      - uses: actions/checkout@PIN\n        # Name checkout\'s throwaway initial branch so Git skips its hint.\n        env:\n          GIT_CONFIG_COUNT: "1"\n          GIT_CONFIG_KEY_0: init.defaultBranch\n          GIT_CONFIG_VALUE_0: main\n        with:\n          fetch-depth: 0\n          persist-credentials: false'
 # Match the step as one block: `grep -F` would split this pattern at each
 # newline and accept any single line, hiding a dropped `fetch-depth: 0`.
-[[ $(<"$workflow") == *"$primary_checkout"* ]] ||
+[[ $pinned_workflow == *"$primary_checkout"* ]] ||
   fail 'provider compatibility primary checkout does not fetch development history'
 grep -F 'neovim/releases/download/v0.12.2/nvim-linux-x86_64.tar.gz' "$workflow" >/dev/null ||
   fail 'provider compatibility Neovim is not version-pinned'
