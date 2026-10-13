@@ -14,6 +14,25 @@ _mise_interactive() {
   [[ -t 0 && -t 1 ]]
 }
 
+# Delete installed versions that no tracked config still selects. Every
+# `latest` bump otherwise leaves the previous release behind, which grew the
+# global toolset to several times its live size. Mise records each config it
+# loads, so a config copied into a Dot backup tree keeps pinning the versions
+# it named once anything loads it there. Ignore those trees for this prune
+# only; the `ignored_config_paths` setting in a config file does not affect
+# which tracked configs `mise prune` honors, but the environment form does.
+# Prune also keeps versions that a running process was started from, so it is
+# safe during unattended cron updates. Failure is advisory: stale versions
+# only cost disk space.
+_mise_prune() {
+  local ignored="$HOME/.dot-backup:$HOME/.dotfiles-backup"
+  if [[ -n "${MISE_IGNORED_CONFIG_PATHS:-}" ]]; then
+    ignored="$MISE_IGNORED_CONFIG_PATHS:$ignored"
+  fi
+  (cd "$HOME" && MISE_IGNORED_CONFIG_PATHS="$ignored" mise prune --yes) \
+    &>/dev/null || true
+}
+
 merge() {
   _dot_tool_any_command mise || return 0
   # Mise's tracked global toolset targets Linux and macOS release assets.
@@ -56,11 +75,9 @@ merge() {
     fi
   fi
 
+  # Prune only after the locked toolset is fully installed, so a failed update
+  # never removes the versions still serving as the working generation.
   if ((install_ok)); then
-    # SuperHTML moved from the deprecated UBI backend to the GitHub backend.
-    # Prune only that retired payload, and let mise preserve it if another
-    # tracked config still references the old provider.
-    (cd "$HOME" && mise prune --tools --yes ubi:kristoff-it/superhtml) \
-      &>/dev/null || true
+    _mise_prune
   fi
 }
