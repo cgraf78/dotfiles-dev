@@ -1104,6 +1104,10 @@
               "description": "GitHub App client ID that turns on native OAuth device-flow tokens.",
               "type": "string"
             },
+            "oauth_copy_code": {
+              "description": "Copy the one-time device code to the clipboard during the native GitHub OAuth device flow.",
+              "type": "boolean"
+            },
             "oauth_export_env": {
               "default": "GITHUB_TOKEN",
               "description": "Environment variable that mise exports the native GitHub OAuth token under; empty turns the export off.",
@@ -5747,10 +5751,7 @@
               "unevaluatedProperties": false,
               "properties": {
                 "auto": {
-                  "description": "automatically touch an internal tracked file instead of specifying outputs",
-                  "enum": [
-                    true
-                  ],
+                  "description": "automatically touch an internal tracked file instead of specifying outputs; `false` is the same as leaving `outputs` unset",
                   "type": "boolean"
                 }
               },

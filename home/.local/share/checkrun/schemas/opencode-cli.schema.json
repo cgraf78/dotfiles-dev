@@ -3583,6 +3583,17 @@
       ],
       "description": "Enable interface animations"
     },
+    "highlights": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Show the release highlights once after OpenCode updates"
+    },
     "mouse": {
       "anyOf": [
         {
