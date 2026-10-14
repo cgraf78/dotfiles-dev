@@ -1099,6 +1099,16 @@
               "description": "GitHub OAuth endpoint base URL for the native device flow.",
               "type": "string"
             },
+            "oauth_cache_get": {
+              "default": "",
+              "description": "Command that prints the native GitHub OAuth refresh tokens stored by github.oauth_cache_set.",
+              "type": "string"
+            },
+            "oauth_cache_set": {
+              "default": "",
+              "description": "Command that stores the native GitHub OAuth refresh tokens, read from its stdin.",
+              "type": "string"
+            },
             "oauth_client_id": {
               "default": "",
               "description": "GitHub App client ID that turns on native OAuth device-flow tokens.",
@@ -2157,7 +2167,7 @@
           "properties": {
             "auto_sync": {
               "default": false,
-              "description": "Link the active tools' agent skills into the project after `mise install` and `mise use`.",
+              "description": "Link the active tools' agent skills into the project after `mise install`, `mise use`, and `mise upgrade`.",
               "type": "boolean"
             },
             "dir": {
@@ -2293,12 +2303,25 @@
           "type": "object",
           "unevaluatedProperties": false,
           "properties": {
+            "elevate_with": {
+              "description": "Command mise uses to get root instead of `sudo`, such as `run0` or `doas`.",
+              "type": "string"
+            },
             "managers": {
               "description": "Package managers that mise may use for `[bootstrap.packages]` and missing plugin dependencies.",
               "type": "array",
               "items": {
                 "type": "string"
               }
+            },
+            "ostree": {
+              "default": "error",
+              "description": "What mise does with `dnf:` packages on an image-based Fedora host such as Silverblue or Bazzite.",
+              "type": "string",
+              "enum": [
+                "error",
+                "layer"
+              ]
             },
             "sudo": {
               "default": true,
@@ -2834,14 +2857,24 @@
             "file": {
               "oneOf": [
                 {
+                  "$ref": "#/$defs/env_directive"
+                },
+                {
                   "description": "environment file to load (dotenv, json, yaml, or toml)",
                   "type": "string"
                 },
                 {
                   "description": "environment files to load (dotenv, json, yaml, or toml)",
                   "items": {
-                    "description": "environment file to load (dotenv, json, yaml, or toml)",
-                    "type": "string"
+                    "oneOf": [
+                      {
+                        "description": "environment file to load (dotenv, json, yaml, or toml)",
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/$defs/env_directive"
+                      }
+                    ]
                   },
                   "type": "array"
                 }
@@ -2850,14 +2883,24 @@
             "source": {
               "oneOf": [
                 {
+                  "$ref": "#/$defs/env_directive"
+                },
+                {
                   "description": "bash script to load",
                   "type": "string"
                 },
                 {
                   "description": "bash scripts to load",
                   "items": {
-                    "description": "bash script to load",
-                    "type": "string"
+                    "oneOf": [
+                      {
+                        "description": "bash script to load",
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/$defs/env_directive"
+                      }
+                    ]
                   },
                   "type": "array"
                 }
@@ -8147,6 +8190,24 @@
                 }
               }
             },
+            "login_items": {
+              "type": "object",
+              "description": "applications to open at login (System Settings > General > Login Items & Extensions)",
+              "properties": {
+                "apps": {
+                  "type": "array",
+                  "description": "application bundles to open at login: absolute or `~/` paths ending in `.app`",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "exclusive": {
+                  "type": "boolean",
+                  "description": "also remove login items that are not declared (default: false, so apps that register themselves are left alone)"
+                }
+              },
+              "additionalProperties": false
+            },
             "launchd": {
               "type": "object",
               "description": "macOS launchd bootstrap config",
@@ -8888,6 +8949,116 @@
             }
           }
         },
+        "apt": {
+          "type": "object",
+          "description": "apt-specific bootstrap package config",
+          "properties": {
+            "sources": {
+              "type": "object",
+              "description": "apt repositories added before apt packages are installed, keyed by a name used in the files mise writes",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.-]*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ppa": {
+                    "type": "string",
+                    "description": "Launchpad PPA as owner/archive, such as git-core/ppa; added on Ubuntu and Ubuntu-based releases only"
+                  },
+                  "uris": {
+                    "type": "string",
+                    "description": "repository URL(s), space-separated"
+                  },
+                  "suites": {
+                    "type": "string",
+                    "description": "suite(s), space-separated; defaults to the release codename"
+                  },
+                  "components": {
+                    "type": "string",
+                    "description": "component(s), space-separated; defaults to main, or none when suites is a path ending in /"
+                  },
+                  "architectures": {
+                    "type": "string",
+                    "description": "architecture(s) to fetch, space-separated"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "http(s) URL of the repository's signing key, armored or binary"
+                  },
+                  "fingerprint": {
+                    "description": "full primary key fingerprint(s) the signing key must have; required with key",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "oneOf": [
+                  {
+                    "required": [
+                      "ppa"
+                    ],
+                    "properties": {
+                      "fingerprint": {
+                        "type": "string"
+                      }
+                    },
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "uris"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "suites"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "components"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "architectures"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "key"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "uris",
+                      "key",
+                      "fingerprint"
+                    ],
+                    "not": {
+                      "required": [
+                        "ppa"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
         "brew": {
           "type": "object",
           "description": "Homebrew-specific bootstrap package config",
@@ -9017,6 +9188,268 @@
             }
           },
           "additionalProperties": false
+        },
+        "secrets": {
+          "type": "object",
+          "description": "sensitive bootstrap inputs read from environment variables, keyed by secret name",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "description": "secret name using ASCII letters, digits, '.', '_' or '-'"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "environment variable that provides this secret's value"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "env": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "description": "environment variable that provides this secret's value"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "human-readable description shown in status output and prompts"
+                  },
+                  "allow_empty": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "accept an empty value; empty values are rejected by default"
+                  }
+                },
+                "required": [
+                  "env"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "groups": {
+          "type": "object",
+          "description": "[experimental] Linux groups that bootstrap creates or removes, keyed by group name",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_-]*\\$?$",
+            "maxLength": 32,
+            "description": "at most 32 ASCII letters, digits, '_' or '-', starting with a letter or '_', with an optional trailing '$'"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "enum": [
+                  "present",
+                  "absent"
+                ],
+                "default": "present",
+                "description": "whether the group should exist"
+              },
+              "gid": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295,
+                "description": "numeric group ID"
+              },
+              "system": {
+                "type": "boolean",
+                "default": false,
+                "description": "create a system group"
+              }
+            },
+            "additionalProperties": false,
+            "if": {
+              "required": [
+                "state"
+              ],
+              "properties": {
+                "state": {
+                  "const": "absent"
+                }
+              },
+              "additionalProperties": true
+            },
+            "then": {
+              "properties": {
+                "gid": false,
+                "system": {
+                  "const": false
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "users": {
+          "type": "object",
+          "description": "[experimental] Linux users that bootstrap creates or removes, keyed by user name",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_-]*\\$?$",
+            "maxLength": 32,
+            "description": "at most 32 ASCII letters, digits, '_' or '-', starting with a letter or '_', with an optional trailing '$'"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "enum": [
+                  "present",
+                  "absent"
+                ],
+                "default": "present",
+                "description": "whether the user should exist"
+              },
+              "uid": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295,
+                "description": "numeric user ID"
+              },
+              "group": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*\\$?$",
+                "maxLength": 32,
+                "description": "primary group; required for a present user"
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_-]*\\$?$",
+                  "maxLength": 32
+                },
+                "description": "supplementary groups"
+              },
+              "exclusive_groups": {
+                "type": "boolean",
+                "default": false,
+                "description": "remove the user from supplementary groups not listed in groups"
+              },
+              "home": {
+                "type": "string",
+                "pattern": "^/[^:\\r\\n]*$",
+                "description": "home directory; an absolute path without ':', CR or LF"
+              },
+              "shell": {
+                "type": "string",
+                "pattern": "^/[^:\\r\\n]*$",
+                "description": "login shell; an absolute path without ':', CR or LF"
+              },
+              "comment": {
+                "type": "string",
+                "pattern": "^[^:\\r\\n]*$",
+                "description": "comment (GECOS) field, without ':', CR or LF"
+              },
+              "system": {
+                "type": "boolean",
+                "default": false,
+                "description": "create a system user"
+              },
+              "create_home": {
+                "type": "boolean",
+                "description": "create the home directory"
+              },
+              "move_home": {
+                "type": "boolean",
+                "default": false,
+                "description": "move the existing home directory to home"
+              },
+              "remove_home": {
+                "type": "boolean",
+                "default": false,
+                "description": "remove the home directory when removing the user"
+              }
+            },
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "const": "absent"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "then": {
+                  "properties": {
+                    "uid": false,
+                    "group": false,
+                    "groups": false,
+                    "home": false,
+                    "shell": false,
+                    "comment": false,
+                    "create_home": false,
+                    "exclusive_groups": {
+                      "const": false
+                    },
+                    "system": {
+                      "const": false
+                    },
+                    "move_home": {
+                      "const": false
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "else": {
+                  "required": [
+                    "group"
+                  ],
+                  "properties": {
+                    "remove_home": {
+                      "const": false
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "exclusive_groups"
+                  ],
+                  "properties": {
+                    "exclusive_groups": {
+                      "const": true
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "then": {
+                  "required": [
+                    "groups"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "move_home"
+                  ],
+                  "properties": {
+                    "move_home": {
+                      "const": true
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "then": {
+                  "required": [
+                    "home"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            ]
+          }
         }
       }
     },
