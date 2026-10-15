@@ -113,6 +113,7 @@ dot_dev_static_test() {
   local hm_playbook=.config/agent-rules/playbooks.d/hive-memory/hygiene.md
   local checkrun_playbook=.config/agent-rules/playbooks.d/checkrun/schema-associations.md
   local git_tools_playbook=.config/agent-rules/playbooks.d/git-tools/cleanup.md
+  local pr_watch_playbook=.config/agent-rules/playbooks.d/git-tools/pr-watch.md
   check_contains 'Hive Memory rule declares its ID' "$hm_rule" \
     '<!-- agent-rule-id: dev-hive-memory-policy -->'
   check_contains 'Hive Memory rule uses the hm command' "$hm_rule" \
@@ -161,6 +162,16 @@ dot_dev_static_test() {
     "$git_tools_playbook" "\`core.worktree\`, such as the base dotfiles checkout of \`\$HOME\`"
   check_contains 'git-tools cleanup reports kept worktrees instead of forcing' \
     "$git_tools_playbook" 'instead of forcing'
+  check_contains 'git-tools pr-watch playbook declares its ID' "$pr_watch_playbook" \
+    '<!-- agent-rule-id: dev-git-tools-pr-watch -->'
+  check_contains 'git-tools pr-watch playbook has a routed trigger' "$pr_watch_playbook" \
+    "<!-- agent-rule-trigger: Monitoring a GitHub pull request's checks to green -->"
+  check_contains 'git-tools pr-watch runs the waiting watcher' "$pr_watch_playbook" \
+    "\`git pr-watch --wait <pr>...\`"
+  check_contains 'git-tools pr-watch reports stalls instead of restarting' \
+    "$pr_watch_playbook" 'report that instead of restarting the watch'
+  check_contains 'git-tools pr-watch defers to a host network wrapper' \
+    "$pr_watch_playbook" 'reachable only through a host wrapper, follow the on-demand'
 
   shell_fixture=$(_tmpdir)
   shell_bin=$shell_fixture/.local/bin
