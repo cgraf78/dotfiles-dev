@@ -500,6 +500,17 @@
               ],
               "description": "Toggle diff viewer split or unified view"
             },
+            "diff.toggle_fullscreen": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Toggle diff viewer full screen"
+            },
             "diff.mark_reviewed": {
               "anyOf": [
                 {
