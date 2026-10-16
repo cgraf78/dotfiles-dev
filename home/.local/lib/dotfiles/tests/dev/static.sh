@@ -227,7 +227,7 @@ SH
 
   # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
   env_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
-    bash -c '. "$1"; . "$2"; printf "gh=%s\ngithub=%s\ncodex=%s\nsley=%s\noverride=%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$(command -v sley)" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"' \
+    bash -c '. "$1"; . "$2"; printf "gh=%s\ngithub=%s\ncodex=%s\nsley=%s\noverride=%s\nwatchblock=%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$(command -v sley)" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS" "$AGENTGUARD_WATCH_BLOCK"' \
     _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
   check_contains_value 'Noninteractive Bash exports the GitHub token' \
     'gh=shell-gh-token' "$env_output"
@@ -237,16 +237,18 @@ SH
     'codex=shell-gh-token' "$env_output"
   check_contains_value 'Noninteractive Bash resolves Sley from local bin' \
     "sley=$shell_bin/sley" "$env_output"
+  check_contains_value 'Dev overlay turns on PR watch blocking' \
+    'watchblock=1' "$env_output"
 
   # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
   override_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
     GH_TOKEN=explicit-gh GITHUB_PERSONAL_ACCESS_TOKEN=explicit-github \
     CODEX_GITHUB_PERSONAL_ACCESS_TOKEN=explicit-codex \
-    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=0 \
-    bash -c '. "$1"; . "$2"; printf "%s|%s|%s|%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"' \
+    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=0 AGENTGUARD_WATCH_BLOCK=0 \
+    bash -c '. "$1"; . "$2"; printf "%s|%s|%s|%s|%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS" "$AGENTGUARD_WATCH_BLOCK"' \
     _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
   check_equal 'Explicit dev environment overrides survive Bash loading' \
-    'explicit-gh|explicit-github|explicit-codex|0' "$override_output"
+    'explicit-gh|explicit-github|explicit-codex|0|0' "$override_output"
 
   # Converted exports go through base's _shell_env_set. Without it (a base
   # checkout that predates the helper) they stay plain exports; with a stub

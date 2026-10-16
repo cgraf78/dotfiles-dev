@@ -38,6 +38,12 @@ if [ -z "${AGENTGUARD_PROTECTED_BARE_GIT_DIR+x}" ] && [ -d "$HOME/.dotfiles" ]; 
   export AGENTGUARD_PROTECTED_BARE_GIT_CLEAN_MESSAGE="do not run unscoped git clean in the base dotfiles repo. Inspect a scoped path with git clean --dry-run -- <path>."
 fi
 
+# git-tools (`git pr-watch`) comes with this overlay, so agents here are held
+# to watching the pull requests they push: AgentGuard's Stop hook blocks once
+# per push or watcher exit when nothing watches one, and its pre-bash hook
+# blocks foreground or detached watcher launches. An inherited value wins
+# (0 turns both back into reminders).
+export AGENTGUARD_WATCH_BLOCK="${AGENTGUARD_WATCH_BLOCK:-1}"
 export AGENTGUARD_EDIT_CHURN_WARN="${AGENTGUARD_EDIT_CHURN_WARN:-10}"
 export AGENTGUARD_EDIT_CHURN_BLOCK="${AGENTGUARD_EDIT_CHURN_BLOCK:-20}"
 export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS="${OPENCODE_DISABLE_CLAUDE_CODE_SKILLS:-1}"
