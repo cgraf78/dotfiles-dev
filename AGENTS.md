@@ -30,8 +30,9 @@ here defines or changes profile selection.
 ## Testing
 
 - `test/run`: what CI runs. It needs network (it installs the latest Dot
-  release; `test/workflow-test` rejects a pinned `DOT_TEST_DOT_RELEASE_TAG`)
-  and `nvim` in a system root or an absolute `CAPABILITY_TEST_NVIM`.
+  release unless `DOT_TEST_DOT_RELEASE_TAG` names one; `test/workflow-test`
+  rejects a tag committed in `test/run` or a workflow) and `nvim` in a system
+  root or an absolute `CAPABILITY_TEST_NVIM`.
 - `test/run --termux`: the CI Termux smoke.
 - `test/run --provider-compatibility` (CI only): needs
   `DOT_TEST_{CHECKRUN,SLEY,GIT_TOOLS,AGENTGUARD}_ROOT` checkouts with a
