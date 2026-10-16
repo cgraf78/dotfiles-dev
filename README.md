@@ -5,11 +5,13 @@
 The development layer of my [dotfiles](https://github.com/cgraf78/dotfiles):
 global Git config, hooks, and workflow tools
 ([git-tools](https://github.com/cgraf78/git-tools),
-[sley](https://github.com/cgraf78/sley)), mise-managed language toolchains,
-VS Code settings, Neovim LSP, debug, and format modules, and AI-agent tooling
-([agentguard](https://github.com/cgraf78/agentguard),
+[sley](https://github.com/cgraf78/sley)), Rust, Go, and Python toolchains,
+mise-managed linters, formatters, and language servers, VS Code settings,
+Neovim LSP, debug, and format modules,
+[Checkrun](https://github.com/cgraf78/checkrun) format and lint dispatch, and
+AI-agent tooling ([agentguard](https://github.com/cgraf78/agentguard),
 [Hive Memory](https://github.com/cgraf78/hive-memory),
-[Checkrun](https://github.com/cgraf78/checkrun), gstack).
+[gstack](https://github.com/garrytan/gstack)).
 
 It is an [overlay](https://github.com/cgraf78/dot/blob/main/docs/overlays.md):
 a repo whose `home/` tree is linked into `$HOME` on top of the base dotfiles.

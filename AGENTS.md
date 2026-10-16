@@ -18,19 +18,20 @@ here defines or changes profile selection.
 
 ## Layout
 
-- `home/`: the payload (Git config and hooks, shdeps and mise declarations,
-  merge hooks, Neovim dev modules, doctor checks, suites under
-  `home/.local/lib/dotfiles/tests/`).
+- `home/`: the payload; suites live in `home/.local/lib/dotfiles/tests/`.
 - `dot/profile-deactivate`: Dot runs it when a machine leaves `dev`, to clean
   up generated state that removing the links does not.
 - `docs/`: component docs.
 - `test/run`: the suite runner. `test/workflow-test`: the repo contract.
 - `test/lib/`: vendored from cgraf78/actions `capability-harness/`.
+- `.selene.toml` and `vim.yml`: repo-level Lua lint config that
+  `test/workflow-test` requires.
 
 ## Testing
 
-- `test/run`: what CI runs. It needs network: it installs the latest Dot
-  release into a scratch home.
+- `test/run`: what CI runs. It needs network (it installs the latest Dot
+  release; `test/workflow-test` rejects a pinned `DOT_TEST_DOT_RELEASE_TAG`)
+  and `nvim` in a system root or an absolute `CAPABILITY_TEST_NVIM`.
 - `test/run --termux`: the CI Termux smoke.
 - `test/run --provider-compatibility` (CI only): needs
   `DOT_TEST_{CHECKRUN,SLEY,GIT_TOOLS,AGENTGUARD}_ROOT` checkouts with a
@@ -42,8 +43,9 @@ here defines or changes profile selection.
 ## Test isolation
 
 Suites run on a restricted PATH: only the `required_commands` in `test/run`,
-resolved from `/opt/homebrew/bin /usr/local/bin /usr/bin /bin`. `~/.local/bin`
-and mise shims are not visible. A new tool needs three paired edits:
+resolved from `$PREFIX/bin` (Termux), `/opt/homebrew/bin`, `/usr/local/bin`,
+`/usr/bin`, and `/bin`; `~/.local/bin` and mise shims are not visible. A new
+tool needs three paired edits:
 `required_commands`, the `profiles:` line in `.github/workflows/test.yml`, and
 the matching `grep -Fx` line in `test/workflow-test`.
 
@@ -51,7 +53,8 @@ the matching `grep -Fx` line in `test/workflow-test`.
 
 - CI's ShellCheck job fails on any shell program missing from
   `.github/shellcheck-files.txt` (untracked files included) and on stale rows;
-  `test/run` runs no ShellCheck. Rows must be `program`. Before pushing, run
+  `test/run` runs no ShellCheck. Rows must be `program`, and every file
+  under `dot/` needs one. Before pushing, run
   `SHELLCHECK_EXCLUDE_CODES=SC1091 bash <actions@lock>/.github/actions/shellcheck-inventory/run.sh "$PWD" .github/shellcheck-files.txt`.
 - Every executable suite must be listed in `.github/dot-test-suites.txt`;
   `test/run` rejects unlisted ones.
@@ -66,8 +69,7 @@ the matching `grep -Fx` line in `test/workflow-test`.
   hashes), both gitleaks commands in `README.md`, the LICENSE and
   `.gitignore` bytes, and the sha256 of `home/.config/checkrun/selene.toml`.
   Edit it together with any of those.
-- `retry-infrastructure.yml` keys on the workflow name `Tests`; don't rename
-  it.
+- `retry-infrastructure.yml` keys on the workflow name `Tests`; keep it.
 - The `installed-profiles` job calls base
   `installed-profiles.yml@main`, and the provider job checks out checkrun,
   sley, git-tools, and agentguard at `main`. A change in any of them can turn
