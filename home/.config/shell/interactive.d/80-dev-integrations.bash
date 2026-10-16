@@ -18,11 +18,15 @@ _dot_direnv_after=$(declare -f _direnv_hook 2>/dev/null) || true
 if [[ -n $_dot_direnv_after && $_dot_direnv_after != "$_dot_direnv_before" &&
   $_dot_direnv_after == *$'\n'* ]]; then
   eval "_dot_direnv_hook_orig() ${_dot_direnv_after#*$'\n'}"
+  # The hook runs first in PROMPT_COMMAND and hands the command's exit status
+  # through to the prompt code after it. The gate test above replaces `$?`,
+  # so set it back before the original hook reads it as its previous status.
+  _dot_direnv_status() { return "$1"; }
   _direnv_hook() {
     local _st=$?
     if [[ -n "${DIRENV_DIFF:-}" ]] || _dot_upward_envrc; then
+      _dot_direnv_status "$_st"
       _dot_direnv_hook_orig "$@"
-      _st=$?
     fi
     return "$_st"
   }
