@@ -894,7 +894,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Share current session"
+              "description": "Deprecated: session sharing was removed"
             },
             "session.unshare": {
               "anyOf": [
@@ -905,7 +905,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Unshare current session"
+              "description": "Deprecated: session sharing was removed"
             },
             "session.interrupt": {
               "anyOf": [
@@ -2991,6 +2991,17 @@
                 }
               ],
               "description": "Show only the selected file patch"
+            },
+            "fullscreen": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Open the diff side panel full screen; remembers the last full screen toggle"
             },
             "view": {
               "anyOf": [
