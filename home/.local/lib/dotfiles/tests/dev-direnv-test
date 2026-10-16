@@ -146,6 +146,35 @@ status_after_true=$(
 )
 _assert_eq 'gate: skipped hook preserves a failing status' '1' "$status_after_false"
 _assert_eq 'gate: skipped hook preserves a passing status' '0' "$status_after_true"
+# PROMPT_COMMAND code after the hook (the prompt's `[N]`, the terminal
+# restore) reads the status it returns, so a hook that runs must return the
+# command's status, and the original hook, which returns the status it saw on
+# entry, must see the command's status rather than the gate test's.
+status_through_export=$(
+  set +e
+  cd "$work/withrc/sub/deep"
+  (exit 3)
+  _direnv_hook
+  echo $?
+)
+status_through_unload=$(
+  set +e
+  cd "$work/empty/a/b"
+  (exit 130)
+  DIRENV_DIFF=stale _direnv_hook
+  echo $?
+)
+status_into_orig=$(
+  set +e
+  cd "$work/withrc/sub/deep"
+  # shellcheck disable=SC2317,SC2329 # invoked through the gate.
+  _dot_direnv_hook_orig() { echo "orig-saw=$?"; }
+  (exit 255)
+  _direnv_hook || :
+)
+_assert_eq 'gate: a hook that runs passes on a failing status' '3' "$status_through_export"
+_assert_eq 'gate: an unloading hook passes on a signal status' '130' "$status_through_unload"
+_assert_eq 'gate: the original hook sees the command status' 'orig-saw=255' "$status_into_orig"
 # Re-sourcing reinstalls over the raw hook exactly once (no stacked exports).
 # shellcheck disable=SC1091 # file under test, resolved under test HOME.
 . "$HOME/.config/shell/interactive.d/80-dev-integrations.bash"
