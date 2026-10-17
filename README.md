@@ -1,6 +1,7 @@
 # dotfiles-dev
 
-[![Tests](https://github.com/cgraf78/dotfiles-dev/actions/workflows/test.yml/badge.svg)](https://github.com/cgraf78/dotfiles-dev/actions/workflows/test.yml)
+[![Tests](https://github.com/cgraf78/dotfiles-dev/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/cgraf78/dotfiles-dev/actions/workflows/test.yml?query=branch%3Amain)
+[![License](https://img.shields.io/badge/license-MIT-67ac09)](LICENSE)
 
 The development layer of my [dotfiles](https://github.com/cgraf78/dotfiles):
 global Git config, hooks, and workflow tools
