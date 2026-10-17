@@ -14,7 +14,15 @@ _shell_env_set LG_CONFIG_FILE "$HOME/.config/lazygit/config.yml"
 _shell_env_set GITHOOK_PRECOMMIT_STRICT_LINT 1
 
 if [ -f "$HOME/.config/gh/github-pat" ]; then
-  chmod 600 "$HOME/.config/gh/github-pat" 2>/dev/null || true
+  # Keep a hand-written token owner-only, but repair the mode only in
+  # interactive shells. env.d also loads in every non-interactive bash
+  # (BASH_ENV) and zsh (~/.zshenv), where chmod would fork on each agent tool
+  # call and script, and recurse without end under a test that shadows chmod
+  # with a bash script; bash has no builtin to check the mode first. The gh
+  # merge hook also repairs it on `dot update`.
+  case $- in
+    *i*) chmod 600 "$HOME/.config/gh/github-pat" 2>/dev/null || true ;;
+  esac
   read -r _DOT_GITHUB_PAT <"$HOME/.config/gh/github-pat" || true
   if [ -n "${_DOT_GITHUB_PAT:-}" ]; then
     export GH_TOKEN="${GH_TOKEN:-$_DOT_GITHUB_PAT}"
