@@ -193,8 +193,6 @@ SH
 exit 0
 SH
   chmod +x "$shell_bin/git" "$shell_bin/lazygit" "$shell_bin/sley"
-  printf '%s\n' shell-gh-token >"$shell_fixture/.config/gh/github-pat"
-  chmod 600 "$shell_fixture/.config/gh/github-pat"
 
   lazygit_log=$(_tmpdir)/lazygit.log
   HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
@@ -227,9 +225,10 @@ SH
 
   # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
   env_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+    GH_TOKEN=shell-gh-token \
     bash -c '. "$1"; . "$2"; printf "gh=%s\ngithub=%s\ncodex=%s\nsley=%s\noverride=%s\nwatchblock=%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$(command -v sley)" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS" "$AGENTGUARD_WATCH_BLOCK"' \
     _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
-  check_contains_value 'Noninteractive Bash exports the GitHub token' \
+  check_contains_value 'Noninteractive Bash preserves the base GitHub token' \
     'gh=shell-gh-token' "$env_output"
   check_contains_value 'Noninteractive Bash propagates the GitHub token' \
     'github=shell-gh-token' "$env_output"
@@ -283,68 +282,45 @@ SH
   if command -v zsh >/dev/null 2>&1; then
     # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
     zsh_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      GH_TOKEN=shell-gh-token \
       zsh -c '. "$1"; . "$2"; printf "gh=%s\nsley=%s\n" "$GH_TOKEN" "$(command -v sley)"' \
       _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
-    check_contains_value 'Noninteractive Zsh exports the GitHub token' \
+    check_contains_value 'Noninteractive Zsh preserves the base GitHub token' \
       'gh=shell-gh-token' "$zsh_output"
     check_contains_value 'Noninteractive Zsh resolves Sley from local bin' \
       "sley=$shell_bin/sley" "$zsh_output"
   fi
 
-  # env.d loads in every non-interactive shell, so the token mode repair must
-  # not fork there; interactive shells still repair a loose mode. A /bin/sh
-  # shim on PATH logs each chmod and delegates to the real one.
-  chmod_bin=$(_tmpdir)
-  chmod_log=$chmod_bin/chmod.log
-  chmod_real=$(command -v chmod)
-  pat_file=$shell_fixture/.config/gh/github-pat
-  cat >"$chmod_bin/chmod" <<SH
-#!/bin/sh
-printf '%s\n' "\$*" >>"$chmod_log"
-exec "$chmod_real" "\$@"
-SH
-  chmod +x "$chmod_bin/chmod"
-  for pat_sh in bash zsh; do
-    command -v "$pat_sh" >/dev/null 2>&1 || continue
-    chmod 644 "$pat_file"
-    rm -f "$chmod_log"
-    # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
-    pat_output=$(env -i HOME="$shell_fixture" PATH="$chmod_bin:$shell_bin:/usr/bin:/bin" \
-      "$pat_sh" -c '. "$1"; . "$2"; printf "%s\n" "$GH_TOKEN"' \
-      _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
-    check_equal "Noninteractive $pat_sh still reads the GitHub token" \
-      shell-gh-token "$pat_output"
-    if [[ ! -e $chmod_log ]]; then
-      printf 'PASS: Noninteractive %s loads the token without chmod\n' "$pat_sh"
-      pass=$((pass + 1))
-    else
-      printf 'FAIL: Noninteractive %s loads the token without chmod (ran: %s)\n' \
-        "$pat_sh" "$(<"$chmod_log")" >&2
-      fail=$((fail + 1))
-    fi
-
-    # Skip rc files: the fixture HOME has none, and zsh's newuser wizard
-    # would prompt for one.
-    rm -f "$chmod_log"
-    # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
-    if [[ $pat_sh == zsh ]]; then
-      pat_output=$(env -i HOME="$shell_fixture" PATH="$chmod_bin:$shell_bin:/usr/bin:/bin" \
-        zsh -f -i -c '. "$1"; . "$2"; printf "%s\n" "$GH_TOKEN"' \
-        _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh" \
-        2>/dev/null </dev/null)
-    else
-      pat_output=$(env -i HOME="$shell_fixture" PATH="$chmod_bin:$shell_bin:/usr/bin:/bin" \
-        bash --norc --noprofile -i -c '. "$1"; . "$2"; printf "%s\n" "$GH_TOKEN"' \
-        _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh" \
-        2>/dev/null </dev/null)
-    fi
-    check_equal "Interactive $pat_sh reads the GitHub token" shell-gh-token "$pat_output"
-    pat_mode=$(stat -c '%a' "$pat_file" 2>/dev/null || stat -f '%Lp' "$pat_file" 2>/dev/null || true)
-    check_equal "Interactive $pat_sh repairs a loose GitHub token mode" 600 "$pat_mode"
-    check_equal "Interactive $pat_sh runs chmod once" "600 $pat_file" \
-      "$(cat "$chmod_log" 2>/dev/null)"
+  # Aliases follow base's token without requiring a dev-owned credential file.
+  for token_sh in bash zsh; do
+    command -v "$token_sh" >/dev/null 2>&1 || continue
+    for token_helper in '' "$fill_stub"; do
+      # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
+      token_probe='. "$1"; printf "%s|%s|%s\n" "${GH_TOKEN-unset}" "${GITHUB_PERSONAL_ACCESS_TOKEN-unset}" "${CODEX_GITHUB_PERSONAL_ACCESS_TOKEN-unset}"'
+      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+        GH_TOKEN=base-token "$token_sh" -c "$token_helper$token_probe" \
+        _ "$root/.config/shell/env.d/80-dev-environment.sh")
+      check_equal "Dev aliases derive from base GH_TOKEN ($token_sh, helper=${token_helper:+yes})" \
+        'base-token|base-token|base-token' "$token_output"
+      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+        GH_TOKEN=base-token GITHUB_PERSONAL_ACCESS_TOKEN=github-override \
+        CODEX_GITHUB_PERSONAL_ACCESS_TOKEN=codex-override \
+        "$token_sh" -c "$token_helper$token_probe" \
+        _ "$root/.config/shell/env.d/80-dev-environment.sh")
+      check_equal "Dev token alias overrides survive ($token_sh, helper=${token_helper:+yes})" \
+        'base-token|github-override|codex-override' "$token_output"
+      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+        "$token_sh" -c "$token_helper$token_probe" \
+        _ "$root/.config/shell/env.d/80-dev-environment.sh")
+      check_equal "Absent GH_TOKEN creates no dev aliases ($token_sh, helper=${token_helper:+yes})" \
+        'unset|unset|unset' "$token_output"
+      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+        GH_TOKEN= "$token_sh" -c "$token_helper$token_probe" \
+        _ "$root/.config/shell/env.d/80-dev-environment.sh")
+      check_equal "Empty GH_TOKEN creates no dev aliases ($token_sh, helper=${token_helper:+yes})" \
+        '|unset|unset' "$token_output"
+    done
   done
-  chmod 600 "$pat_file"
   check_contains 'Deployed Selene policy preserves unused-variable warnings' .config/checkrun/selene.toml 'unused_variable = "warn"'
   check_not_contains 'Deployed Selene policy is not weakened for repository fixtures' .config/checkrun/selene.toml 'unused_variable = "allow"'
   if [[ $(<"$owner_root/.selene.toml") == *'unused_variable = "allow"'* &&

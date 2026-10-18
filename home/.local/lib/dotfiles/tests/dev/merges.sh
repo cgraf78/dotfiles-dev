@@ -622,13 +622,6 @@ YAML
     cat >"$gh_mock_bin/gh" <<'GH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$HOME/.gh-calls.log"
-if [[ "${GH_MOCK_FAIL:-0}" == "1" ]]; then
-  exit 1
-fi
-if [[ "$1" == "auth" && "$2" == "token" ]]; then
-  printf '%s\n' "fallback-token"
-  exit 0
-fi
 exit 1
 GH
     chmod +x "$gh_mock_bin/gh"
@@ -647,139 +640,11 @@ GH
       '"co": "pr checkout"' "$gh_output"
     _assert_contains "gh merge: later config layer applied" \
       '"view": "pr view"' "$gh_output"
-    _assert_file_content "gh merge: seeds github-pat from hosts.yml" \
-      "seeded-token" "$gh_home/.config/gh/github-pat"
-    _gh_pat_mode=$(stat -c '%a' "$gh_home/.config/gh/github-pat" 2>/dev/null || stat -f '%Lp' "$gh_home/.config/gh/github-pat" 2>/dev/null || true)
-    _assert_eq "gh merge: github-pat is owner-only" "600" "$_gh_pat_mode"
-    if [[ ! -e "$gh_home/.gh-calls.log" ]]; then
-      _pass "gh merge: hosts.yml token seed skips gh"
-    else
-      _fail "gh merge: hosts.yml token seed skips gh"
-    fi
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    cat >"$gh_home/.config/gh/hosts.yml" <<'YAML'
-github.com:
-  user: fixture-user
-  users:
-    fixture-user:
-      oauth_token: nested-token
-YAML
-    _run_gh_merge_nested_hosts_for_test() {
-      unset -f merge 2>/dev/null
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/gh.sh"
-      merge
-    }
-    HOME="$gh_home" PATH="$gh_mock_bin:$PATH" _run_gh_merge_nested_hosts_for_test
-    unset -f _run_gh_merge_nested_hosts_for_test merge 2>/dev/null
-    _assert_file_content "gh merge: seeds github-pat from nested hosts.yml users" \
-      "nested-token" "$gh_home/.config/gh/github-pat"
-    if [[ ! -e "$gh_home/.gh-calls.log" ]]; then
-      _pass "gh merge: nested hosts.yml token seed skips gh"
-    else
-      _fail "gh merge: nested hosts.yml token seed skips gh"
-    fi
-
-    printf '%s\n' "existing-token" >"$gh_home/.config/gh/github-pat"
-    rm -f "$gh_home/.gh-calls.log"
-    _run_gh_merge_existing_for_test() {
-      unset -f merge 2>/dev/null
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/gh.sh"
-      merge
-    }
-    HOME="$gh_home" PATH="$gh_mock_bin:$PATH" _run_gh_merge_existing_for_test
-    unset -f _run_gh_merge_existing_for_test merge 2>/dev/null
-    _assert_file_content "gh merge: preserves existing github-pat" \
-      "existing-token" "$gh_home/.config/gh/github-pat"
-    if [[ ! -e "$gh_home/.gh-calls.log" ]]; then
-      _pass "gh merge: existing github-pat skips gh"
-    else
-      _fail "gh merge: existing github-pat skips gh"
-    fi
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    rm -f "$gh_home/.config/gh/hosts.yml"
-    _run_gh_merge_fallback_for_test() {
-      unset -f merge 2>/dev/null
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/gh.sh"
-      merge
-    }
-
-    gh_missing_double_output=$(HOME="$gh_home" PATH="$gh_mock_bin:$PATH" \
-      _run_gh_merge_fallback_for_test 2>&1)
     if [[ ! -e "$gh_home/.gh-calls.log" && ! -e "$gh_home/.config/gh/github-pat" ]]; then
-      _pass "gh merge: test mode requires an explicit credential double"
+      _pass "gh preferences merge leaves credential loading to base"
     else
-      _fail "gh merge: test mode requires an explicit credential double"
+      _fail "gh preferences merge leaves credential loading to base"
     fi
-    _assert_contains "gh merge: missing credential double is reported" \
-      "test gh" "$gh_missing_double_output"
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    gh_non_account_output=$(DOT_TEST=0 HOME="$gh_home" \
-      PATH="$gh_mock_bin:$PATH" _run_gh_merge_fallback_for_test 2>&1)
-    if [[ ! -e "$gh_home/.gh-calls.log" && ! -e "$gh_home/.config/gh/github-pat" ]]; then
-      _pass "gh merge: non-account HOME leaves credentials unread"
-    else
-      _fail "gh merge: non-account HOME leaves credentials unread"
-    fi
-    _assert_contains "gh merge: non-account HOME is reported" \
-      "account home" "$gh_non_account_output"
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    HOME="$gh_home" PATH="$gh_mock_bin:$PATH" DOT_TEST_GH="$gh_mock_bin/gh" \
-      _run_gh_merge_fallback_for_test
-    unset -f _run_gh_merge_fallback_for_test merge 2>/dev/null
-    _assert_file_content "gh merge: falls back to gh auth token when hosts.yml has no token" \
-      "fallback-token" "$gh_home/.config/gh/github-pat"
-    _assert_contains "gh merge: fallback calls gh auth token" \
-      "auth token" "$(cat "$gh_home/.gh-calls.log")"
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    _run_gh_merge_failed_fallback_for_test() {
-      unset -f merge 2>/dev/null
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/gh.sh"
-      merge
-    }
-    DOT_QUIET=1 GH_MOCK_FAIL=1 HOME="$gh_home" PATH="$gh_mock_bin:$PATH" \
-      DOT_TEST_GH="$gh_mock_bin/gh" _run_gh_merge_failed_fallback_for_test
-    DOT_QUIET=1 GH_MOCK_FAIL=1 HOME="$gh_home" PATH="$gh_mock_bin:$PATH" \
-      DOT_TEST_GH="$gh_mock_bin/gh" _run_gh_merge_failed_fallback_for_test
-    unset -f _run_gh_merge_failed_fallback_for_test merge 2>/dev/null
-    _gh_fallback_call_count=$(wc -l <"$gh_home/.gh-calls.log" | tr -d ' ')
-    _assert_eq "gh merge: failed keyring fallback is throttled" "1" "$_gh_fallback_call_count"
-    if [[ ! -e "$gh_home/.config/gh/github-pat" ]]; then
-      _pass "gh merge: failed keyring fallback does not create github-pat"
-    else
-      _fail "gh merge: failed keyring fallback does not create github-pat"
-    fi
-
-    rm -f "$gh_home/.config/gh/github-pat" "$gh_home/.gh-calls.log"
-    cat >"$gh_home/.config/gh/hosts.yml" <<'YAML'
-github.com:
-  git_protocol: https
-  users:
-    fixture-user:
-      git_protocol: https
-  user: fixture-user
-YAML
-    _run_gh_merge_manual_retry_for_test() {
-      unset -f merge 2>/dev/null
-      # shellcheck source=/dev/null
-      . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/gh.sh"
-      merge
-    }
-    HOME="$gh_home" PATH="$gh_mock_bin:$PATH" DOT_TEST_GH="$gh_mock_bin/gh" \
-      _run_gh_merge_manual_retry_for_test
-    unset -f _run_gh_merge_manual_retry_for_test merge 2>/dev/null
-    _assert_file_content "gh merge: manual update retries keyring fallback after prior quiet failure" \
-      "fallback-token" "$gh_home/.config/gh/github-pat"
-    _assert_contains "gh merge: manual retry calls gh auth token" \
-      "auth token" "$(cat "$gh_home/.gh-calls.log")"
   else
     echo "  SKIP: GitHub CLI merge hook assertions (mikefarah/yq unavailable)"
   fi
