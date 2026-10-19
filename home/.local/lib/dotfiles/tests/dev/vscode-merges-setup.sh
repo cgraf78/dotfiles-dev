@@ -3,6 +3,17 @@
 # with Sley and Termnav payloads, tracked merge inputs, checkrun/shdeps/mv
 # shims, and the full single-variant Linux merge run against it.
 
+# Prepare a dev-vscode suite: the shared isolated merge home, with the
+# system Git ahead of any Git launcher script on the host PATH. A full merge
+# runs about fifteen Git commands (blob ids for its signature and receipts),
+# and a launcher adds a shell start to each; CI runs the system Git directly.
+# Select Git first: the helper skips the source home's own launcher, and
+# _dev_merges_setup repoints DOT_TEST_SOURCE_HOME at this overlay.
+_dev_vscode_merges_setup() {
+  _test_prefer_system_git || return
+  _dev_merges_setup
+}
+
 # Seed keybinding files with the user-owned, legacy, and stale entries the
 # merge must preserve, migrate, or retire. The fixture and several suite cases
 # use these, so they live beside the fixture rather than inside one suite.

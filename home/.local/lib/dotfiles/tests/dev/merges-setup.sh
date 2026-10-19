@@ -6,8 +6,9 @@
 . "${BASH_SOURCE[0]%/*}/helpers.sh"
 
 # Build the isolated home shared by the development merge-hook suites and
-# load the public Dot hook API into it. The VS Code block runs as its own
-# suite (vscode-merges.sh) so `dot test` can overlap it with the rest.
+# load the public Dot hook API into it. The VS Code blocks run as their own
+# suites (vscode-merges*.sh, vscode-signature-merges.sh) so `dot test` can
+# overlap them with the rest.
 _dev_merges_setup() {
   set +e +u
   local owner_root

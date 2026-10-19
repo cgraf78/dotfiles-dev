@@ -16,7 +16,7 @@
 . "${BASH_SOURCE[0]%/*}/vscode-merges-setup.sh"
 
 dot_dev_vscode_signature_merges_test() {
-  _dev_merges_setup || return
+  _dev_vscode_merges_setup || return
   echo "=== VS Code merge signature ==="
 
   if command -v jq >/dev/null 2>&1; then

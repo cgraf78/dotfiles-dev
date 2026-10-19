@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The VS Code merge-hook units, split from dev-vscode-merges-test. Start
+# them in the `dot test` runner's first worker wave so they overlap that
+# suite's serial chain.
+# dot-suite-priority: early
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/vscode-merges-units.sh"
+dot_dev_vscode_merges_units_test

@@ -350,6 +350,9 @@ if [[ $mode == --provider-compatibility ]]; then
     dev-merges
     dev-shdeps-hooks
     dev-vscode-merges
+    dev-vscode-merges-providers
+    dev-vscode-merges-rerun
+    dev-vscode-merges-units
     dev-vscode-signature-merges
     git-shell-workflows
     nvim-dev

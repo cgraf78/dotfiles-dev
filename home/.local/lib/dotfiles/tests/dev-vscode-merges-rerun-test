@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The VS Code repeat and failure merges, split from dev-vscode-merges-test.
+# Start them in the `dot test` runner's first worker wave so they overlap
+# that suite's serial chain.
+# dot-suite-priority: early
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/vscode-merges-rerun.sh"
+dot_dev_vscode_merges_rerun_test
