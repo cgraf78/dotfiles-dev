@@ -1172,6 +1172,8 @@ JSON
       DESTINATION_FAILURE_DIR="$vscode_destination_failure_dir" bash -c '
       set -uo pipefail
       . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      dot_hook_platform_match() { return 1; }
+      uname() { printf "Linux\n"; }
       _warn() { printf "%s\n" "$*" >&2; }
       # shellcheck source=/dev/null
       . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
@@ -1200,6 +1202,8 @@ JSON
       DESTINATION_FAILURE_DIR="$vscode_destination_failure_dir" bash -c '
       set -euo pipefail
       . "$REAL_HOME/.local/lib/dotfiles/tests/dev/load-merge-api.sh"
+      dot_hook_platform_match() { return 1; }
+      uname() { printf "Linux\n"; }
       _warn() { printf "%s\n" "$*" >&2; }
       # shellcheck source=/dev/null
       . "$REAL_HOME/.local/lib/dotfiles/merge-hooks.d/vscode.sh"
