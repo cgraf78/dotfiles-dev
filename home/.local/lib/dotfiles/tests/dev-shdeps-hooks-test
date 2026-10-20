@@ -418,7 +418,7 @@ EOF
 chmod +x "$_cmake_language_server_bin/uv"
 
 _cmake_language_server_saved_path=$PATH
-PATH="$_cmake_language_server_bin:/usr/bin:/bin"
+PATH="$_cmake_language_server_bin:$DOT_TEST_SYSTEM_PATH"
 export CMAKE_LANGUAGE_SERVER_TEST_CALLS="$_cmake_language_server_calls"
 
 _cmake_language_server_active_lifecycle=
@@ -463,7 +463,7 @@ EOF
 chmod +x "$_gstack_bin/gstack-register"
 export GSTACK_CALLS=$_gstack_calls
 _saved_path=$PATH
-PATH="$_gstack_bin:/usr/bin:/bin"
+PATH="$_gstack_bin:$DOT_TEST_SYSTEM_PATH"
 # shellcheck source=/dev/null
 . "$_gstack_hook"
 post
@@ -848,7 +848,7 @@ _home=$(_tmpdir)
 _bin=$(_tmpdir)
 _pkg_log=$(_tmpdir)/pkg.log
 _php_saved_path=$PATH
-PATH=/usr/bin:/bin
+PATH=$DOT_TEST_SYSTEM_PATH
 
 # shellcheck disable=SC2329  # hook install calls this by name.
 shdeps_pkg_install_for_mgr() {
@@ -933,7 +933,7 @@ printf '%s\n' "mock phar" >"$out"
 EOF
 chmod +x "$_curl_bin/curl"
 
-PATH="$_curl_bin:/usr/bin:/bin"
+PATH="$_curl_bin:$DOT_TEST_SYSTEM_PATH"
 if DOT_TEST_CURL_FAIL_PHASE=asset install 2>/dev/null; then
   _fail "php-cs-fixer: failed asset download fails the install"
 else
@@ -983,7 +983,7 @@ _home=$(_tmpdir)
 _bin=$(_tmpdir)
 _pkg_log=$(_tmpdir)/pkg.log
 _google_saved_path=$PATH
-PATH=/usr/bin:/bin
+PATH=$DOT_TEST_SYSTEM_PATH
 
 # shellcheck disable=SC2329  # hook install calls this by name.
 shdeps_pkg_install_for_mgr() {
@@ -1071,7 +1071,7 @@ esac
 EOF
 chmod +x "$_curl_bin/curl"
 
-PATH="$_curl_bin:/usr/bin:/bin"
+PATH="$_curl_bin:$DOT_TEST_SYSTEM_PATH"
 if DOT_TEST_CURL_FAIL_PHASE=metadata install 2>/dev/null; then
   _fail "google-java-format: failed metadata download fails the install"
 else

@@ -399,7 +399,7 @@ _assert_eq 'Sley commands abort from nofile buffers instead of inheriting cwd' \
 echo '=== Minimal child schema resolution ==='
 minimal_path=${PATH%%:*}
 output=$(DOT_TEST_CHECKRUN_ADAPTER="$checkrun_fixture/nvim.lua" \
-  DOT_TEST_MINIMAL_CHILD_PATH="$minimal_path:/usr/bin:/bin" _nvim_lua '
+  DOT_TEST_MINIMAL_CHILD_PATH="$minimal_path:$DOT_TEST_SYSTEM_PATH" _nvim_lua '
   vim.env.PATH = vim.env.DOT_TEST_MINIMAL_CHILD_PATH
   package.loaded["config.checkrun-nvim"] = nil
   package.loaded["config.schema-policy"] = nil

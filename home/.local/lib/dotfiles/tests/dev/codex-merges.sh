@@ -463,8 +463,14 @@ TOML
     saved_path=$PATH
     _codex_no_yq_bin=$(_mock_bin)
     ln -s "$(command -v python3)" "$_codex_no_yq_bin/python3"
-    PATH="$_codex_no_yq_bin:/usr/bin:/bin" _run_codex_merge 2>/dev/null
+    # The system PATH can hold mikefarah's yq (Termux's $PREFIX/bin, or a
+    # distribution package), so shadow it with one the lookup rejects.
+    printf '#!/bin/sh\necho "yq 0.0 (stub)"\n' >"$_codex_no_yq_bin/yq"
+    chmod +x "$_codex_no_yq_bin/yq"
+    PATH="$_codex_no_yq_bin:$DOT_TEST_SYSTEM_PATH" _run_codex_merge 2>/dev/null
     PATH=$saved_path
+    _assert_not_contains "codex hook: merge is skipped without mikefarah/yq" \
+      cache-source-change "$(cat "$CODEX_CONFIG")"
     _run_codex_merge 2>/dev/null
     if python3 - "$CODEX_CONFIG" <<'PY'
 import sys

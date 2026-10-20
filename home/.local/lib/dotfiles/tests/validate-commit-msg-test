@@ -1355,7 +1355,7 @@ _message_sley_root=$(_mock_sley_message_root)
 # Bash 3.2 and is below Sley's documented Bash 4 minimum; replacing PATH with
 # only /usr/bin:/bin would test an unsupported runtime rather than provider
 # independence.
-_provider_test_path=${BASH%/*}:/usr/bin:/bin
+_provider_test_path=${BASH%/*}:$DOT_TEST_SYSTEM_PATH
 
 repo=$(_new_repo)
 echo "x = 1" >"$repo/test.py"

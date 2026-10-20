@@ -52,7 +52,7 @@ _probe_wrapper() {
     bash) rc_opts=(--norc --noprofile) ;;
   esac
   # shellcheck disable=SC2016 # The inner shell expands its own positional args.
-  env -i HOME="$HOME" PATH="$mock_bin:/usr/bin:/bin" \
+  "${DOT_TEST_ENV_CLEAN[@]}" HOME="$HOME" PATH="$mock_bin:$DOT_TEST_SYSTEM_PATH" \
     "$shell_bin" ${rc_opts[@]+"${rc_opts[@]}"} -c \
     'source "$1" >/dev/null 2>&1; shift; "$@"' _ "$aliases_file" "$@"
 }
