@@ -667,7 +667,7 @@ if [[ -z $real_api || ! -r $real_api ]]; then
 else
   _detect() {
     # shellcheck disable=SC2016 # expanded by the child shell.
-    env -i PATH="$PATH" HOME="$HOME" AGENTGUARD_PROCESS_DETECT=0 "$@" \
+    "${DOT_TEST_ENV_CLEAN[@]}" PATH="$PATH" HOME="$HOME" AGENTGUARD_PROCESS_DETECT=0 "$@" \
       bash -c '. "$1"; agentguard_is_session' _ "$real_api"
   }
   _detect CLAUDE_CODE_SESSION_ID=s

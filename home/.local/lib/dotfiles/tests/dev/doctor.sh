@@ -475,19 +475,19 @@ PLUGIN
 
   printf '#!/usr/bin/env bash\nexit 0\n' >"$doctor_bin/grok"
   chmod +x "$doctor_bin/grok"
-  grok_compat_path="$doctor_bin:/usr/bin:/bin"
+  grok_compat_path="$doctor_bin:$DOT_TEST_SYSTEM_PATH"
   # The gate is `grok` on PATH, as for the registration table and the merge
   # hooks; the retired DOT_GROK_COMMAND override no longer moves it.
   mkdir -p "$doctor_home/.grok/hooks" "$doctor_home/.grok/rules"
   printf '{"hooks":{}}\n' >"$doctor_home/.grok/hooks/agentguard.json"
   printf '# grok rules\n' >"$doctor_home/.grok/rules/agent-rules.md"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:/usr/bin:/bin" \
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$DOT_TEST_SYSTEM_PATH" \
     DOT_GROK_COMMAND=missing-grok-binary \
     _doctor_records _dr_check_grok_compat)
   _assert_contains 'Doctor gates Grok Claude-compat on grok, not DOT_GROK_COMMAND' \
     'Grok Claude-compat cells missing' "$result"
   mv "$doctor_bin/grok" "$doctor_bin/grok-renamed"
-  result=$(HOME="$doctor_home" PATH="$doctor_bin:/usr/bin:/bin" \
+  result=$(HOME="$doctor_home" PATH="$doctor_bin:$DOT_TEST_SYSTEM_PATH" \
     DOT_GROK_COMMAND=grok-renamed \
     _doctor_records _dr_check_grok_compat)
   mv "$doctor_bin/grok-renamed" "$doctor_bin/grok"
@@ -938,7 +938,7 @@ LUA
       fi
       mkdir -p "$hooks_home/selected-git"
       ln -sf "$git_path" "$hooks_home/selected-git/git"
-      PATH="$hooks_home/selected-git:/usr/bin:/bin" \
+      PATH="$hooks_home/selected-git:$DOT_TEST_SYSTEM_PATH" \
         HOME="$hooks_home" XDG_CONFIG_HOME="$hooks_home/.config" \
         GIT_CONFIG_GLOBAL="$hooks_home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 \
         DOTFILES="${DOCTOR_DOTFILES-$hooks_home/.dotfiles}" \
@@ -1131,7 +1131,7 @@ SH
   result=$(DOCTOR_HM_JSON=$hm_healthy _hm_records)
   _assert_not_contains 'Hive Memory does not flag a store that answers at once' \
     'store slow' "$result"
-  result=$(HOME="$hm_home" PATH="$doctor_bin:/usr/bin:/bin" \
+  result=$(HOME="$hm_home" PATH="$doctor_bin:$DOT_TEST_SYSTEM_PATH" \
     _doctor_records _hm_probe "$(_tmpdir)")
   _assert_contains 'Hive Memory skips when hm is not installed' \
     $'skip\tHive Memory\thm not installed' "$result"

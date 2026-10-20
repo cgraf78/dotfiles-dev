@@ -48,7 +48,7 @@ _probe_wrapper() {
   [[ $shell == zsh ]] && rc_opts=(-f)
   : >"$wrapper_log"
   # shellcheck disable=SC2016 # The inner shell expands its own arguments.
-  env -i HOME="$home" PATH="$wrapper_bin:/usr/bin:/bin" \
+  "${DOT_TEST_ENV_CLEAN[@]}" HOME="$home" PATH="$wrapper_bin:$DOT_TEST_SYSTEM_PATH" \
     WRAPPER_LOG="$wrapper_log" WRAPPER_STATUS="$status" \
     "$shell_bin" "${rc_opts[@]}" -c \
     'source "$1"; shift; "$@" >>"$WRAPPER_LOG"; printf "status=%s\n" "$?" >>"$WRAPPER_LOG"' \
@@ -63,7 +63,7 @@ _probe_wrapper_kind() {
   local -a rc_opts=(--norc --noprofile)
   [[ $shell == zsh ]] && rc_opts=(-f)
   # shellcheck disable=SC2016 # The inner shell expands its own arguments.
-  env -i HOME="$home" PATH="$wrapper_bin:/usr/bin:/bin" \
+  "${DOT_TEST_ENV_CLEAN[@]}" HOME="$home" PATH="$wrapper_bin:$DOT_TEST_SYSTEM_PATH" \
     "$shell_bin" "${rc_opts[@]}" -c \
     'source "$1"; if typeset -f grok >/dev/null 2>&1; then echo function; else echo not-a-function; fi' \
     _ "$shell_dir/interactive.d/72-dev-grok.sh"

@@ -195,13 +195,13 @@ SH
   chmod +x "$shell_bin/git" "$shell_bin/lazygit" "$shell_bin/sley"
 
   lazygit_log=$(_tmpdir)/lazygit.log
-  HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+  HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
     GIT_MOCK_ABSOLUTE_DIR="$shell_fixture/.dotfiles" LAZYGIT_LOG="$lazygit_log" \
     bash -c '. "$1"; lg log' _ "$root/.config/shell/interactive.d/70-dev-aliases.sh"
   check_equal 'Lazygit wrapper passes explicit base-dotfiles context' \
     "--git-dir=$shell_fixture/.dotfiles --work-tree=$shell_fixture log" \
     "$(<"$lazygit_log")"
-  HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+  HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
     GIT_MOCK_ABSOLUTE_DIR="$shell_fixture/git/project/.git" LAZYGIT_LOG="$lazygit_log" \
     bash -c '. "$1"; lg log' _ "$root/.config/shell/interactive.d/70-dev-aliases.sh"
   check_equal 'Lazygit wrapper leaves normal repositories unmodified' log \
@@ -224,7 +224,7 @@ SH
   check_contains_value 'Retired dll alias stays absent' 'dll=1' "$alias_probe"
 
   # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
-  env_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+  env_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
     GH_TOKEN=shell-gh-token \
     bash -c '. "$1"; . "$2"; printf "gh=%s\ngithub=%s\ncodex=%s\nsley=%s\noverride=%s\nwatchblock=%s\n" "$GH_TOKEN" "$GITHUB_PERSONAL_ACCESS_TOKEN" "$CODEX_GITHUB_PERSONAL_ACCESS_TOKEN" "$(command -v sley)" "$OPENCODE_DISABLE_CLAUDE_CODE_SKILLS" "$AGENTGUARD_WATCH_BLOCK"' \
     _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
@@ -240,7 +240,7 @@ SH
     'watchblock=1' "$env_output"
 
   # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
-  override_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+  override_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
     GH_TOKEN=explicit-gh GITHUB_PERSONAL_ACCESS_TOKEN=explicit-github \
     CODEX_GITHUB_PERSONAL_ACCESS_TOKEN=explicit-codex \
     OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=0 AGENTGUARD_WATCH_BLOCK=0 \
@@ -259,20 +259,20 @@ SH
   fill_stub='_shell_env_set() { eval "[ -n \"\${$1+x}\" ]" || export "$1=$2"; }; '
   for owned_sh in bash zsh; do
     command -v "$owned_sh" >/dev/null 2>&1 || continue
-    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+    owned_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
       GITHOOK_PRECOMMIT_STRICT_LINT=0 \
       "$owned_sh" -c "$owned_probe" \
       _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
     check_equal "Dev defaults are plain exports without the base helper ($owned_sh)" \
       "$shell_fixture/.bun|$shell_fixture/.config/lazygit/config.yml|1|claude" "$owned_output"
-    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+    owned_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
       GITHOOK_PRECOMMIT_STRICT_LINT=0 LG_CONFIG_FILE=/caller/lg.yml DS_DEV_CHATBOT=caller \
       BUN_INSTALL=/caller/bun \
       "$owned_sh" -c "$fill_stub$owned_probe" \
       _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
     check_equal "Fill-only load keeps caller dev values ($owned_sh)" \
       "/caller/bun|/caller/lg.yml|0|caller" "$owned_output"
-    owned_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+    owned_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
       "$owned_sh" -c "$fill_stub$owned_probe" \
       _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
     check_equal "Fill-only load fills missing dev values ($owned_sh)" \
@@ -281,7 +281,7 @@ SH
 
   if command -v zsh >/dev/null 2>&1; then
     # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
-    zsh_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+    zsh_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
       GH_TOKEN=shell-gh-token \
       zsh -c '. "$1"; . "$2"; printf "gh=%s\nsley=%s\n" "$GH_TOKEN" "$(command -v sley)"' \
       _ "$root/.config/shell/env.d/70-dev.sh" "$root/.config/shell/env.d/80-dev-environment.sh")
@@ -297,24 +297,24 @@ SH
     for token_helper in '' "$fill_stub"; do
       # shellcheck disable=SC2016 # Expansion belongs to the isolated child shell.
       token_probe='. "$1"; printf "%s|%s|%s\n" "${GH_TOKEN-unset}" "${GITHUB_PERSONAL_ACCESS_TOKEN-unset}" "${CODEX_GITHUB_PERSONAL_ACCESS_TOKEN-unset}"'
-      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      token_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
         GH_TOKEN=base-token "$token_sh" -c "$token_helper$token_probe" \
         _ "$root/.config/shell/env.d/80-dev-environment.sh")
       check_equal "Dev aliases derive from base GH_TOKEN ($token_sh, helper=${token_helper:+yes})" \
         'base-token|base-token|base-token' "$token_output"
-      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      token_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
         GH_TOKEN=base-token GITHUB_PERSONAL_ACCESS_TOKEN=github-override \
         CODEX_GITHUB_PERSONAL_ACCESS_TOKEN=codex-override \
         "$token_sh" -c "$token_helper$token_probe" \
         _ "$root/.config/shell/env.d/80-dev-environment.sh")
       check_equal "Dev token alias overrides survive ($token_sh, helper=${token_helper:+yes})" \
         'base-token|github-override|codex-override' "$token_output"
-      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      token_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
         "$token_sh" -c "$token_helper$token_probe" \
         _ "$root/.config/shell/env.d/80-dev-environment.sh")
       check_equal "Absent GH_TOKEN creates no dev aliases ($token_sh, helper=${token_helper:+yes})" \
         'unset|unset|unset' "$token_output"
-      token_output=$(env -i HOME="$shell_fixture" PATH="$shell_bin:/usr/bin:/bin" \
+      token_output=$("${DOT_TEST_ENV_CLEAN[@]}" HOME="$shell_fixture" PATH="$shell_bin:$DOT_TEST_SYSTEM_PATH" \
         GH_TOKEN= "$token_sh" -c "$token_helper$token_probe" \
         _ "$root/.config/shell/env.d/80-dev-environment.sh")
       check_equal "Empty GH_TOKEN creates no dev aliases ($token_sh, helper=${token_helper:+yes})" \
@@ -643,6 +643,50 @@ PY
     fail=$((fail + 1))
   fi
 
+  check_equal 'Termux portability: suites use the shared clean env and system PATH' \
+    '' "$(_dev_test_portability_findings "$owner_root")"
+
   "${DOT_TEST_REPORTER:?}" complete "$pass" "$fail"
   ((fail == 0))
+}
+
+# Termux portability for the suites themselves, as base's static suite checks
+# its own: a bare `env -i` drops the libtermux-exec LD_PRELOAD that Termux's
+# Google Play build needs for every nested exec, and a literal /usr/bin:/bin
+# fixture PATH has no userland under Termux. CI's Termux build reproduces
+# neither. helpers.sh owns DOT_TEST_ENV_CLEAN and DOT_TEST_SYSTEM_PATH; a
+# deliberate literal PATH carries the marker on the line above. Prints one
+# file:line finding per line, or nothing.
+_dev_test_portability_findings() {
+  local owner_root=$1 rel files findings=''
+  local owner=home/.local/lib/dotfiles/tests/dev/helpers.sh
+
+  # An unlistable tree (for example Git's dubious-ownership refusal in a
+  # container) must fail rather than pass having scanned nothing.
+  files=$(git -C "$owner_root" -c safe.directory="$owner_root" \
+    ls-files -- home/.local/lib/dotfiles/tests) || files=''
+  case $'\n'"$files"$'\n' in
+    *$'\n'"$owner"$'\n'*) ;;
+    *) findings='could not list the tracked suite files' ;;
+  esac
+  while IFS= read -r rel; do
+    [[ -n $rel ]] || continue
+    case $rel in *.md | *.py | *.lua | *.json) continue ;; esac
+    [[ -f $owner_root/$rel && ! -L $owner_root/$rel ]] || continue
+    # The patterns are split so this check never matches its own source.
+    findings+=$(awk -v rel="$rel" -v owner="$owner" -v env_i='env'' -i' \
+      -v sys_path='/usr/bin'':/bin' -v marker='dot-test-portability:'' literal system PATH' '
+      {
+        code = $0
+        sub(/^[ \t]+/, "", code)
+        defines = rel == owner && code ~ /^DOT_TEST_(ENV_CLEAN|SYSTEM_PATH)=/
+        if (code !~ /^#/ && !defines) {
+          if (index($0, env_i)) print "\n" rel ":" NR ": clears the environment without DOT_TEST_ENV_CLEAN"
+          if (index($0, sys_path) && index(previous, marker) == 0)
+            print "\n" rel ":" NR ": literal system PATH; use DOT_TEST_SYSTEM_PATH"
+        }
+        previous = $0
+      }' "$owner_root/$rel")
+  done <<<"$files"
+  printf '%s' "$findings"
 }

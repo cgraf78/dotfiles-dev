@@ -60,7 +60,7 @@ chmod +x "$mock_bin/gstack-register"
 saved_home=$HOME
 saved_path=$PATH
 HOME=$fixture_home
-PATH="$mock_bin:/usr/bin:/bin"
+PATH="$mock_bin:$DOT_TEST_SYSTEM_PATH"
 export HOME PATH
 export DOT_TEST_GSTACK_REGISTER_LOG=$call_log
 
@@ -102,7 +102,7 @@ unset DOT_TEST_GSTACK_REGISTER_STATUS
 # provider command. The upstream post hook remains the authoritative first
 # registration pass once shdeps installs both dependencies.
 : >"$call_log"
-PATH=/usr/bin:/bin
+PATH=$DOT_TEST_SYSTEM_PATH
 hash -r
 if merge; then
   _pass "gstack merge adapter: missing provider is a safe no-op"

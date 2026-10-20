@@ -33,9 +33,15 @@ rm -rf "$stale_tmp"
 # still pruned. Pinned to /tmp instead of $work because $TMPDIR is outside
 # /tmp on macOS, which would flip this fixture from pruned to kept.
 existing_tmp=/tmp/codex-trust-existing-$$
-rm -rf "$existing_tmp"
-mkdir -p "$existing_tmp"
-CLEANUP_DIRS+=("$existing_tmp")
+# Android has no writable /tmp, so under Termux the directory cannot exist and
+# its entry is still checked, but only as a missing path; say so.
+if _test_on_termux; then
+  echo "  SKIP: an existing directory under /tmp is pruned (no writable /tmp on Termux)"
+else
+  rm -rf "$existing_tmp"
+  mkdir -p "$existing_tmp"
+  CLEANUP_DIRS+=("$existing_tmp")
+fi
 config=$fix_home/.codex/config.toml
 chmod 700 "$fix_home/.codex"
 
