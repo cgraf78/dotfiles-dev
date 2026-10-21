@@ -1119,7 +1119,7 @@
     },
     "env_file_find_up": {
       "type": "boolean",
-      "description": "look for a relative env._.file path in the current directory and each parent directory",
+      "description": "search the config file's directory and each parent directory for a relative env._.file path. An absolute path searches its own directory and each parent for its file name",
       "default": false
     },
     "env_path": {
@@ -2890,6 +2890,14 @@
           "type": "object",
           "unevaluatedProperties": false,
           "properties": {
+            "keyring_provider": {
+              "description": "Read a `pypi:` index password from a `keyring` command when the index URL names a user but no password.",
+              "type": "string",
+              "enum": [
+                "disabled",
+                "subprocess"
+              ]
+            },
             "registry_url": {
               "description": "Package index URL that `pypi:` tools list versions from, with `{}` in place of the package name.",
               "type": "string"
@@ -9541,8 +9549,8 @@
           "properties": {
             "login_shell": {
               "type": "string",
-              "description": "current user's desired login shell, applied with `chsh -s`; a template that must render to an absolute path",
-              "pattern": "^\\s*(?:/|\\{[{%])"
+              "description": "current user's desired login shell, applied with `chsh -s`; an absolute path or a bare shell name resolved after packages are installed; may be a template",
+              "pattern": "^\\s*(?:/|\\{[{%]|[^/\\\\{\\s][^/\\\\]*$)"
             }
           },
           "additionalProperties": false
