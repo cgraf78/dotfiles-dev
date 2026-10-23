@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.176.2 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.178.5 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.176.2",
+  "x-renovate-version": "44.178.5",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -13679,7 +13679,7 @@
       "markdownDescription": "Configuration object to define language or manager version constraints.\n\nSee also: [constraints](https://docs.renovatebot.com/configuration-options/#constraints)",
       "type": "object",
       "default": {
-        "ghActionsLock": "v0.2.0"
+        "ghActionsLock": "v0.3.0"
       },
       "additionalProperties": false,
       "properties": {
