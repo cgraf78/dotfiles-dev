@@ -48,6 +48,17 @@ merge() {
 
   dot_hook_log "  mise"
 
+  # The tracked config and lockfile decide what gets installed; `dot update`
+  # must not rewrite the lockfile, which is a symlink into the overlay
+  # checkout. Since mise 2026.10.19 the default `lockfile_mode = "generate"`
+  # makes both `mise install` and `mise prune` rebuild `mise.lock`
+  # (backfilling other platforms' checksums), dirtying the checkout. Merge
+  # mode only adds missing entries instead of rebuilding, and `--locked`
+  # refuses to add any, so a complete committed lock stays byte-identical.
+  # Forced over any caller value; the scheduled lock-refresh workflow owns
+  # lock updates.
+  local -x MISE_LOCKFILE_MODE=merge
+
   mise trust "$config" &>/dev/null || true
 
   local github_token install_ok=0
