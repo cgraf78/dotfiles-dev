@@ -1936,8 +1936,8 @@ TOML
   mkdir -p "$mise_home/.config/mise"
   cat >"$mise_bin/mise" <<'MISE'
 #!/usr/bin/env bash
-printf 'token=%s args=%s ignored=%s\n' "${MISE_GITHUB_TOKEN:-}" "$*" \
-  "${MISE_IGNORED_CONFIG_PATHS:-}" >>"$MISE_TEST_LOG"
+printf 'token=%s args=%s ignored=%s lockfile_mode=%s\n' "${MISE_GITHUB_TOKEN:-}" "$*" \
+  "${MISE_IGNORED_CONFIG_PATHS:-}" "${MISE_LOCKFILE_MODE:-}" >>"$MISE_TEST_LOG"
 [[ "${MISE_FAIL_INSTALL:-0}" != 1 || "$1" != install ]] || exit 1
 [[ "${MISE_FAIL_PRUNE:-0}" != 1 || "$1" != prune ]]
 MISE
@@ -1956,7 +1956,8 @@ GH
     _mise_interactive() { [[ $interactive -eq 1 ]]; }
     merge
   )
-  unset MISE_GITHUB_TOKEN GITHUB_TOKEN DOT_TEST_GH MISE_IGNORED_CONFIG_PATHS
+  unset MISE_GITHUB_TOKEN GITHUB_TOKEN DOT_TEST_GH MISE_IGNORED_CONFIG_PATHS \
+    MISE_LOCKFILE_MODE
   : >"$mise_log"
   # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
   PREFIX=/data/data/com.termux/files/usr HOME="$mise_home" PATH="$mise_bin:$PATH" \
@@ -1983,6 +1984,20 @@ GH
     "$(<"$mise_log")"
   _assert_not_contains 'Mise merge: install does not ignore backup configs' \
     'args=install --locked ignored=/' "$(<"$mise_log")"
+  _assert_contains 'Mise merge: install runs in merge lockfile mode' \
+    'args=install --locked ignored= lockfile_mode=merge' "$(<"$mise_log")"
+  _assert_contains 'Mise merge: prune runs in merge lockfile mode' \
+    "args=prune --yes ignored=$mise_home/.dot-backup:$mise_home/.dotfiles-backup lockfile_mode=merge" \
+    "$(<"$mise_log")"
+
+  : >"$mise_log"
+  # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
+  HOME="$mise_home" PATH="$mise_bin:$PATH" MISE_TEST_LOG="$mise_log" \
+    GITHUB_TOKEN=actions-token MISE_LOCKFILE_MODE=generate _run_mise_merge
+  _assert_not_contains 'Mise merge: a caller lockfile mode cannot rewrite the lock' \
+    'lockfile_mode=generate' "$(<"$mise_log")"
+  _assert_contains 'Mise merge: the hook forces merge mode over a caller setting' \
+    'args=install --locked ignored= lockfile_mode=merge' "$(<"$mise_log")"
 
   : >"$mise_log"
   # shellcheck disable=SC2031 # PATH assignments below are command-scoped fixtures.
