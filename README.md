@@ -11,6 +11,7 @@ mise-managed linters, formatters, and language servers, VS Code settings,
 Neovim LSP, debug, and format modules,
 [Checkrun](https://github.com/cgraf78/checkrun) format and lint dispatch, and
 AI-agent tooling ([agentguard](https://github.com/cgraf78/agentguard),
+[agent-root](https://github.com/cgraf78/agent-root),
 [Hive Memory](https://github.com/cgraf78/hive-memory),
 [gstack](https://github.com/garrytan/gstack)).
 
