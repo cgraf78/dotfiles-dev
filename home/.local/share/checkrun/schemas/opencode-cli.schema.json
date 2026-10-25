@@ -1314,6 +1314,17 @@
               ],
               "description": "Toggle model favorite status"
             },
+            "model.dialog.usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Open usage limits from model dialog"
+            },
             "model.list": {
               "anyOf": [
                 {
@@ -1379,6 +1390,17 @@
                 }
               ],
               "description": "List MCP servers"
+            },
+            "usage.show": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "View usage limits"
             },
             "provider.connect": {
               "anyOf": [
