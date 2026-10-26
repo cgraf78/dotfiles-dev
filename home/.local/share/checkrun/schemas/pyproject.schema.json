@@ -914,8 +914,19 @@
     "tool": {
       "type": "object",
       "additionalProperties": {
-        "type": "object",
-        "additionalProperties": true
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": true
+          },
+          {
+            "description": "An array of tables, e.g. `[[tool.dynamic-metadata]]`",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        ]
       },
       "title": "Tool-specific configuration",
       "description": "Every tool that is used by the project can have users specify configuration data as long as they use a sub-table within `[tool]`. Generally a project can use the subtable `tool.$NAME` if, and only if, they own the entry for `$NAME` in the Cheeseshop/PyPI.",
@@ -968,6 +979,11 @@
           "$ref": "ty.json",
           "title": "Type checker",
           "description": "An extremely fast Python type checker, written in Rust."
+        },
+        "complexipy": {
+          "$ref": "https://www.schemastore.org/complexipy.json",
+          "title": "Cognitive Complexity Analyzer",
+          "description": "Measures how hard Python code is for humans to understand."
         },
         "hatch": {
           "$ref": "hatch.json",
