@@ -23,6 +23,9 @@ gh_log="$fixtures/gh.log"
 jq_capture="$fixtures/records.jq"
 sched_jq_capture="$fixtures/sched.jq"
 workflows_jq_capture="$fixtures/workflows.jq"
+required_jq_capture="$fixtures/required.jq"
+checks_jq_capture="$fixtures/checks.jq"
+statuses_jq_capture="$fixtures/statuses.jq"
 sched_dir="$fixtures/sched"
 mkdir -p "$sched_dir"
 
@@ -81,6 +84,45 @@ if [[ $1 == api && $2 == -X && $3 == GET ]]; then
       else
         cat "$dir/$repo.$id" 2>/dev/null
       fi
+      exit 0
+      ;;
+    */branches/*)
+      jq_program "$@" >"$GH_STUB_REQUIRED_JQ_CAPTURE"
+      [[ ! -f $dir/$repo.required.fail ]] || exit 1
+      if [[ -f $dir/$repo.required ]]; then
+        IFS= read -r first <"$dir/$repo.required" || first=
+        if [[ $first != meta$'\x1f'* ]]; then
+          printf 'meta\037true\n'
+          while IFS= read -r line; do
+            printf 'required\037%s\n' "$line"
+          done <"$dir/$repo.required"
+        else
+          cat "$dir/$repo.required"
+        fi
+      else
+        printf 'meta\037false\n'
+      fi
+      exit 0
+      ;;
+    */commits/*/check-runs)
+      jq_program "$@" >"$GH_STUB_CHECKS_JQ_CAPTURE"
+      [[ ! -f $dir/$repo.checks.fail ]] || exit 1
+      counter=$dir/$repo.checks.count
+      count=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
+      printf '%s\n' "$count" >"$counter"
+      [[ ! -f $dir/$repo.checks.$count.fail ]] || exit 1
+      [[ $count -le 1 || ! -f $dir/$repo.checks.after-first.fail ]] || exit 1
+      if [[ -f $dir/$repo.checks.$count ]]; then
+        cat "$dir/$repo.checks.$count"
+      else
+        cat "$dir/$repo.checks" 2>/dev/null
+      fi
+      exit 0
+      ;;
+    */commits/*/statuses)
+      jq_program "$@" >"$GH_STUB_STATUSES_JQ_CAPTURE"
+      [[ ! -f $dir/$repo.statuses.fail ]] || exit 1
+      cat "$dir/$repo.statuses" 2>/dev/null
       exit 0
       ;;
   esac
@@ -193,6 +235,9 @@ run() {
   GH_STUB_LOG=$gh_log GH_STUB_JQ_CAPTURE=$jq_capture \
     GH_STUB_SCHED_JQ_CAPTURE=$sched_jq_capture \
     GH_STUB_WORKFLOWS_JQ_CAPTURE=$workflows_jq_capture \
+    GH_STUB_REQUIRED_JQ_CAPTURE=$required_jq_capture \
+    GH_STUB_CHECKS_JQ_CAPTURE=$checks_jq_capture \
+    GH_STUB_STATUSES_JQ_CAPTURE=$statuses_jq_capture \
     GH_STUB_SCHED_DIR="${SCHED_DIR:-$sched_dir}" \
     GH_STUB_COUNTER="$fixtures/counter" GH_STUB_RECORDS="${RECORDS:-$records}" \
     PATH="$stub_bin:$PATH" invoke "$command_path" "$@"
@@ -306,12 +351,12 @@ _assert_contains "summary: truncated pull request lists warn" \
   "warning  31 open pull requests; only the oldest 30 are checked" "$out"
 _assert_contains "summary: an empty repository has no default branch" \
   "none     empty    no default branch (no checks)" "$out"
-_assert_contains "summary: repository without CI reports none" \
-  "none     gamma    main (no checks)" "$out"
+_assert_contains "summary: an active workflow without required checks remains none" \
+  "none     gamma    main@fffffff (no required checks found)" "$out"
 _assert_contains "summary: sanitized titles print verbatim" \
   "#5 Tab title \\ slash" "$out"
 _assert_contains "summary: counts cover branches, scheduled runs, and pull requests" \
-  "summary: 5 pass, 7 fail, 3 pending, 4 without checks (7 scheduled runs checked)" "$out"
+  "summary: 5 pass, 7 fail, 3 pending, 4 without CI result (7 scheduled runs checked)" "$out"
 _assert_contains "scheduled: a failing nightly is listed under its repository" \
   "  ✗ fail     scheduled Nightly: failure (2026-01-02 03:04Z)" "$out"
 _assert_contains "scheduled: a failing nightly links to its run" \
@@ -343,6 +388,150 @@ _assert_contains "scheduled: runs are read from the default branch" \
 _assert_contains "scheduled: each workflow is asked for a few recent runs" \
   "-F per_page=5" "$(grep 'alpha/actions/workflows/11/runs' "$gh_log")"
 
+echo "=== missing rollup visibility ==="
+
+head_records="$fixtures/head-records"
+head_sched=$(_tmpdir)
+{
+  _rec repo no-ci main 1111111111111111111111111111111111111111 ''
+  _rec repo untested main 2222222222222222222222222222222222222222 ''
+  _rec repo partial main 3333333333333333333333333333333333333333 ''
+  _rec repo checked main 4444444444444444444444444444444444444444 ''
+  _rec repo failing main 5555555555555555555555555555555555555555 ''
+  _rec repo running main 6666666666666666666666666666666666666666 ''
+  _rec repo unavailable main 7777777777777777777777777777777777777777 ''
+  _rec repo wrong-app main 8888888888888888888888888888888888888888 ''
+  _rec repo checks-error main 9999999999999999999999999999999999999999 ''
+  _rec repo accepted main aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ''
+  _rec repo external main bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ''
+  _rec repo status-only main cccccccccccccccccccccccccccccccccccccccc ''
+  _rec repo status-conflict main dddddddddddddddddddddddddddddddddddddddd ''
+  _rec repo status-wrong-newest main 1212121212121212121212121212121212121212 ''
+  _rec repo ruleset main eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ''
+  _rec repo unknown-app main ffffffffffffffffffffffffffffffffffffffff ''
+} >"$head_records"
+for repo in untested partial checked failing running unavailable wrong-app checks-error accepted status-only status-conflict status-wrong-newest unknown-app; do
+  printf '1\n' >"$head_sched/$repo.workflows"
+done
+_rec Required 15368 >"$head_sched/untested.required"
+{
+  _rec Required 15368
+  _rec 'cgraf78/actions sync' 15368
+} >"$head_sched/partial.required"
+_rec Required 15368 success completed >"$head_sched/partial.checks"
+_rec Dependabot 15368 success completed >>"$head_sched/partial.checks"
+cp "$head_sched/partial.required" "$head_sched/checked.required"
+{
+  _rec Required 15368 success completed
+  _rec 'cgraf78/actions sync' 15368 success completed
+} >"$head_sched/checked.checks"
+_rec Required 15368 >"$head_sched/failing.required"
+_rec Required 15368 failure completed >"$head_sched/failing.checks"
+_rec Required 15368 >"$head_sched/running.required"
+_rec Required 15368 '' in_progress >"$head_sched/running.checks"
+: >"$head_sched/unavailable.required.fail"
+_rec Required 15368 >"$head_sched/wrong-app.required"
+_rec Required 99999 success completed >"$head_sched/wrong-app.checks"
+_rec Required 15368 >"$head_sched/checks-error.required"
+: >"$head_sched/checks-error.checks.fail"
+cp "$head_sched/partial.required" "$head_sched/accepted.required"
+{
+  _rec Required 15368 neutral completed
+  _rec 'cgraf78/actions sync' 15368 skipped completed
+} >"$head_sched/accepted.checks"
+_rec Required 777 >"$head_sched/external.required"
+_rec Required 777 success completed >"$head_sched/external.checks"
+_rec Required 15368 >"$head_sched/status-only.required"
+_rec Required 15368 success >"$head_sched/status-only.statuses"
+_rec Required 15368 >"$head_sched/status-conflict.required"
+_rec Required 15368 success completed >"$head_sched/status-conflict.checks"
+_rec Required -1 failure >"$head_sched/status-conflict.statuses"
+_rec Required 15368 success >>"$head_sched/status-conflict.statuses"
+_rec Required 15368 >"$head_sched/status-wrong-newest.required"
+_rec Required 15368 success completed >"$head_sched/status-wrong-newest.checks"
+_rec Required 99999 success >"$head_sched/status-wrong-newest.statuses"
+_rec Required 15368 success >>"$head_sched/status-wrong-newest.statuses"
+_rec meta true >"$head_sched/ruleset.required"
+{
+  _rec meta true
+  _rec required Required -2
+} >"$head_sched/unknown-app.required"
+_rec Required 99999 success completed >"$head_sched/unknown-app.checks"
+out=$(RECORDS=$head_records SCHED_DIR=$head_sched run 2>&1)
+rc=$?
+_assert_exit "missing rollup: a failed required check fails the command" 1 "$rc"
+_assert_contains "missing rollup: no active workflows is distinct" \
+  "main (no active workflows)" "$out"
+_assert_contains "missing rollup: an untested head names its commit" \
+  "main@2222222 (required checks missing)" "$out"
+_assert_contains "missing rollup: a housekeeping check cannot pass missing required CI" \
+  "main@3333333 (required checks missing)" "$out"
+_assert_contains "missing rollup: complete required checks pass despite a null rollup" \
+  "main@4444444" "$out"
+_assert_contains "missing rollup: a failed required check fails" \
+  "main@5555555" "$out"
+_assert_contains "missing rollup: an in-progress required check is pending" \
+  "main@6666666" "$out"
+_assert_contains "missing rollup: an API failure stays visible without a green result" \
+  "main@7777777 (check lookup unavailable)" "$out"
+_assert_contains "missing rollup: a check from another app cannot pass a required context" \
+  "main@8888888 (required checks missing)" "$out"
+_assert_contains "missing rollup: a check-run API failure stays unknown" \
+  "main@9999999 (check lookup unavailable)" "$out"
+_assert_contains "missing rollup: neutral and skipped required checks are accepted" \
+  "main@aaaaaaa" "$out"
+_assert_contains "missing rollup: external required CI works without Actions workflows" \
+  "main@bbbbbbb" "$out"
+_assert_contains "missing rollup: a required commit status can pass without a check run" \
+  "main@ccccccc" "$out"
+_assert_contains "missing rollup: a failing commit status defeats a passing same-name check run" \
+  "main@ddddddd" "$out"
+_assert_contains "missing rollup: a newer status from another App blocks an older pass" \
+  "main@1212121 (required checks missing)" "$out"
+_assert_contains "missing rollup: a protected branch without classic check metadata stays unknown" \
+  "main@eeeeeee (check lookup unavailable)" "$out"
+_assert_contains "missing rollup: unknown App provenance cannot pass a same-name check" \
+  "main@fffffff (check lookup unavailable)" "$out"
+_assert_not_contains "missing rollup: no extra detail rows are added" \
+  "  scheduled" "$out"
+out=$(RECORDS=$head_records SCHED_DIR=$head_sched run --porcelain 2>&1)
+_assert_contains "missing rollup: porcelain keeps the existing repo columns" \
+  "repo${tab}pass${tab}checked${tab}main${tab}4444444444444444444444444444444444444444" "$out"
+_assert_contains "missing rollup: failed required CI is machine-readable" \
+  "repo${tab}fail${tab}failing${tab}main${tab}5555555555555555555555555555555555555555" "$out"
+_assert_contains "missing rollup: pending required CI is machine-readable" \
+  "repo${tab}pending${tab}running${tab}main${tab}6666666666666666666666666666666666666666" "$out"
+_assert_contains "missing rollup: external required CI is machine-readable" \
+  "repo${tab}pass${tab}external${tab}main${tab}bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$out"
+_assert_contains "missing rollup: status-only required CI is machine-readable" \
+  "repo${tab}pass${tab}status-only${tab}main${tab}cccccccccccccccccccccccccccccccccccccccc" "$out"
+_assert_contains "missing rollup: a failed same-name status is machine-readable" \
+  "repo${tab}fail${tab}status-conflict${tab}main${tab}dddddddddddddddddddddddddddddddddddddddd" "$out"
+_assert_contains "missing rollup: a newer wrong-source status is machine-readable" \
+  "repo${tab}none${tab}status-wrong-newest${tab}main${tab}1212121212121212121212121212121212121212" "$out"
+
+watch_head_records="$fixtures/watch-head-records"
+_rec repo running main 6666666666666666666666666666666666666666 '' >"$watch_head_records"
+watch_head_sched=$(_tmpdir)
+printf '1\n' >"$watch_head_sched/running.workflows"
+_rec Required 15368 >"$watch_head_sched/running.required"
+_rec Required 15368 '' in_progress >"$watch_head_sched/running.checks.1"
+_rec Required 15368 success completed >"$watch_head_sched/running.checks.2"
+out=$(RECORDS=$watch_head_records SCHED_DIR=$watch_head_sched \
+  run --watch --interval=1 --timeout=3 2>&1)
+_assert_exit "watch: recovered pending required CI settles" 0 "$?"
+_assert_contains "watch: recovered check is re-read until it passes" \
+  "pass     running" "$out"
+
+# A temporary REST failure must not replace an already pending head check.
+: >"$watch_head_sched/running.checks.after-first.fail"
+out=$(RECORDS=$watch_head_records SCHED_DIR=$watch_head_sched \
+  run --watch --interval=1 --timeout=2 2>&1)
+_assert_exit "watch: a failed head re-read keeps the check pending" 8 "$?"
+_assert_contains "watch: pending head lookup retries after an API error" \
+  "stopped watching after 2s with checks still pending" "$out"
+rm -f "$watch_head_sched/running.checks.after-first.fail"
+
 one_failed=$(_tmpdir)
 printf '11\n13\n' >"$one_failed/alpha.workflows"
 _sched "$one_failed" alpha 11 Nightly failure "$recent"
@@ -356,7 +545,7 @@ _assert_not_contains "scheduled: a partly read repository reports no partial res
 : >"$gh_log"
 out=$(run --no-scheduled 2>&1)
 _assert_contains "no-scheduled: counts exclude scheduled runs" \
-  "summary: 4 pass, 2 fail, 2 pending, 4 without checks" "$out"
+  "summary: 4 pass, 2 fail, 2 pending, 4 without CI result" "$out"
 _assert_not_contains "no-scheduled: makes no Actions API calls" "actions/" "$(cat "$gh_log")"
 
 echo ""
@@ -671,6 +860,56 @@ JSON
       "" "$(jq -r "$(cat "$sched_jq_capture")" "$fixtures/no-runs-field.json")"
     _assert_eq "jq program: only active workflows are queried" $'11\n13' \
       "$(jq -r "$(cat "$workflows_jq_capture")" "$fixtures/workflows.json")"
+    cat >"$fixtures/branch.json" <<'JSON'
+{"protected":true,"protection":{"required_status_checks":{"contexts":["Required","cgraf78/actions sync"],"checks":[
+ {"context":"Required","app_id":15368},
+ {"context":"cgraf78/actions sync","app_id":15368}
+]}}}
+JSON
+    cat >"$fixtures/check-runs.json" <<'JSON'
+{"total_count":2,"check_runs":[
+ {"name":"Required","app":{"id":15368},"status":"completed","conclusion":"success"},
+ {"name":"cgraf78/actions sync","app":{"id":15368},"status":"in_progress","conclusion":null}
+]}
+JSON
+    cat >"$fixtures/statuses.json" <<'JSON'
+[
+ {"context":"Required","performed_via_github_app":{"id":15368},"state":"success"},
+ {"context":"cgraf78/actions sync","performed_via_github_app":null,"state":"pending"}
+]
+JSON
+    cat >"$fixtures/branch-contexts-only.json" <<'JSON'
+{"protected":true,"protection":{"required_status_checks":{"contexts":["Required"]}}}
+JSON
+    if [[ -s $required_jq_capture && -s $checks_jq_capture ]]; then
+      _assert_eq "jq program: renders required names and their trusted apps" \
+        "$(
+          _rec meta true
+          _rec required Required 15368
+          _rec required 'cgraf78/actions sync' 15368
+        )" \
+        "$(jq -r "$(cat "$required_jq_capture")" "$fixtures/branch.json")"
+      _assert_eq "jq program: contexts without App metadata stay untrusted" \
+        "$(
+          _rec meta true
+          _rec required Required -2
+        )" \
+        "$(jq -r "$(cat "$required_jq_capture")" "$fixtures/branch-contexts-only.json")"
+      _assert_eq "jq program: renders check run status and conclusion" \
+        "$(
+          _rec Required 15368 success completed
+          _rec 'cgraf78/actions sync' 15368 '' in_progress
+        )" \
+        "$(jq -r "$(cat "$checks_jq_capture")" "$fixtures/check-runs.json")"
+      _assert_eq "jq program: renders commit status source and state" \
+        "$(
+          _rec Required 15368 success
+          _rec 'cgraf78/actions sync' -1 pending
+        )" \
+        "$(jq -r "$(cat "$statuses_jq_capture")" "$fixtures/statuses.json")"
+    else
+      _fail "jq program: required-check lookup programs were captured"
+    fi
   else
     _fail "jq program: the scheduled-run programs were captured"
   fi
