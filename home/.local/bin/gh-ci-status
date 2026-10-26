@@ -26,8 +26,7 @@ Options:
       --include-forks   Include forked repositories.
       --include-archived
                         Include archived repositories.
-      --no-scheduled    Skip scheduled workflow runs (saves one API call per
-                        repository plus one per active workflow).
+      --no-scheduled    Skip scheduled runs and missing-rollup recovery.
       --stale-days <n>  Fail an active workflow whose newest scheduled run is
                         older than this many days (default: 10). Workflows that
                         run less often need a higher value; 45 or higher
@@ -43,7 +42,7 @@ Options:
   -t, --timeout <sec>   Give up watching after this long (default: 1800).
   -h, --help            Show this help.
 
-Repositories without CI report "none" and never fail the run. Scheduled runs
+Repositories without a current CI result report "none" and never fail the run. Scheduled runs
 older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
 A run older than --stale-days from an active workflow fails as stale, so a
 schedule that suddenly stops cannot keep reporting its last pass as ok.
@@ -298,6 +297,164 @@ def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
    (.created_at | fromdateiso8601), .html_url] | rec'
 _sched_workflows_jq='.workflows[] | select(.state == "active") | .id'
 
+# The rollup can be null even when a scheduled workflow has produced check
+# runs on the current commit. Only configured required checks may recover a
+# branch result: a passing housekeeping check must not make an untested head
+# green. The branch endpoint includes the required GitHub App id where one is
+# pinned; check-runs defaults to the latest run for each name. Commit statuses
+# are read separately because GitHub can require both kinds under one name.
+# shellcheck disable=SC2016 # jq variables, not shell expansions.
+_required_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+(["meta", (.protected // false)] | rec),
+((.protection.required_status_checks // {}) as $r
+ | (if (($r.checks // []) | length) > 0 then
+      $r.checks[] | ["required", .context, (.app_id // -1)]
+    else
+      $r.contexts[]? | ["required", ., -2]
+    end) | rec)'
+_head_checks_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+.check_runs[]? | [.name, (.app.id // -1), (.conclusion // ""), .status] | rec'
+_head_statuses_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+.[]? | [.context, (.performed_via_github_app.id // -1), .state] | rec'
+
+# Map a required check run onto the summary state in REPLY. GitHub accepts
+# neutral and skipped required checks; an unfinished or unknown conclusion
+# must not be promoted to a passing branch.
+_head_check_state() {
+  if [[ $1 != completed ]]; then
+    REPLY=pending
+    return
+  fi
+  case $2 in
+    success | neutral | skipped) REPLY=pass ;;
+    failure | timed_out | cancelled | action_required | startup_failure) REPLY=fail ;;
+    *) REPLY=pending ;;
+  esac
+}
+
+# Commit statuses are separate from check runs. When both share a required
+# context, GitHub requires both results; neither may mask the other.
+_head_status_state() {
+  case $1 in
+    success) REPLY=pass ;;
+    failure | error) REPLY=fail ;;
+    *) REPLY=pending ;;
+  esac
+}
+
+# Combine required-check states, with a visible failure or in-flight check
+# taking precedence over a missing sibling context.
+_head_worst() {
+  if [[ $1 == fail || $2 == fail ]]; then
+    REPLY=fail
+  elif [[ $1 == pending || $2 == pending ]]; then
+    REPLY=pending
+  elif [[ $1 == none || $2 == none ]]; then
+    REPLY=none
+  else
+    REPLY=pass
+  fi
+}
+
+# Append the best supported state for a commit whose GraphQL rollup is null.
+# Lookup failures stay visible as unknown; missing required contexts never
+# become a pass merely because another check run succeeded.
+_fetch_head_one() {
+  local repo=$1 branch=$2 oid=$3 active=$4 out=$5 required checks statuses
+  local requirement check commit_status kind context app name check_app conclusion status
+  local protected='' count=0 found overall=pass
+  if ! required=$(gh api -X GET "repos/$_owner/$repo/branches/$branch" \
+    --jq "$_required_jq" 2>/dev/null); then
+    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    return
+  fi
+  while IFS= read -r requirement; do
+    [[ -n $requirement ]] || continue
+    IFS=$_sep read -r kind context app <<<"$requirement"
+    if [[ $kind == meta ]]; then
+      protected=$context
+    elif [[ $kind == required ]]; then
+      count=$((count + 1))
+      # A contexts-only response omits the pinned App identity. Do not
+      # accept a same-name check from an arbitrary App as proof of success.
+      if [[ $app == -2 ]]; then
+        printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+        return
+      fi
+    fi
+  done <<<"$required"
+  if [[ $protected != true && $protected != false ]]; then
+    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    return
+  fi
+  if ((count == 0)); then
+    if [[ $protected == true ]]; then
+      # An active ruleset can protect a branch without classic check data.
+      printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    elif ((active == 0)); then
+      printf 'head%s%s%snone%sno-workflows\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    else
+      printf 'head%s%s%snone%sno-required-config\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    fi
+    return
+  fi
+  if ! checks=$(gh api -X GET --paginate "repos/$_owner/$repo/commits/$oid/check-runs" \
+    -f filter=latest -F per_page=100 --jq "$_head_checks_jq" 2>/dev/null); then
+    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    return
+  fi
+  if ! statuses=$(gh api -X GET --paginate "repos/$_owner/$repo/commits/$oid/statuses" \
+    -F per_page=100 --jq "$_head_statuses_jq" 2>/dev/null); then
+    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    return
+  fi
+  while IFS= read -r requirement; do
+    [[ -n $requirement ]] || continue
+    IFS=$_sep read -r kind context app <<<"$requirement"
+    [[ $kind == required ]] || continue
+    found=0
+    while IFS= read -r check; do
+      [[ -n $check ]] || continue
+      IFS=$_sep read -r name check_app conclusion status <<<"$check"
+      [[ $name == "$context" && ($app == -1 || $check_app == "$app") ]] || continue
+      found=1
+      _head_check_state "$status" "$conclusion"
+      _head_worst "$overall" "$REPLY"
+      overall=$REPLY
+      break
+    done <<<"$checks"
+    # Statuses arrive newest first. A newer status from an unexpected or
+    # unidentifiable App supersedes older statuses for this context; it must
+    # not let an older trusted success or a passing check run turn green.
+    while IFS= read -r commit_status; do
+      [[ -n $commit_status ]] || continue
+      IFS=$_sep read -r name check_app status <<<"$commit_status"
+      [[ $name == "$context" ]] || continue
+      found=1
+      _head_status_state "$status"
+      if [[ $app != -1 && $check_app != "$app" && $REPLY == pass ]]; then
+        REPLY=none
+      fi
+      _head_worst "$overall" "$REPLY"
+      overall=$REPLY
+      break
+    done <<<"$statuses"
+    if ((found == 0)); then
+      _head_worst "$overall" none
+      overall=$REPLY
+    fi
+  done <<<"$required"
+  if [[ $overall == none ]]; then
+    printf 'head%s%s%snone%sno-head-required\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+  else
+    printf 'head%s%s%s%s%srequired-checks\n' \
+      "$_sep" "$repo" "$_sep" "$overall" "$_sep" >>"$out"
+  fi
+}
+
 # A scheduled result older than this is not the latest run of a live
 # schedule: the schedule was removed or paused, and reporting it would pin a
 # stale failure forever. 45 days keeps monthly schedules visible. Runs between
@@ -320,16 +477,16 @@ _sched_state() {
 }
 
 # Write repository $1's newest scheduled run for each active workflow on
-# branch $2 to file $3 as sched records, or stale records when the newest run
+# branch $2 to file $5 as sched records, or stale records when the newest run
 # is older than --stale-days, or one schederror record when any part cannot
 # be read. The per-workflow queries run concurrently: each is dominated by API
 # latency rather than payload, so asking for a few runs per workflow, for
 # _sched_run_jq to pick the newest, costs no extra requests; the responses are
 # only larger.
 _fetch_scheduled_one() {
-  local repo=$1 branch=$2 out=$3 ids id line name raw created epoch url now cutoff
+  local repo=$1 branch=$2 oid=$3 rollup=$4 out=$5 ids id line name raw created epoch url now cutoff
   local stale_cutoff
-  local failed=0
+  local failed=0 active=0
   # -X GET is required: gh switches to POST whenever fields are passed.
   if ! ids=$(gh api -X GET --paginate "repos/$_owner/$repo/actions/workflows" \
     -F per_page=100 --jq "$_sched_workflows_jq" 2>/dev/null); then
@@ -338,6 +495,7 @@ _fetch_scheduled_one() {
   fi
   for id in $ids; do
     [[ $id =~ ^[0-9]+$ ]] || continue
+    active=$((active + 1))
     {
       gh api -X GET "repos/$_owner/$repo/actions/workflows/$id/runs" \
         -f event=schedule -f branch="$branch" -F per_page=5 \
@@ -354,6 +512,9 @@ _fetch_scheduled_one() {
   cutoff=$((now - _sched_max_age))
   stale_cutoff=$((now - 10#$_stale_days * 86400))
   : >"$out"
+  if [[ -z $rollup ]]; then
+    _fetch_head_one "$repo" "$branch" "$oid" "$active" "$out"
+  fi
   for id in $ids; do
     [[ $id =~ ^[0-9]+$ ]] || continue
     if [[ -e $out.$id.failed ]]; then
@@ -395,23 +556,26 @@ _sched_cleanup() {
 # Queries up to eight repositories at once; with their per-workflow calls that
 # stays well under GitHub's limit on concurrent requests.
 _fetch_scheduled() {
-  local line kind repo branch i j running=0 merged='' name
-  local -a repos=() branches=()
+  local line kind repo branch oid rollup i j running=0 merged='' name state reason
+  local -a repos=() branches=() oids=() rollups=()
   ((_scheduled == 1)) || return 0
   while IFS= read -r line; do
-    IFS=$_sep read -r kind repo branch _ <<<"$line"
+    IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
     [[ $kind == repo && -n $branch ]] || continue
     if (($# > 0)); then
       case " $* " in *" $repo "*) ;; *) continue ;; esac
     fi
     repos+=("$repo")
     branches+=("$branch")
+    oids+=("$oid")
+    rollups+=("$rollup")
   done <<<"$_records"
   (($# > 0)) || _sched_records=
   ((${#repos[@]} > 0)) || return 0
   _sched_tmp=$(mktemp -d "${TMPDIR:-/tmp}/gh-ci-status.XXXXXX") || return 1
   for ((i = 0; i < ${#repos[@]}; i++)); do
-    _fetch_scheduled_one "${repos[$i]}" "${branches[$i]}" "$_sched_tmp/$i" &
+    _fetch_scheduled_one "${repos[$i]}" "${branches[$i]}" \
+      "${oids[$i]}" "${rollups[$i]}" "$_sched_tmp/$i" &
     running=$((running + 1))
     if ((running >= 8)); then
       wait
@@ -431,14 +595,16 @@ _fetch_scheduled() {
       IFS=$_sep read -r kind repo _ <<<"$line"
       for ((j = 0; j < ${#repos[@]}; j++)); do
         [[ ${repos[$j]} == "$repo" ]] || continue
-        IFS=$_sep read -r name _ <"$_sched_tmp/$j" 2>/dev/null || name=
-        [[ $name == schederror ]] || continue 2
+        IFS=$_sep read -r name _ state reason <"$_sched_tmp/$j" 2>/dev/null || name=
+        # A transient head lookup error must not replace a pending head
+        # record and make --watch stop before the check settles.
+        [[ $name == schederror || ($name == head && $reason == lookup-error) ]] || continue 2
       done
       merged+="$line"$'\n'
     done <<<"$_sched_records"
     for ((j = 0; j < ${#repos[@]}; j++)); do
-      IFS=$_sep read -r name _ <"$_sched_tmp/$j" 2>/dev/null || name=
-      [[ $name != schederror && -s $_sched_tmp/$j ]] || continue
+      IFS=$_sep read -r name _ state reason <"$_sched_tmp/$j" 2>/dev/null || name=
+      [[ $name != schederror && ! ($name == head && $reason == lookup-error) && -s $_sched_tmp/$j ]] || continue
       merged+="$(<"$_sched_tmp/$j")"$'\n'
     done
     _sched_records=$merged
@@ -456,12 +622,38 @@ _count() {
   esac
 }
 
+# Read a typed fallback record for repository $1 from the scheduled fetch.
+# REPLY remains none when the optional lookup was skipped or unavailable.
+_head_result() {
+  local want=$1 line kind repo state reason
+  REPLY=none
+  _head_reason=
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    IFS=$_sep read -r kind repo state reason <<<"$line"
+    [[ $kind == head && $repo == "$want" ]] || continue
+    REPLY=$state
+    _head_reason=$reason
+    return
+  done <<<"${_sched_records:-}"
+}
+
+# Track repositories whose REST result must be re-read during --watch. Both
+# scheduled runs and recovered required checks can be pending independently
+# of the GraphQL rollup.
+_mark_pending_repo() {
+  case " $_pending_repos " in
+    *" $1 "*) ;;
+    *) _pending_repos+=" $1" ;;
+  esac
+}
+
 # Parse _records into display rows (kind, state, repo, ...) joined with the
 # unit separator, and reset and recompute every counter. Repos keep the
 # query's name order, and each repo's pull requests and truncation notice
 # follow it.
 _summarize() {
-  local line kind repo branch oid rollup number draft auto url title total
+  local line kind repo branch oid rollup number draft auto url title total reason
   _rows=()
   _repos=0
   _prs=0
@@ -472,7 +664,7 @@ _summarize() {
   _truncated=0
   _sched_count=0
   _sched_pending=0
-  _sched_pending_repos=''
+  _pending_repos=''
   _sched_errors=0
   _stale_count=0
   _width=4
@@ -483,10 +675,16 @@ _summarize() {
       repo)
         IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
         _state "$rollup"
+        reason=
+        if [[ -z $rollup && -n $branch && $_scheduled == 1 ]]; then
+          _head_result "$repo"
+          reason=$_head_reason
+          if [[ $REPLY == pending ]]; then _mark_pending_repo "$repo"; fi
+        fi
         _repos=$((_repos + 1))
         _count "$REPLY"
         ((${#repo} <= _width)) || _width=${#repo}
-        _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid")
+        _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid$_sep$reason")
         _summarize_scheduled "$repo"
         ;;
       pr)
@@ -534,10 +732,7 @@ _summarize_scheduled() {
     _sched_count=$((_sched_count + 1))
     if [[ $REPLY == pending ]]; then
       _sched_pending=$((_sched_pending + 1))
-      case " $_sched_pending_repos " in
-        *" $repo "*) ;;
-        *) _sched_pending_repos+=" $repo" ;;
-      esac
+      _mark_pending_repo "$repo"
     fi
     _count "$REPLY"
     _rows+=("sched$_sep$REPLY$_sep$repo$_sep$name$_sep$raw$_sep$created$_sep$url")
@@ -603,6 +798,9 @@ _print_porcelain() {
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
     _visible "$kind" "$state" "$repo" || continue
+    # The reason is an internal display hint; preserve the existing five
+    # columns of the stable repo record for porcelain consumers.
+    if [[ $kind == repo ]]; then row=${row%"$_sep"*}; fi
     printf '%s\n' "${row//$_sep/$'\t'}"
   done
 }
@@ -632,7 +830,7 @@ _badge() {
 # its pull requests indented beneath it (with links for problems), truncation
 # warnings, and a closing count line.
 _print_human() {
-  local row kind state repo branch oid number draft auto url title total label
+  local row kind state repo branch oid reason number draft auto url title total label
   local name raw created
   printf 'owner: %s (%s repositories, %s open pull requests)\n' "$_owner" "$_repos" "$_prs"
   for row in ${_rows[@]+"${_rows[@]}"}; do
@@ -640,12 +838,20 @@ _print_human() {
     _visible "$kind" "$state" "$repo" || continue
     case $kind in
       repo)
-        IFS=$_sep read -r kind state repo branch oid <<<"$row"
-        if [[ $state == none ]]; then
-          label="${branch:-no default branch} (no checks)"
-        else
-          label="$branch@${oid:0:7}"
-        fi
+        IFS=$_sep read -r kind state repo branch oid reason <<<"$row"
+        case $reason in
+          no-workflows) label="$branch (no active workflows)" ;;
+          no-head-required) label="$branch@${oid:0:7} (required checks missing)" ;;
+          no-required-config) label="$branch@${oid:0:7} (no required checks found)" ;;
+          lookup-error) label="$branch@${oid:0:7} (check lookup unavailable)" ;;
+          *)
+            if [[ $state == none ]]; then
+              label="${branch:-no default branch} (no checks)"
+            else
+              label="$branch@${oid:0:7}"
+            fi
+            ;;
+        esac
         _badge "$state"
         printf ' %-*s  %s\n' "$_width" "$repo" "$label"
         ;;
@@ -693,7 +899,7 @@ _print_human() {
   done
   _overall
   _tone "$REPLY"
-  printf '%s%s summary: %s pass, %s fail, %s pending, %s without checks' \
+  printf '%s%s summary: %s pass, %s fail, %s pending, %s without CI result' \
     "$_shade" "$_glyph" \
     "$_pass" "$_fail" "$_pending" "$_none"
   ((_scheduled == 0)) || printf ' (%s scheduled runs checked)' "$_sched_count"
@@ -717,12 +923,11 @@ if ((_watch == 1)); then
       "$_prog" "$_pending" "$_fail" "$((10#$_interval))" >&2
     sleep "$((10#$_interval))"
     if _fetch; then
-      # Re-read scheduled runs only for repositories that still have one
-      # running: re-reading every repository on each poll would exhaust the
-      # hourly REST limit during a long watch.
-      if [[ -n $_sched_pending_repos ]]; then
+      # Re-read only repositories with a pending scheduled run or recovered
+      # required check; the GraphQL query refreshes the remaining branches.
+      if [[ -n $_pending_repos ]]; then
         # shellcheck disable=SC2086 # Repository names contain no spaces.
-        _fetch_scheduled $_sched_pending_repos ||
+        _fetch_scheduled $_pending_repos ||
           _die "could not create a temporary directory"
       fi
       _summarize

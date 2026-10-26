@@ -18,13 +18,21 @@ gh-ci-status --failing       # only failing or pending items
 gh-ci-status --watch         # poll until nothing is pending (30 min cap)
 gh-ci-status --owner my-org  # another user or organization
 gh-ci-status --porcelain     # key=value summary plus tab-separated records
-gh-ci-status --no-scheduled  # skip scheduled runs (one fewer call per repo)
+gh-ci-status --no-scheduled  # skip scheduled runs and missing-rollup recovery
 ```
 
 Only repositories the owner owns are listed; archived repositories and forks
 are skipped unless `--include-archived` or `--include-forks` is given.
-Repositories without CI report `none` and never fail the run. Each repository's
-oldest 30 open pull requests are checked, and a longer queue prints a warning.
+When GitHub reports no check rollup for a default-branch commit, the normal
+view reads classic branch protection's required check runs and commit statuses
+on that commit. It reports a pass only when each required context has a passing
+result from the configured GitHub App; unrelated checks cannot make the branch
+green. A protected branch with unavailable required-check metadata stays
+unknown. The same row distinguishes no active workflows from missing required
+checks. `--no-scheduled` retains the faster rollup-only view. Repositories
+without a current CI result report `none` and never fail the run. Each
+repository's oldest 30 open pull requests are checked, and a longer queue
+prints a warning.
 
 Scheduled runs catch nightly failures that a later push would otherwise hide,
 since a push moves the default branch past the commit the nightly ran on.
