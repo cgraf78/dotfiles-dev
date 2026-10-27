@@ -5207,6 +5207,10 @@
           "type": "string",
           "description": "release tag prefix stripped from versions and re-added when resolving tags"
         },
+        "version_regex": {
+          "type": "string",
+          "description": "regex a release tag must match to be listed; versions are still derived from the tag as usual"
+        },
         "asset_pattern": {
           "type": "string",
           "description": "glob (* and ?) matched against release asset names, tera templated; replaces autodetection"
@@ -8807,7 +8811,7 @@
           "description": "System services and portable user services managed by mise bootstrap, keyed by service name",
           "additionalProperties": {
             "type": "object",
-            "description": "Linux systemd system unit that mise starts, stops, enables, or masks, or a user service mise defines from command or builtin",
+            "description": "Linux systemd unit that mise starts, stops, enables, or masks (a system unit, or with scope user an existing user unit), or a user service mise defines from command or builtin",
             "properties": {
               "state": {
                 "type": "string",
@@ -9390,6 +9394,19 @@
                           "type": "string",
                           "minLength": 1,
                           "pattern": "^(?:/|~$|~/|\\{[{%])"
+                        }
+                      },
+                      "launch_events": {
+                        "type": "object",
+                        "description": "write LaunchEvents, keyed by event stream, then event name, with launchd's case-sensitive property names",
+                        "additionalProperties": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "$ref": "#/$defs/macos_defaults_value"
+                            }
+                          }
                         }
                       },
                       "environment": {
@@ -10133,6 +10150,10 @@
             "adopt": {
               "type": "boolean",
               "description": "adopt existing app artifacts by default for configured brew-cask packages"
+            },
+            "homebrew_metadata": {
+              "type": "boolean",
+              "description": "write Homebrew's cask metadata after mise installs a brew-cask package, so `brew upgrade` and `brew outdated` manage it afterwards"
             },
             "taps": {
               "type": "object",
