@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Exercise the fallback spelling policy through typos, including its own
+# built-in hash handling. A regex-only test would miss tokenizer differences.
+set -euo pipefail
+. "${BASH_SOURCE[0]%/*}/dev/helpers.sh"
+
+typos_bin=$(command -v typos) || _test_skip_suite 'typos configuration needs typos'
+# Resolve mise's shim before isolating HOME; the checker itself is stateless.
+case $typos_bin in
+  */mise/shims/typos) typos_bin=$(mise which typos) ;;
+esac
+config=$(_dev_repo_root)/home/.config/checkrun/typos.toml
+work=$(_tmpdir)
+mkdir -p "$work/home"
+
+# Removing the release-ID ignore must expose the suffix's false positive;
+# widening it must fail the malformed and glued-token cases below.
+check_spelling() {
+  local description=$1 expected=$2 text=$3 output status=0 expected_status=0 actual
+  [[ $expected == '[]' ]] || expected_status=2
+  printf '%s\n' "$text" >"$work/input.md"
+  output=$(HOME="$work/home" XDG_CONFIG_HOME="$work/config" \
+    XDG_DATA_HOME="$work/data" XDG_STATE_HOME="$work/state" \
+    XDG_CACHE_HOME="$work/cache" "$typos_bin" --isolated --config "$config" \
+    --no-check-filenames --format json "$work/input.md") || status=$?
+  _assert_eq "$description: status" "$expected_status" "$status"
+  actual=$(printf '%s\n' "$output" | jq -sc '[.[] | select(.type == "typo") | .typo]')
+  _assert_eq "$description: spelling findings" "$expected" "$actual"
+}
+
+# Encode deliberate misspellings so this suite still passes its own lint.
+fragment=$(printf '\142\141')
+misspelling=$(printf '\164\145\150')
+short_hash=3${fragment}97097
+full_hash=3${fragment}970971e8ec85205ccfdf8a1e56496ef475507
+release_id=20261018-152429-$short_hash
+fragment_findings="[\"$fragment\"]"
+word_findings="[\"$misspelling\"]"
+
+check_spelling 'release ID in prose' '[]' "Release $release_id is installed."
+check_spelling 'release ID in code span' '[]' "\`$release_id\`"
+check_spelling 'minimum abbreviated release hash' '[]' "20261018-152429-3${fragment}9709"
+check_spelling 'full release hash' '[]' "20261018-152429-$full_hash"
+check_spelling 'adjacent release IDs' '[]' "$release_id,$release_id"
+check_spelling 'full SHA-1 retains native handling' '[]' "\`$full_hash\`"
+check_spelling 'full SHA-256 retains native handling' '[]' '3ba970971e8ec85205ccfdf8a1e56496ef4755073ba970971e8ec85205ccfdf8a1e564'
+check_spelling 'ordinary typo beside release ID' "$word_findings" "$misspelling $release_id"
+check_spelling 'ordinary typo remains checked' "$word_findings" "$misspelling"
+check_spelling 'short hexadecimal word remains checked' "$fragment_findings" "$fragment"
+check_spelling 'unqualified abbreviated hash remains checked' "$fragment_findings" "$short_hash"
+check_spelling 'glued release prefix remains checked' "$fragment_findings" "prefix$release_id"
+check_spelling 'glued release suffix remains checked' "$fragment_findings" "${release_id}suffix"
+check_spelling 'underscore prefix remains checked' "$fragment_findings" "prefix_$release_id"
+check_spelling 'underscore suffix remains checked' "$fragment_findings" "${release_id}_suffix"
+check_spelling 'short release hash remains checked' "$fragment_findings" "20261018-152429-3${fragment}970"
+check_spelling 'nonhex release hash remains checked' "$fragment_findings" "20261018-152429-3${fragment}9709g"
+check_spelling 'short date remains checked' "$fragment_findings" "2026101-152429-$short_hash"
+check_spelling 'short time remains checked' "$fragment_findings" "20261018-15242-$short_hash"
+check_spelling 'long date remains checked' "$fragment_findings" "202610180-152429-$short_hash"
+check_spelling 'long time remains checked' "$fragment_findings" "20261018-1524290-$short_hash"
+
+_test_summary
