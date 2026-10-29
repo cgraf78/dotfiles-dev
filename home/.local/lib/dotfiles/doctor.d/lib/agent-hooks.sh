@@ -35,10 +35,9 @@ _dr_run_agent_hook() {
   out_file="$tmp/out"
   err_file="$tmp/err"
 
-  # The hook opens its payload itself, through a bare Bash that execs it: a
-  # pipe into the bounded command would not reach it under base's builtin
-  # watchdog (hosts without a coreutils timeout), which starts the command
-  # as a background job, and Bash gives those /dev/null for stdin.
+  # Keep payload delivery independent of the bounded runner and any older
+  # base's asynchronous launch behavior. The hook opens this private file
+  # itself, through a bare Bash that execs it.
   printf '%s' "$payload" >"$tmp/payload" || {
     rm -rf "$tmp" 2>/dev/null || true
     return 1
