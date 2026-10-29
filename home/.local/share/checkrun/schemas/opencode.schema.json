@@ -79,6 +79,10 @@
       "type": "string",
       "description": "Username displayed in conversations and used for telemetry identity"
     },
+    "timezone": {
+      "type": "string",
+      "description": "IANA time zone for schedules, e.g. America/Los_Angeles. Defaults to the server's local zone"
+    },
     "permissions": {
       "$ref": "#/$defs/Permission.Ruleset",
       "description": "Ordered tool permission rules applied to agent tool use"
@@ -475,6 +479,52 @@
           "type": "boolean"
         },
         "media_blob": {
+          "type": "boolean"
+        },
+        "image_generate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "providerID": {
+                          "type": "string",
+                          "pattern": "^[^/#]+$"
+                        },
+                        "model": {
+                          "type": "string",
+                          "pattern": "^[^#]+$"
+                        },
+                        "variant": {
+                          "type": "string",
+                          "pattern": "^[^#]+$"
+                        }
+                      },
+                      "required": [
+                        "providerID",
+                        "model"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "schedules": {
           "type": "boolean"
         },
         "subagent_depth": {

@@ -181,6 +181,10 @@
                   }
                 }
               ]
+            },
+            "description": {
+              "type": "string",
+              "description": "what `mise bootstrap` prints instead of the command; `--verbose` and `--dry-run` print the command"
             }
           },
           "additionalProperties": true,
@@ -2512,6 +2516,11 @@
             "legacy",
             "identity"
           ]
+        },
+        "ipv4_only": {
+          "default": false,
+          "description": "Connect to remote hosts over IPv4 only.",
+          "type": "boolean"
         },
         "java": {
           "type": "object",
@@ -7385,6 +7394,11 @@
                 "description": "template mode only: remove the target when the template renders empty or whitespace-only; a target that changed since mise last wrote it needs --force",
                 "default": false
               },
+              "create_if_missing": {
+                "type": "boolean",
+                "description": "copy and template modes, or inline content: write the target only when nothing exists there yet, leaving an existing file's content and permissions alone; a target that was deleted is created again on the next apply. Not for directory sources",
+                "default": false
+              },
               "dot_prefix": {
                 "type": "boolean",
                 "description": "symlink-each and directory copy only: deploy each source path component named \"dot-<name>\" as \".<name>\", like GNU Stow's --dotfiles; exclude still matches source names",
@@ -7396,7 +7410,7 @@
               },
               "permissions": {
                 "type": "string",
-                "description": "octal permissions for the target, such as \"0600\"; overrides what copy, template, and inline content entries set, and on its own manages only the permissions of an existing target (Unix only)",
+                "description": "octal permissions for the target, such as \"0600\"; overrides what copy, template, and inline content entries set, and on its own manages only the permissions of an existing target; on a merge entry it sets the mode only when apply creates the target, never on one that exists (Unix only)",
                 "pattern": "^(0o)?[0-7]{1,4}$"
               },
               "autosave": {
@@ -7450,13 +7464,30 @@
                 "description": "comment prefix for edit marker lines; inferred from the file extension when omitted"
               },
               "merge": {
-                "description": "edit entry: true sets the keys of source (default: the target's path under dotfiles.root) on a JSON, TOML, or YAML target and leaves the target's other keys to the application that also writes it; \"missing\" sets only the keys the target has no value for; the format comes from the target's extension",
+                "description": "edit entry: true sets the keys of source (default: the target's path under dotfiles.root) on a JSON, JSONC, TOML, or YAML target and leaves the target's other keys to the application that also writes it; \"missing\" sets only the keys the target has no value for; the format comes from the target's extension unless \"format\" names it",
                 "oneOf": [
                   {
                     "type": "boolean"
                   },
                   {
                     "const": "missing"
+                  }
+                ]
+              },
+              "format": {
+                "type": "string",
+                "description": "merge only: the format of the target and source when the target's extension doesn't name it, such as \"jsonc\" for VS Code's settings.json",
+                "anyOf": [
+                  {
+                    "enum": [
+                      "json",
+                      "jsonc",
+                      "toml",
+                      "yaml"
+                    ]
+                  },
+                  {
+                    "type": "string"
                   }
                 ]
               },
@@ -7520,7 +7551,6 @@
                   "properties": {
                     "mode": false,
                     "content": false,
-                    "permissions": false,
                     "exclude": false,
                     "include": false,
                     "manifest": false,
@@ -7530,6 +7560,7 @@
                     "variants": false,
                     "enabled": false,
                     "remove_empty": false,
+                    "create_if_missing": false,
                     "relative": false,
                     "dot_prefix": false,
                     "group": false,
@@ -7628,6 +7659,7 @@
                     "manifest": false,
                     "permissions": false,
                     "remove_empty": false,
+                    "create_if_missing": false,
                     "dot_prefix": {
                       "const": false
                     },
@@ -7728,7 +7760,6 @@
                         ]
                       },
                       "block": false,
-                      "template": false,
                       "comment": false
                     },
                     "required": [
@@ -7756,6 +7787,22 @@
                           "manifest": false,
                           "encrypt": false
                         }
+                      }
+                    ],
+                    "allOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "template": false
+                            }
+                          },
+                          {
+                            "required": [
+                              "merge"
+                            ]
+                          }
+                        ]
                       }
                     ]
                   },
@@ -7851,6 +7898,70 @@
                     "properties": {
                       "allow_plaintext": false
                     }
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "create_if_missing": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "mode": {
+                        "enum": [
+                          "copy",
+                          "template"
+                        ]
+                      },
+                      "block": false,
+                      "line": false,
+                      "template": false,
+                      "comment": false
+                    },
+                    "anyOf": [
+                      {
+                        "required": [
+                          "source"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "content"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "mode"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "format": false
+                    }
+                  },
+                  {
+                    "properties": {
+                      "merge": {
+                        "enum": [
+                          true,
+                          "missing"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "merge"
+                    ]
                   }
                 ]
               }
@@ -8005,6 +8116,11 @@
                       "description": "template mode only: remove the target when the template renders empty or whitespace-only; a target that changed since mise last wrote it needs --force",
                       "default": false
                     },
+                    "create_if_missing": {
+                      "type": "boolean",
+                      "description": "copy and template modes, or inline content: write the target only when nothing exists there yet, leaving an existing file's content and permissions alone; a target that was deleted is created again on the next apply. Not for directory sources",
+                      "default": false
+                    },
                     "dot_prefix": {
                       "type": "boolean",
                       "description": "symlink-each and directory copy only: deploy each source path component named \"dot-<name>\" as \".<name>\", like GNU Stow's --dotfiles; exclude still matches source names",
@@ -8016,7 +8132,7 @@
                     },
                     "permissions": {
                       "type": "string",
-                      "description": "octal permissions for the target, such as \"0600\"; overrides what copy, template, and inline content entries set, and on its own manages only the permissions of an existing target (Unix only)",
+                      "description": "octal permissions for the target, such as \"0600\"; overrides what copy, template, and inline content entries set, and on its own manages only the permissions of an existing target; on a merge entry it sets the mode only when apply creates the target, never on one that exists (Unix only)",
                       "pattern": "^(0o)?[0-7]{1,4}$"
                     },
                     "autosave": {
@@ -8087,7 +8203,6 @@
                         "properties": {
                           "mode": false,
                           "content": false,
-                          "permissions": false,
                           "exclude": false,
                           "include": false,
                           "manifest": false,
@@ -8097,6 +8212,7 @@
                           "variants": false,
                           "enabled": false,
                           "remove_empty": false,
+                          "create_if_missing": false,
                           "relative": false,
                           "dot_prefix": false,
                           "group": false,
@@ -8195,6 +8311,7 @@
                           "manifest": false,
                           "permissions": false,
                           "remove_empty": false,
+                          "create_if_missing": false,
                           "dot_prefix": {
                             "const": false
                           },
@@ -8295,7 +8412,6 @@
                               ]
                             },
                             "block": false,
-                            "template": false,
                             "comment": false
                           },
                           "required": [
@@ -8323,6 +8439,22 @@
                                 "manifest": false,
                                 "encrypt": false
                               }
+                            }
+                          ],
+                          "allOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "template": false
+                                  }
+                                },
+                                {
+                                  "required": [
+                                    "merge"
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         },
@@ -8418,6 +8550,70 @@
                           "properties": {
                             "allow_plaintext": false
                           }
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "create_if_missing": {
+                              "const": false
+                            }
+                          }
+                        },
+                        {
+                          "properties": {
+                            "mode": {
+                              "enum": [
+                                "copy",
+                                "template"
+                              ]
+                            },
+                            "block": false,
+                            "line": false,
+                            "template": false,
+                            "comment": false
+                          },
+                          "anyOf": [
+                            {
+                              "required": [
+                                "source"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "content"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "mode"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "format": false
+                          }
+                        },
+                        {
+                          "properties": {
+                            "merge": {
+                              "enum": [
+                                true,
+                                "missing"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "merge"
+                          ]
                         }
                       ]
                     }
