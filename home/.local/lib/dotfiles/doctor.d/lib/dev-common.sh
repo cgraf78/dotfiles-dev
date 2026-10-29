@@ -4,8 +4,8 @@
 # Run CMD... with a deadline of SECS seconds and return its status: 124
 # when the deadline passed, or 137 when the command also ignored SIGTERM and
 # had to be killed (see _dr_dev_deadline_status). Base's _dr_run_bounded is
-# preferred: it is portable (a builtin watchdog where no coreutils timeout
-# exists, as on stock macOS) and kills the command's whole process group. It
+# preferred: it delegates to Dot's native process supervisor, including on
+# stock macOS, and stops descendants before returning. It
 # is newer than base's compat module and base updates independently of this
 # overlay, so on a base without it a coreutils timeout(1) or gtimeout bounds
 # the run when one is installed, and otherwise the command runs unbounded,

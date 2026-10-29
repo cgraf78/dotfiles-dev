@@ -701,9 +701,14 @@ SH
   # probes report the first stderr line as the hook's own message. Job
   # notices from a watcher are racy, so repeat a fast, silent failure.
   _bounded_stderr() {
-    local i err
+    local i err rc
     for ((i = 0; i < 100; i++)); do
-      err=$("$@" sh -c 'exit 6' 2>&1 >/dev/null) || true
+      rc=0
+      err=$("$@" sh -c 'exit 6' 2>&1 >/dev/null) || rc=$?
+      if [[ $rc != 6 ]]; then
+        printf 'expected command exit 6, got %s: %s' "$rc" "$err"
+        return 0
+      fi
       [[ -z $err ]] || {
         printf '%s' "$err"
         return 0
@@ -721,7 +726,7 @@ SH
   if declare -F _dr_run_bounded >/dev/null; then
     _assert_eq "Base's bounded runner adds nothing to stderr" '' \
       "$(PATH="$doctor_bin:$PATH" _fresh_deadline _bounded_stderr _dr_dev_bounded 5)"
-    _assert_eq "Base's builtin watchdog adds nothing to stderr" '' \
+    _assert_eq "Base's native supervisor adds nothing to stderr" '' \
       "$(
         _DR_TIMEOUT_BIN=
         _bounded_stderr _dr_dev_bounded 5
