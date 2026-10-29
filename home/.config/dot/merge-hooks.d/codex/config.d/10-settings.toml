@@ -16,6 +16,8 @@ terminal_resize_reflow = true
 
 
 [tui]
+# AgentGuard owns attention alerts; Codex's unfocused-tab alert doubles the bell.
+notifications = false
 status_line = [
   "current-dir",
   "git-branch",
