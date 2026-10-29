@@ -565,9 +565,9 @@ TOML
     cat >"$1/timeout" <<'SH'
 #!/usr/bin/env bash
 # Test stand-in for timeout(1): `timeout [-k KILL_AFTER] DURATION CMD...`.
-# Job control gives CMD and the watcher their own process groups, so the
-# deadline signals CMD's whole group, as GNU timeout does, and the watcher
-# (with its sleep) is reaped as a group once CMD finishes first.
+# One supervisor owns CMD and its process group. A shell watchdog can leave
+# sleep grandchildren behind, or race group delivery after wait reaps CMD.
+# Keep the leader unreaped throughout timeout delivery to pin that identity.
 # Identify as coreutils: doctor bounded runners only trust a timeout whose
 # status 124 means the deadline, and this shim keeps that contract.
 if [[ ${1:-} == --version ]]; then
@@ -581,31 +581,67 @@ if [[ ${1:-} == -k ]]; then
 fi
 duration=$1
 shift
-started=$SECONDS
-# Under job control Bash reports a finished or killed job ("[2]+
-# Terminated ...") on its own stderr, which is CMD's stderr as the caller
-# captures it. Only CMD gets the caller's stderr (fd 3); the shim's own goes
-# to /dev/null, as a real timeout(1) adds nothing to CMD's output.
-exec 3>&2 2>/dev/null
-set -m
-"$@" 2>&3 3>&- &
-cmd=$!
-(
-  sleep "$duration"
-  kill -TERM -- "-$cmd" 2>/dev/null || exit 0
-  sleep "$kill_after"
-  kill -KILL -- "-$cmd" 2>/dev/null
-) 3>&- &
-watcher=$!
-status=0
-wait "$cmd" 2>/dev/null || status=$?
-kill -TERM -- "-$watcher" 2>/dev/null
-wait "$watcher" 2>/dev/null
-# A signal death at or past the deadline is the deadline's doing.
-if ((status > 128 && SECONDS - started >= duration)); then
-  exit 124
-fi
-exit "$status"
+exec python3 -c '
+import os
+import signal
+import subprocess
+import sys
+import time
+
+duration, kill_after = map(float, sys.argv[1:3])
+pending = 0
+
+def cancel(requested, _frame):
+    """Record cancellation; only the owner loop may act on the child."""
+    global pending
+    if not pending:
+        pending = requested
+
+for requested in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+    signal.signal(requested, cancel)
+if pending:
+    sys.exit(128 + pending)
+child = subprocess.Popen(sys.argv[3:], start_new_session=True)
+deadline = time.monotonic() + duration
+while not pending and time.monotonic() < deadline:
+    try:
+        status = child.wait(timeout=min(0.02, max(0, deadline - time.monotonic())))
+    except subprocess.TimeoutExpired:
+        pass
+    else:
+        # A completed wait reaps the leader. Even a concurrent cancellation
+        # must not send another group signal after this ownership boundary.
+        sys.exit(status if status >= 0 else 128 - status)
+# Do not wait during grace: an early reap could recycle the group identity
+# before KILL. A retained exited leader still pins the original group.
+try:
+    os.killpg(child.pid, signal.SIGTERM)
+except ProcessLookupError:
+    pass
+except PermissionError:
+    if sys.platform != "darwin":
+        raise
+    # Darwin reports EPERM for a zombie-only group. Do not reap or skip KILL:
+    # the final delivery and bounded exit proof below resolve that refusal.
+# External cancellation must finish inside the outer cleanup grace, rather
+# than spending that entire budget before delivering KILL to the command group.
+time.sleep(min(kill_after, 0.05) if pending else kill_after)
+kill_refused = False
+try:
+    os.killpg(child.pid, signal.SIGKILL)
+except ProcessLookupError:
+    pass
+except PermissionError:
+    if sys.platform != "darwin":
+        raise
+    kill_refused = True
+# These private probe commands run as this UID and never execute setuid code.
+# With no signal-eligible live member, Darwin can refuse a zombie-only group.
+# Accept that final refusal only if the retained leader demonstrably exits;
+# failure to obtain that proof remains an error. No signals follow this reap.
+child.wait(timeout=1 if kill_refused else None)
+sys.exit(128 + pending if pending else 124)
+' "$duration" "$kill_after" "$@"
 SH
     chmod +x "$1/timeout"
   }
@@ -1532,6 +1568,127 @@ SH
     $'fail\tagent stop hook failed\tno answer within 1s' "$result"
   _assert_eq 'Agent hook probes return within their deadline' yes \
     "$( ((SECONDS - started < 10)) && printf yes || printf no)"
+
+  # Model a watchdog sleep that is descheduled during cancellation. Waiting
+  # for its shell parent does not join that grandchild. The private release
+  # file and hard deadline let this regression clean up cooperatively without
+  # signaling a PID whose original parent may already have reaped it.
+  local watchdog_root watchdog_bin watchdog_status
+  watchdog_root=$(_tmpdir)
+  watchdog_bin=$watchdog_root/bin
+  mkdir -p "$watchdog_bin"
+  _timeout_shim "$watchdog_bin"
+  cat >"$watchdog_bin/sleep" <<'PY'
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import signal
+import time
+
+root = Path(os.environ["DOCTOR_WATCHDOG_PROBE"])
+signal.signal(signal.SIGTERM, lambda *_: None)
+(root / "ready").write_text(json.dumps({"pid": os.getpid(), "ppid": os.getppid(), "pgid": os.getpgrp()}))
+deadline = time.monotonic() + 5
+while not (root / "release").exists() and time.monotonic() < deadline:
+    time.sleep(0.01)
+(root / "done").touch()
+PY
+  chmod +x "$watchdog_bin/sleep"
+  watchdog_status=0
+  DOCTOR_WATCHDOG_PROBE="$watchdog_root" PATH="$watchdog_bin:$PATH" \
+    "$watchdog_bin/timeout" 10 python3 -c '
+from pathlib import Path
+import sys
+import time
+ready = Path(sys.argv[1]) / "ready"
+deadline = time.monotonic() + 0.25
+while not ready.exists() and time.monotonic() < deadline:
+    time.sleep(0.005)
+' "$watchdog_root" || watchdog_status=$?
+  _assert_eq 'Timeout fixture preserves a normally completed command' 0 "$watchdog_status"
+  if [[ ! -f $watchdog_root/ready || -f $watchdog_root/done ]]; then
+    _pass 'Timeout fixture joins its complete watchdog before returning'
+  else
+    _fail "Timeout fixture leaves a live watchdog grandchild: $(<"$watchdog_root/ready")"
+    # Diagnostics contain process identity only, never command arguments or
+    # environment. Observing a PID here confers no authority to signal it.
+    python3 - "$watchdog_root/ready" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+identity = json.loads(Path(sys.argv[1]).read_text())
+subprocess.run(["ps", "-p", str(identity["pid"]), "-o", "pid=,ppid=,pgid=,stat=,comm="], check=False)
+PY
+  fi
+  : >"$watchdog_root/release"
+  # A delayed child owns the completion marker; wait for that observable
+  # condition before removing its private directory or ending the suite.
+  python3 - "$watchdog_root" <<'PY'
+from pathlib import Path
+import sys
+import time
+root = Path(sys.argv[1])
+deadline = time.monotonic() + 6
+while (root / "ready").exists() and not (root / "done").exists():
+    if time.monotonic() >= deadline:
+        raise RuntimeError("watchdog did not acknowledge cooperative release")
+    time.sleep(0.01)
+PY
+
+  # Cancellation must not kill the supervisor while leaving CMD's separate
+  # group alive. A private release file bounds cleanup even when testing the
+  # broken supervisor; the driver signals only its retained direct child.
+  local watchdog_signal
+  for watchdog_signal in HUP INT TERM; do
+    watchdog_status=0
+    python3 - "$watchdog_bin/timeout" "$watchdog_signal" "$watchdog_root" <<'PY' || watchdog_status=$?
+from pathlib import Path
+import selectors
+import signal
+import subprocess
+import sys
+import time
+
+shim, name, directory = sys.argv[1:]
+release = Path(directory) / ("release-" + name)
+command = """
+from pathlib import Path
+import sys
+import time
+release = Path(sys.argv[1])
+print("ready", flush=True)
+deadline = time.monotonic() + 10
+while not release.exists() and time.monotonic() < deadline:
+    time.sleep(0.01)
+"""
+child = subprocess.Popen([shim, "30", sys.executable, "-c", command, str(release)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+try:
+    with selectors.DefaultSelector() as poll:
+        poll.register(child.stdout, selectors.EVENT_READ)
+        if not poll.select(5) or child.stdout.readline() != b"ready\n":
+            raise RuntimeError("timeout fixture command did not become ready")
+    requested = getattr(signal, "SIG" + name)
+    cancelled = time.monotonic()
+    child.send_signal(requested)
+    child.communicate(timeout=3)
+    if child.returncode != 128 + requested:
+        raise RuntimeError(f"cancellation returned {child.returncode}, expected {128 + requested}")
+    if time.monotonic() - cancelled >= 0.75:
+        raise RuntimeError("fixture cancellation consumed Dot's one-second cleanup grace")
+finally:
+    release.touch()
+    try:
+        child.communicate(timeout=4)
+    except subprocess.TimeoutExpired:
+        # The only signaled process remains our unreaped direct child.
+        child.terminate()
+        child.communicate(timeout=4)
+PY
+    _assert_eq "Timeout fixture joins its command on $watchdog_signal" 0 "$watchdog_status"
+  done
 
   # Agent tooling is one section: AgentGuard, Grok, Hive Memory, and the
   # agent config folders handed to base's leftover-temporary check. The
