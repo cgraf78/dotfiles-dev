@@ -12,6 +12,8 @@
 .config/dot/merge-hooks.d/iterm2/profiles.d/*.json	iTerm2 dynamic profiles have no public schema.
 .config/dot/merge-hooks.d/karabiner/profiles.d/*.json	Karabiner-Elements publishes no official schema.
 .config/dot/merge-hooks.d/grok-config/*.toml	Grok publishes no config schema.
+.config/dot/merge-hooks.d/terminal/profile.json	Repository-owned Terminal profile source; validated by terminal-font tests and the plist renderer.
+.config/wezterm/appearance.json	Repository-owned shared appearance model; validated by terminal-font tests and WezTerm's native config types.
 .config/hive-memory/*.toml	Hive Memory publishes no config schema yet.
 .config/nvim/lazyvim.json	LazyVim writes this state file itself.
 selene.toml	Selene publishes no config schema.
