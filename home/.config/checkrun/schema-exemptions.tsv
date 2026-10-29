@@ -10,6 +10,8 @@
 # pattern	reason
 .config/atuin/config.toml	Atuin publishes no config schema.
 .config/dot/merge-hooks.d/iterm2/profiles.d/*.json	iTerm2 dynamic profiles have no public schema.
+.config/dot/merge-hooks.d/terminal/profile.json	macOS Terminal profile policy has no public schema; native profile tests validate it.
+.config/terminal/settings.json	Shared terminal settings are dotfiles-owned data, validated by the three terminal adapters and their tests.
 .config/dot/merge-hooks.d/karabiner/profiles.d/*.json	Karabiner-Elements publishes no official schema.
 .config/dot/merge-hooks.d/grok-config/*.toml	Grok publishes no config schema.
 .config/dot/merge-hooks.d/terminal/profile.json	Repository-owned Terminal profile source; validated by terminal-font tests and the plist renderer.
