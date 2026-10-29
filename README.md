@@ -30,6 +30,17 @@ Maintainer and agent notes (ownership rules, tests, CI) are in
 
 ## Repository maintenance
 
+Interactive local `codex` shell invocations use the public `--no-daemon` mode
+so lifecycle hooks remain attached to the foreground terminal. This lets
+AgentGuard show trustworthy tmux working/attention indicators; the shared
+backend has no controlling terminal and cannot safely identify a TUI's pane.
+Headless commands, administration, remote frontends and the desktop application
+keep their existing backend selection. The existing approval-mode policy is
+unchanged. This integration requires a Codex version supporting `--no-daemon`
+(validated with 0.165.0). Use `CODEX_USE_SHARED_DAEMON=1 codex` or `command codex`
+to retain the shared backend, including with older binaries; detached hooks
+then deliberately omit pane marks rather than claiming an unrelated terminal.
+
 Run both public-boundary scans with this repository's allowlist:
 
 ```bash

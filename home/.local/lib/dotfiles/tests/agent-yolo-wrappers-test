@@ -137,4 +137,83 @@ _assert_wrapper_argv "codex preserves quoted prompts" \
   "[--dangerously-bypass-approvals-and-sandbox][fix the tests]" \
   codex "fix the tests"
 
+# A real pseudo tty exercises the interactive boundary; replacing test -t with
+# a test-only override would fail to catch a headless regression in the wrapper.
+_probe_wrapper_tty() {
+  local shell_bin
+  shell_bin=$(command -v "$1")
+  shift
+  python3 - "$shell_bin" "$aliases_file" "$mock_bin:$DOT_TEST_SYSTEM_PATH" "$@" <<'PY'
+import os
+import selectors
+import subprocess
+import sys
+
+shell, aliases, lookup, shared, *args = sys.argv[1:]
+master, slave = os.openpty()
+try:
+    env = {"PATH": lookup, "HOME": os.environ["HOME"], "CODEX_USE_SHARED_DAEMON": shared}
+    opts = ["-f"] if os.path.basename(shell) == "zsh" else ["--norc", "--noprofile"]
+    command = [shell, *opts, "-c", 'source "$1"; shift; codex "$@"', "_", aliases, *args]
+    completed = subprocess.run(command, stdin=slave, stdout=slave, stderr=subprocess.PIPE,
+                               env=env, timeout=5)
+    if completed.returncode:
+        raise RuntimeError(completed.stderr.decode())
+    os.set_blocking(master, False)
+    with selectors.DefaultSelector() as poll:
+        poll.register(master, selectors.EVENT_READ)
+        data = os.read(master, 65536) if poll.select(1) else b""
+    print(data.decode().strip())
+finally:
+    os.close(slave)
+    os.close(master)
+PY
+}
+
+for shell in bash zsh; do
+  command -v "$shell" >/dev/null 2>&1 || continue
+  _assert_eq "Codex interactive TUI owns its lifecycle terminal ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][fix the tests]' \
+    "$(_probe_wrapper_tty "$shell" '' 'fix the tests')"
+  _assert_eq "Codex interactive resume retains terminal ownership ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][resume][thread-a]' \
+    "$(_probe_wrapper_tty "$shell" '' resume thread-a)"
+  _assert_eq "Codex shared daemon is an explicit caller override ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][fix the tests]' \
+    "$(_probe_wrapper_tty "$shell" 1 'fix the tests')"
+  _assert_eq "Codex interactive exec preserves headless mode ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][exec][do work]' \
+    "$(_probe_wrapper_tty "$shell" '' exec 'do work')"
+  _assert_eq "Codex remote frontend preserves its server choice ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--remote][unix:///test.sock]' \
+    "$(_probe_wrapper_tty "$shell" '' --remote unix:///test.sock)"
+  _assert_eq "Codex root flags before exec preserve headless mode ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][-c][model=probe][exec][do work]' \
+    "$(_probe_wrapper_tty "$shell" '' -c model=probe exec 'do work')"
+  _assert_eq "Codex profile value may match a subcommand ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][-p][review]' \
+    "$(_probe_wrapper_tty "$shell" '' -p review)"
+  _assert_eq "Codex directory value may match a subcommand ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][-C][app]' \
+    "$(_probe_wrapper_tty "$shell" '' -C app)"
+  _assert_eq "Codex attached option values retain interactive dispatch ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][--profile=review][-Capp]' \
+    "$(_probe_wrapper_tty "$shell" '' --profile=review -Capp)"
+  _assert_eq "Codex root option value before exec preserves headless dispatch ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][-p][review][exec][do work]' \
+    "$(_probe_wrapper_tty "$shell" '' -p review exec 'do work')"
+  _assert_eq "Codex resume session name may match a subcommand ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][resume][review]' \
+    "$(_probe_wrapper_tty "$shell" '' resume review)"
+  _assert_eq "Codex explicit prompt separator preserves literal words ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][--no-daemon][--][review]' \
+    "$(_probe_wrapper_tty "$shell" '' -- review)"
+  _assert_eq "Codex remote option after resume preserves explicit backend ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][resume][review][--remote=unix:///test.sock]' \
+    "$(_probe_wrapper_tty "$shell" '' resume review --remote=unix:///test.sock)"
+  _assert_eq "Codex apply alias remains administrative ($shell)" \
+    '[--dangerously-bypass-approvals-and-sandbox][a][task-id]' \
+    "$(_probe_wrapper_tty "$shell" '' a task-id)"
+done
+
 _test_summary
