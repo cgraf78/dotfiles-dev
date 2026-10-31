@@ -59,4 +59,29 @@ check_spelling 'short time remains checked' "$fragment_findings" "20261018-15242
 check_spelling 'long date remains checked' "$fragment_findings" "202610180-152429-$short_hash"
 check_spelling 'long time remains checked' "$fragment_findings" "20261018-1524290-$short_hash"
 
+# Lint reads the installed fallback, not this checkout's, so encode the command
+# name too: the suite must pass lint on the commit that adds the entry.
+nfs_command=$(printf '\145\170\160\157\162\164\146\163')
+capitalized_command=$(printf '\105')${nfs_command#?}
+uppercase_command=$(printf '%s' "$nfs_command" | tr '[:lower:]' '[:upper:]')
+
+# An identifier-level entry would pass the first two cases and fail the
+# case-variant and compound ones, which only a word-level entry covers.
+check_spelling 'command in prose' '[]' "Run $nfs_command on the server."
+check_spelling 'command in code span' '[]' "\`$nfs_command -ra\`"
+check_spelling 'capitalized command' '[]' "$capitalized_command reloads the table."
+check_spelling 'kernel option' '[]' "CONFIG_$uppercase_command"
+check_spelling 'compound identifier' '[]' "${nfs_command}_fh"
+check_spelling 'typo beside command remains checked' "$word_findings" "$nfs_command $misspelling"
+check_spelling 'typo in code span remains checked' "$word_findings" "\`$misspelling\`"
+
+# `check_spelling` disables file-name checks, which a word entry also covers.
+status=0
+: >"$work/$nfs_command-notes.md"
+HOME="$work/home" XDG_CONFIG_HOME="$work/config" \
+  XDG_DATA_HOME="$work/data" XDG_STATE_HOME="$work/state" \
+  XDG_CACHE_HOME="$work/cache" "$typos_bin" --isolated --config "$config" \
+  --format json "$work/$nfs_command-notes.md" >/dev/null || status=$?
+_assert_eq 'command in file name: status' 0 "$status"
+
 _test_summary
