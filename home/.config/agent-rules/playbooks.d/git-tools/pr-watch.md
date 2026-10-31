@@ -17,15 +17,22 @@ names that wrapper first; it says how to run this watcher, if at all.
   (or a worktree of the clone) you pushed from, it waits out GitHub catching
   up with that push. After pushing from elsewhere, or to a fork, check that
   each `pr=` line's `head=` is the commit you pushed.
+- Run the watcher alone: no pipe (`| tail`), no command after it (`; echo
+  $?`, `|| true`). The completion notice carries the watcher's exit status
+  only when it is the whole command, and a `tail` can cut the report. Its
+  final line, `result: <status> reason=<word> prs=<list>`, restates the
+  outcome.
 - Act on its exit status:
   - `0`: every pull request is done: checks green, or merged once auto-merge
     is on. Read each `pr=` line's `reason`: `review-required` or
     `changes-requested` means green checks still waiting on review.
   - `1`: one needs action, and the whole watch ends. `check` lines name
     failing checks and each `run:` line is a command that prints a failed
-    job's log; a conflict, a closed pull request, falling behind, or
-    auto-merge turned off is reported the same way. Fix, push, and watch
-    again.
+    job's full log, also while the rest of its workflow run is still going.
+    Read the log before deciding a failure is a flake; rerun a job only when
+    the log shows an infrastructure flake. A conflict, a closed pull
+    request, falling behind, or auto-merge turned off is reported the same
+    way. Fix, push, and watch again.
   - `8`: still pending at its time cap, or stalled. Each `action:` line names
     what a stalled pull request waits on (a review, a maintainer's approval, a
     check that never reported); report that instead of restarting the watch.

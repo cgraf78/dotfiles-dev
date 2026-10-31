@@ -8,6 +8,16 @@ stacked landings exactly before it deletes a branch or removes a worktree. It
 is this host's tooling for the base playbook's "remove the completed worktree
 with its merged branch" step.
 
+- Land only when the requested work includes landing, and only after
+  `git pr-watch` (git-tools/pr-watch.md) reported the pull request's current
+  head done. `git pr-land` checks readiness again and refuses a pull request
+  that is not ready; do not merge around it with `gh pr merge`. Run it alone,
+  not piped to `tail` or followed by other commands, so its exit status is
+  the result you act on.
+- After it merges, `git pr-land` publishes the merged result the watch hook
+  reads (through a one-shot `git pr-watch`), so no further watcher is needed.
+  If it prints `next: git pr-watch <pr>`, the record could not be published;
+  run that command once.
 - From the main checkout, or any checkout other than the pull request's own
   worktree, `git pr-land` lands the pull request, then deletes the local head
   when every local commit is in what landed, removing its clean linked
