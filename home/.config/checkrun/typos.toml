@@ -19,6 +19,12 @@ extend-ignore-re = [
   '\bSHA256:[A-Za-z0-9+/_-]{43}(?:[^A-Za-z0-9+/=_-]|$)',
 ]
 
+[default.extend-words]
+# Linux NFS export command, a corrections-dictionary entry for `exports`.
+# Word level, unlike the table below, so `CONFIG_EXPORTFS`, `exportfs_fh`, and
+# file names such as `exportfs-notes.md` stay covered.
+exportfs = "exportfs"
+
 [default.extend-identifiers]
 # Makefile extension used by Checkrun filetype metadata.
 mak = "mak"
