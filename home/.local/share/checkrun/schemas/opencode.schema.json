@@ -2142,7 +2142,17 @@
           "type": "string"
         },
         "interval": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "auto"
+              ]
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "duration": {
           "type": "string"
