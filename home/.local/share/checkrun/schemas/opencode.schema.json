@@ -2271,11 +2271,43 @@
       "type": "string",
       "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?(?:ms|s|m|h|d)$"
     },
+    "Provider.CacheWarming": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "interval": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "auto"
+                  ]
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "duration": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "Provider.Cache": {
       "type": "object",
       "properties": {
         "ttl": {
           "$ref": "#/$defs/Provider.CacheTTL"
+        },
+        "warming": {
+          "$ref": "#/$defs/Provider.CacheWarming"
         }
       },
       "additionalProperties": false
