@@ -34,8 +34,8 @@ Options:
       --color <mode>    Color auto (default), always, or never. NO_COLOR disables
                         color; porcelain output is always plain.
       --porcelain       Print stable key=value summary fields followed by
-                        tab-separated repo, credit, sched, stale, pr, and
-                        truncated records.
+                        tab-separated repo, credit, sched, stale, schederror,
+                        pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
                         Checks that have not registered yet read as none.
   -i, --interval <sec>  Poll interval for --watch (default: 30).
@@ -43,8 +43,9 @@ Options:
   -h, --help            Show this help.
 
 A default-branch head without checks of its own, such as a squash merge made
-with GITHUB_TOKEN, takes the result of the merged pull request that produced
-it when that pull request's head has the same tree.
+with GITHUB_TOKEN, takes the result of the pull request whose merge commit it
+is, when that pull request merged into the default branch and its head has
+the same tree.
 
 Repositories without a current CI result report "none" and never fail the run. Scheduled runs
 older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
@@ -470,8 +471,11 @@ _head_own() {
 #   that commit (push) or that commit merged with the base of the moment
 #   (pull_request); both equal the merged tree only when the head already
 #   contained the base. An out-of-date head squashed onto newer base commits
-#   is content CI never saw, and its tree differs, so it is not credited;
-# - that commit has a rollup, so there is a result to credit.
+#   is content CI never saw, and its tree differs, so it is not credited.
+#   That commit must also be the pull request's final head;
+# - that commit has a rollup other than EXPECTED, so there is a result to
+#   credit. EXPECTED means a required check never reported, which on a merged
+#   pull request it never will, so crediting it would stay pending forever.
 # The merger's identity is not checked: these rules hold for anyone's merge.
 # associatedPullRequests names the merged pull request that introduced a
 # default-branch commit. Folding it into the owner-wide query pushed a
@@ -491,9 +495,10 @@ query($owner: String!, $repo: String!, $oid: GitObjectID!) {
             number
             merged
             baseRefName
+            headRefOid
             mergeCommit { oid }
             commits(last: 1) {
-              nodes { commit { tree { oid } statusCheckRollup { state } } }
+              nodes { commit { oid tree { oid } statusCheckRollup { state } } }
             }
           }
         }
@@ -511,19 +516,22 @@ def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
      | select(.merged == true
               and .baseRefName == $r.defaultBranchRef.name
               and .mergeCommit.oid == $c.oid
+              and $h.oid == .headRefOid
               and $h.tree.oid == $c.tree.oid
-              and $h.statusCheckRollup.state != null)
+              and $h.statusCheckRollup.state != null
+              and $h.statusCheckRollup.state != "EXPECTED")
      | [.number, $h.statusCheckRollup.state]] | first // empty | rec
   end'
 
 # Succeed when head state $1 with reason $2 may take a merged pull request's
-# result: the head lookup completed and found no result of the head's own.
-# The head's own required checks always win, and a failed lookup cannot rule
-# them out.
+# result: the head lookup completed and found that CI exists (required checks
+# or active workflows) but left no result of the head's own. The head's own
+# required checks always win, and a failed lookup cannot rule them out. A
+# repository without active workflows has no CI of its own to stand in for.
 _creditable() {
   [[ $1 == none ]] || return 1
   case $2 in
-    no-head-required | no-required-config | no-workflows) return 0 ;;
+    no-head-required | no-required-config) return 0 ;;
   esac
   return 1
 }
@@ -545,10 +553,11 @@ _head_credit() {
 }
 
 # Append the head record for repository $1's branch $2 at commit $3, which
-# has $4 active workflows, to file $5: kind, repo, state, reason, and detail.
-# Detail is the credited pull request's number for via-pr, or credit-error
-# when the head kept its own reason only because the credit lookup failed;
-# that is a transient failure --watch must not let replace a pending result.
+# has $4 active workflows, to file $5: kind, repo, state, reason, detail, and
+# commit. Detail is the credited pull request's number for via-pr, or
+# credit-error when the head kept its own reason only because the credit
+# lookup failed (see _keep_credit). The commit lets --watch tell a record of
+# an earlier head from one of the current head.
 _fetch_head_one() {
   local repo=$1 branch=$2 oid=$3 active=$4 out=$5
   _head_detail=
@@ -556,7 +565,7 @@ _fetch_head_one() {
   if _creditable "$_head_state" "$_head_reason"; then
     _head_credit "$repo" "$oid" || _head_detail=credit-error
   fi
-  printf '%s\n' "head$_sep$repo$_sep$_head_state$_sep$_head_reason$_sep$_head_detail" >>"$out"
+  printf '%s\n' "head$_sep$repo$_sep$_head_state$_sep$_head_reason$_sep$_head_detail$_sep$oid" >>"$out"
 }
 
 # A scheduled result older than this is not the latest run of a live
@@ -652,11 +661,32 @@ _sched_cleanup() {
   _sched_tmp=
 }
 
-# Succeed when a re-read repository's first record, of kind $1 with reason $2
-# and detail $3, shows the re-read failed rather than produced a result.
+# Succeed when a re-read repository's first record, of kind $1 with reason
+# $2, shows the re-read failed rather than produced a result.
 _reread_failed() {
   [[ $1 == schederror ]] && return 0
-  [[ $1 == head && ($2 == lookup-error || $3 == credit-error) ]]
+  [[ $1 == head && $2 == lookup-error ]]
+}
+
+# Print re-read records $3 of repository $1, whose head at commit $2 got no
+# credit only because the credit lookup failed, with the head record swapped
+# for the previous credited record of the same commit if there is one. A
+# transient failure must not turn a pending credit into "required checks
+# missing" and end --watch early, but the optional credit must not hold back
+# the repository's fresh scheduled runs either.
+_keep_credit() {
+  local want=$1 want_oid=$2 fresh=$3 line kind repo state reason detail oid rest=''
+  while IFS= read -r line; do
+    IFS=$_sep read -r kind repo state reason detail oid <<<"$line"
+    [[ $kind == head && $repo == "$want" ]] || continue
+    if [[ $reason == via-pr && $oid == "$want_oid" ]]; then
+      [[ $fresh != *$'\n'* ]] || rest=$'\n'${fresh#*$'\n'}
+      printf '%s\n' "$line$rest"
+      return
+    fi
+    break
+  done <<<"${_sched_records:-}"
+  printf '%s\n' "$fresh"
 }
 
 # Fetch scheduled runs into _sched_records. With no arguments, every listed
@@ -668,6 +698,7 @@ _reread_failed() {
 # stays well under GitHub's limit on concurrent requests.
 _fetch_scheduled() {
   local line kind repo branch oid rollup i j running=0 merged='' name state reason detail
+  local fresh
   local -a repos=() branches=() oids=() rollups=()
   ((_scheduled == 1)) || return 0
   while IFS= read -r line; do
@@ -706,18 +737,22 @@ _fetch_scheduled() {
       IFS=$_sep read -r kind repo _ <<<"$line"
       for ((j = 0; j < ${#repos[@]}; j++)); do
         [[ ${repos[$j]} == "$repo" ]] || continue
-        IFS=$_sep read -r name _ state reason detail <"$_sched_tmp/$j" 2>/dev/null || name=
-        # A transient head or credit lookup error must not replace a pending
-        # head record and make --watch stop before the check settles.
-        _reread_failed "$name" "$reason" "$detail" || continue 2
+        IFS=$_sep read -r name _ state reason _ <"$_sched_tmp/$j" 2>/dev/null || name=
+        # A transient head lookup error must not replace a pending head
+        # record and make --watch stop before the check settles.
+        _reread_failed "$name" "$reason" || continue 2
       done
       merged+="$line"$'\n'
     done <<<"$_sched_records"
     for ((j = 0; j < ${#repos[@]}; j++)); do
-      IFS=$_sep read -r name _ state reason detail <"$_sched_tmp/$j" 2>/dev/null || name=
+      IFS=$_sep read -r name _ state reason detail oid <"$_sched_tmp/$j" 2>/dev/null || name=
       [[ -s $_sched_tmp/$j ]] || continue
-      ! _reread_failed "$name" "$reason" "$detail" || continue
-      merged+="$(<"$_sched_tmp/$j")"$'\n'
+      ! _reread_failed "$name" "$reason" || continue
+      fresh=$(<"$_sched_tmp/$j")
+      if [[ $name == head && $detail == credit-error ]]; then
+        fresh=$(_keep_credit "${repos[$j]}" "$oid" "$fresh")
+      fi
+      merged+="$fresh"$'\n'
     done
     _sched_records=$merged
   fi
@@ -734,24 +769,42 @@ _count() {
   esac
 }
 
-# Read a typed fallback record for repository $1 from the scheduled fetch:
-# state in REPLY, reason in _head_reason, and its detail (the credited pull
-# request's number for via-pr) in _head_detail. REPLY remains none when the
-# optional lookup was skipped or unavailable.
+# Read the typed fallback record for repository $1 at head commit $2 from the
+# scheduled fetch: state in REPLY, reason in _head_reason, and its detail (the
+# credited pull request's number for via-pr) in _head_detail; _head_found is
+# 1 when there is one. REPLY remains none when the optional lookup was
+# skipped or unavailable, or its record describes an earlier head.
 _head_result() {
-  local want=$1 line kind repo state reason detail
+  local want=$1 want_oid=$2 line kind repo state reason detail oid
   REPLY=none
   _head_reason=
   _head_detail=
+  _head_found=0
   while IFS= read -r line; do
     [[ -n $line ]] || continue
-    IFS=$_sep read -r kind repo state reason detail <<<"$line"
-    [[ $kind == head && $repo == "$want" ]] || continue
+    IFS=$_sep read -r kind repo state reason detail oid <<<"$line"
+    [[ $kind == head && $repo == "$want" && $oid == "$want_oid" ]] || continue
     REPLY=$state
     _head_reason=$reason
     _head_detail=$detail
+    _head_found=1
     return
   done <<<"${_sched_records:-}"
+}
+
+# Print the repositories whose head needs a fresh fallback lookup during
+# --watch: a null rollup with no head record for the current commit, as when
+# a merge lands mid-watch. Otherwise a settled repository is never re-read and
+# keeps showing the result, or credited pull request, of its previous head.
+_stale_heads() {
+  local line kind repo branch oid rollup
+  ((_scheduled == 1)) || return 0
+  while IFS= read -r line; do
+    IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
+    [[ $kind == repo && -n $branch && -z $rollup ]] || continue
+    _head_result "$repo" "$oid"
+    ((_head_found == 1)) || printf '%s ' "$repo"
+  done <<<"$_records"
 }
 
 # Track repositories whose REST result must be re-read during --watch. Both
@@ -794,7 +847,7 @@ _summarize() {
         reason=
         via=
         if [[ -z $rollup && -n $branch && $_scheduled == 1 ]]; then
-          _head_result "$repo"
+          _head_result "$repo" "$oid"
           reason=$_head_reason
           [[ $reason != via-pr ]] || via=$_head_detail
           if [[ $REPLY == pending ]]; then _mark_pending_repo "$repo"; fi
@@ -831,7 +884,7 @@ _summarize_scheduled() {
   while IFS= read -r line; do
     [[ -n $line ]] || continue
     IFS=$_sep read -r kind repo name raw created url <<<"$line"
-    [[ $repo == "$want" ]] || continue
+    [[ $repo == "$want" && $kind != head ]] || continue
     if [[ $kind == schederror ]]; then
       _sched_errors=$((_sched_errors + 1))
       _rows+=("schederror${_sep}none$_sep$repo")
@@ -1053,10 +1106,12 @@ if ((_watch == 1)); then
     sleep "$((10#$_interval))"
     if _fetch; then
       # Re-read only repositories with a pending scheduled run or recovered
-      # required check; the GraphQL query refreshes the remaining branches.
-      if [[ -n $_pending_repos ]]; then
+      # required check, or whose head moved; the GraphQL query refreshes the
+      # remaining branches.
+      _stale=$(_stale_heads)
+      if [[ -n $_pending_repos || -n $_stale ]]; then
         # shellcheck disable=SC2086 # Repository names contain no spaces.
-        _fetch_scheduled $_pending_repos ||
+        _fetch_scheduled $_pending_repos $_stale ||
           _die "could not create a temporary directory"
       fi
       _summarize

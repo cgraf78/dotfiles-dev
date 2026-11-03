@@ -29,18 +29,19 @@ on that commit. It reports a pass only when each required context has a passing
 result from the configured GitHub App; unrelated checks cannot make the branch
 green. A protected branch with unavailable required-check metadata stays
 unknown. The same row distinguishes no active workflows from missing required
-checks. A head with no result of its own, such as the squash merge an
-automation's `GITHUB_TOKEN` auto-merge makes (GitHub starts no workflows for
-it), takes the rollup of the pull request it came from, shown as
-`main@6dd54ca (via PR #193)` and in porcelain as a `credit` record after the
-repository record. That requires the pull request to be merged into the
-default branch with the head as its merge commit, and its head commit to have
-the same tree, so its CI tested exactly the merged content. The lookup is one
-small GraphQL query per such head; if it fails, the head keeps its own
-result. `--no-scheduled` retains the faster rollup-only view. Repositories
-without a current CI result report `none` and never fail the run. Each
-repository's oldest 30 open pull requests are checked, and a longer queue
-prints a warning.
+checks. A head that has CI configured but no result of its own, such as the
+squash merge an automation's `GITHUB_TOKEN` auto-merge makes (GitHub starts
+no workflows for it), takes the rollup of the pull request it came from,
+shown as `main@6dd54ca (via PR #193)` and in porcelain as a `credit` record
+after the repository record. That requires the pull request to be merged into
+the default branch with the head as its merge commit, and its final head
+commit to have the same tree, so its CI tested exactly the merged content. An
+`EXPECTED` rollup, a required check that never reported, is not credited. The
+lookup is one small GraphQL query per such head; if it fails, the head keeps
+its own result. `--no-scheduled` retains the faster rollup-only view.
+Repositories without a current CI result report `none` and never fail the
+run. Each repository's oldest 30 open pull requests are checked, and a longer
+queue prints a warning.
 
 Scheduled runs catch nightly failures that a later push would otherwise hide,
 since a push moves the default branch past the commit the nightly ran on.
