@@ -34,13 +34,18 @@ Options:
       --color <mode>    Color auto (default), always, or never. NO_COLOR disables
                         color; porcelain output is always plain.
       --porcelain       Print stable key=value summary fields followed by
-                        tab-separated repo, sched, stale, pr, and truncated
-                        records.
+                        tab-separated repo, credit, sched, stale, schederror,
+                        pr, and truncated records.
   -w, --watch           Poll until nothing is pending, then summarize.
                         Checks that have not registered yet read as none.
   -i, --interval <sec>  Poll interval for --watch (default: 30).
   -t, --timeout <sec>   Give up watching after this long (default: 1800).
   -h, --help            Show this help.
+
+A default-branch head that has CI but no checks of its own, such as a squash
+merge made with GITHUB_TOKEN, takes the result of the pull request whose
+merge commit it is, when that pull request merged into the default branch
+and its final head has the same tree and a result other than EXPECTED.
 
 Repositories without a current CI result report "none" and never fail the run. Scheduled runs
 older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
@@ -359,16 +364,17 @@ _head_worst() {
   fi
 }
 
-# Append the best supported state for a commit whose GraphQL rollup is null.
-# Lookup failures stay visible as unknown; missing required contexts never
-# become a pass merely because another check run succeeded.
-_fetch_head_one() {
-  local repo=$1 branch=$2 oid=$3 active=$4 out=$5 required checks statuses
+# Set _head_state and _head_reason to the best supported state of the head's
+# own checks for a commit whose GraphQL rollup is null. Lookup failures stay
+# visible as unknown; missing required contexts never become a pass merely
+# because another check run succeeded.
+_head_own() {
+  local repo=$1 branch=$2 oid=$3 active=$4 required checks statuses
   local requirement check commit_status kind context app name check_app conclusion status
   local protected='' count=0 found overall=pass
   if ! required=$(gh api -X GET "repos/$_owner/$repo/branches/$branch" \
     --jq "$_required_jq" 2>/dev/null); then
-    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    _head_state=none _head_reason=lookup-error
     return
   fi
   while IFS= read -r requirement; do
@@ -381,34 +387,34 @@ _fetch_head_one() {
       # A contexts-only response omits the pinned App identity. Do not
       # accept a same-name check from an arbitrary App as proof of success.
       if [[ $app == -2 ]]; then
-        printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+        _head_state=none _head_reason=lookup-error
         return
       fi
     fi
   done <<<"$required"
   if [[ $protected != true && $protected != false ]]; then
-    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    _head_state=none _head_reason=lookup-error
     return
   fi
   if ((count == 0)); then
     if [[ $protected == true ]]; then
       # An active ruleset can protect a branch without classic check data.
-      printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+      _head_state=none _head_reason=lookup-error
     elif ((active == 0)); then
-      printf 'head%s%s%snone%sno-workflows\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+      _head_state=none _head_reason=no-workflows
     else
-      printf 'head%s%s%snone%sno-required-config\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+      _head_state=none _head_reason=no-required-config
     fi
     return
   fi
   if ! checks=$(gh api -X GET --paginate "repos/$_owner/$repo/commits/$oid/check-runs" \
     -f filter=latest -F per_page=100 --jq "$_head_checks_jq" 2>/dev/null); then
-    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    _head_state=none _head_reason=lookup-error
     return
   fi
   if ! statuses=$(gh api -X GET --paginate "repos/$_owner/$repo/commits/$oid/statuses" \
     -F per_page=100 --jq "$_head_statuses_jq" 2>/dev/null); then
-    printf 'head%s%s%snone%slookup-error\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    _head_state=none _head_reason=lookup-error
     return
   fi
   while IFS= read -r requirement; do
@@ -448,11 +454,118 @@ _fetch_head_one() {
     fi
   done <<<"$required"
   if [[ $overall == none ]]; then
-    printf 'head%s%s%snone%sno-head-required\n' "$_sep" "$repo" "$_sep" "$_sep" >>"$out"
+    _head_state=none _head_reason=no-head-required
   else
-    printf 'head%s%s%s%s%srequired-checks\n' \
-      "$_sep" "$repo" "$_sep" "$overall" "$_sep" >>"$out"
+    _head_state=$overall _head_reason=required-checks
   fi
+}
+
+# GitHub starts no workflows for commits pushed with GITHUB_TOKEN, so a squash
+# merge made by an automation's native auto-merge never gets checks of its
+# own, although its pull request's CI already ran on the same content. Such a
+# head may take that pull request's rollup, provided all of:
+# - the pull request merged into the current default branch, and its merge
+#   commit is exactly the head: a pull request that merely contains the
+#   commit, or merged into another branch, proves nothing about this one;
+# - the pull request's head commit has the head's tree. Pull request CI tests
+#   that commit (push) or that commit merged with the base of the moment
+#   (pull_request); both equal the merged tree only when the head already
+#   contained the base. An out-of-date head squashed onto newer base commits
+#   is content CI never saw, and its tree differs, so it is not credited.
+#   That commit must also be the pull request's final head;
+# - that commit has a rollup other than EXPECTED, so there is a result to
+#   credit. EXPECTED means a required check never reported, which on a merged
+#   pull request it never will, so crediting it would stay pending forever.
+# The merger's identity is not checked: these rules hold for anyone's merge.
+# associatedPullRequests names the merged pull request that introduced a
+# default-branch commit. Folding it into the owner-wide query pushed a
+# 50-repository page past GitHub's gateway timeout, so it is a separate
+# one-point query, asked only for heads that have no result of their own.
+# shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+_credit_query='
+query($owner: String!, $repo: String!, $oid: GitObjectID!) {
+  repository(owner: $owner, name: $repo) {
+    defaultBranchRef { name }
+    object(oid: $oid) {
+      ... on Commit {
+        oid
+        tree { oid }
+        associatedPullRequests(first: 2) {
+          nodes {
+            number
+            merged
+            baseRefName
+            headRefOid
+            mergeCommit { oid }
+            commits(last: 1) {
+              nodes { commit { oid tree { oid } statusCheckRollup { state } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}'
+# shellcheck disable=SC2016 # jq variables, not shell expansions.
+_credit_jq='
+def rec: map(tostring | gsub("[[:cntrl:]]"; " ")) | join("\u001f");
+.data.repository as $r | ($r.object // {}) as $c
+| if ($c.oid // "") == "" or ($c.tree.oid // "") == "" then empty else
+    [($c.associatedPullRequests.nodes // [])[]
+     | .commits.nodes[0].commit as $h
+     | select(.merged == true
+              and .baseRefName == $r.defaultBranchRef.name
+              and .mergeCommit.oid == $c.oid
+              and $h.oid == .headRefOid
+              and $h.tree.oid == $c.tree.oid
+              and $h.statusCheckRollup.state != null
+              and $h.statusCheckRollup.state != "EXPECTED")
+     | [.number, $h.statusCheckRollup.state]] | first // empty | rec
+  end'
+
+# Succeed when head state $1 with reason $2 may take a merged pull request's
+# result: the head lookup completed and found that CI exists (required checks
+# or active workflows) but left no result of the head's own. The head's own
+# required checks always win, and a failed lookup cannot rule them out. A
+# repository without active workflows has no CI of its own to stand in for.
+_creditable() {
+  [[ $1 == none ]] || return 1
+  case $2 in
+    no-head-required | no-required-config) return 0 ;;
+  esac
+  return 1
+}
+
+# Credit head $2 of repository $1 with its merged pull request's result: on
+# success set _head_state to that result, _head_reason to via-pr, and
+# _head_detail to the pull request's number. Leave them unchanged when no
+# pull request qualifies, and return 1 when the lookup fails.
+_head_credit() {
+  local repo=$1 oid=$2 line number rollup
+  line=$(gh api graphql -f owner="$_owner" -f repo="$repo" -f oid="$oid" \
+    -f query="$_credit_query" --jq "$_credit_jq" 2>/dev/null) || return 1
+  [[ -n $line ]] || return 0
+  IFS=$_sep read -r number rollup <<<"$line"
+  [[ $number =~ ^[0-9]+$ ]] || return 1
+  _state "$rollup"
+  [[ $REPLY != none ]] || return 0
+  _head_state=$REPLY _head_reason=via-pr _head_detail=$number
+}
+
+# Append the head record for repository $1's branch $2 at commit $3, which
+# has $4 active workflows, to file $5: kind, repo, state, reason, detail, and
+# commit. Detail is the credited pull request's number for via-pr, or
+# credit-error when the head kept its own reason only because the credit
+# lookup failed (see _keep_credit). The commit lets --watch tell a record of
+# an earlier head from one of the current head.
+_fetch_head_one() {
+  local repo=$1 branch=$2 oid=$3 active=$4 out=$5
+  _head_detail=
+  _head_own "$repo" "$branch" "$oid" "$active"
+  if _creditable "$_head_state" "$_head_reason"; then
+    _head_credit "$repo" "$oid" || _head_detail=credit-error
+  fi
+  printf '%s\n' "head$_sep$repo$_sep$_head_state$_sep$_head_reason$_sep$_head_detail$_sep$oid" >>"$out"
 }
 
 # A scheduled result older than this is not the latest run of a live
@@ -548,6 +661,34 @@ _sched_cleanup() {
   _sched_tmp=
 }
 
+# Succeed when a re-read repository's first record, of kind $1 with reason
+# $2, shows the re-read failed rather than produced a result.
+_reread_failed() {
+  [[ $1 == schederror ]] && return 0
+  [[ $1 == head && $2 == lookup-error ]]
+}
+
+# Print re-read records $3 of repository $1, whose head at commit $2 got no
+# credit only because the credit lookup failed, with the head record swapped
+# for the previous credited record of the same commit if there is one. A
+# transient failure must not turn a pending credit into "required checks
+# missing" and end --watch early, but the optional credit must not hold back
+# the repository's fresh scheduled runs either.
+_keep_credit() {
+  local want=$1 want_oid=$2 fresh=$3 line kind repo state reason detail oid rest=''
+  while IFS= read -r line; do
+    IFS=$_sep read -r kind repo state reason detail oid <<<"$line"
+    [[ $kind == head && $repo == "$want" ]] || continue
+    if [[ $reason == via-pr && $oid == "$want_oid" ]]; then
+      [[ $fresh != *$'\n'* ]] || rest=$'\n'${fresh#*$'\n'}
+      printf '%s\n' "$line$rest"
+      return
+    fi
+    break
+  done <<<"${_sched_records:-}"
+  printf '%s\n' "$fresh"
+}
+
 # Fetch scheduled runs into _sched_records. With no arguments, every listed
 # repository that has a default branch is read; with repository names, only
 # those are re-read and merged over their previous records, except that a
@@ -556,7 +697,8 @@ _sched_cleanup() {
 # Queries up to eight repositories at once; with their per-workflow calls that
 # stays well under GitHub's limit on concurrent requests.
 _fetch_scheduled() {
-  local line kind repo branch oid rollup i j running=0 merged='' name state reason
+  local line kind repo branch oid rollup i j running=0 merged='' name state reason detail
+  local fresh
   local -a repos=() branches=() oids=() rollups=()
   ((_scheduled == 1)) || return 0
   while IFS= read -r line; do
@@ -595,17 +737,22 @@ _fetch_scheduled() {
       IFS=$_sep read -r kind repo _ <<<"$line"
       for ((j = 0; j < ${#repos[@]}; j++)); do
         [[ ${repos[$j]} == "$repo" ]] || continue
-        IFS=$_sep read -r name _ state reason <"$_sched_tmp/$j" 2>/dev/null || name=
+        IFS=$_sep read -r name _ state reason _ <"$_sched_tmp/$j" 2>/dev/null || name=
         # A transient head lookup error must not replace a pending head
         # record and make --watch stop before the check settles.
-        [[ $name == schederror || ($name == head && $reason == lookup-error) ]] || continue 2
+        _reread_failed "$name" "$reason" || continue 2
       done
       merged+="$line"$'\n'
     done <<<"$_sched_records"
     for ((j = 0; j < ${#repos[@]}; j++)); do
-      IFS=$_sep read -r name _ state reason <"$_sched_tmp/$j" 2>/dev/null || name=
-      [[ $name != schederror && ! ($name == head && $reason == lookup-error) && -s $_sched_tmp/$j ]] || continue
-      merged+="$(<"$_sched_tmp/$j")"$'\n'
+      IFS=$_sep read -r name _ state reason detail oid <"$_sched_tmp/$j" 2>/dev/null || name=
+      [[ -s $_sched_tmp/$j ]] || continue
+      ! _reread_failed "$name" "$reason" || continue
+      fresh=$(<"$_sched_tmp/$j")
+      if [[ $name == head && $detail == credit-error ]]; then
+        fresh=$(_keep_credit "${repos[$j]}" "$oid" "$fresh")
+      fi
+      merged+="$fresh"$'\n'
     done
     _sched_records=$merged
   fi
@@ -622,20 +769,46 @@ _count() {
   esac
 }
 
-# Read a typed fallback record for repository $1 from the scheduled fetch.
-# REPLY remains none when the optional lookup was skipped or unavailable.
+# Read the typed fallback record for repository $1 at head commit $2 from the
+# scheduled fetch: state in REPLY, reason in _head_reason, and its detail (the
+# credited pull request's number for via-pr) in _head_detail; _head_found is
+# 1 when there is one. REPLY remains none when the optional lookup was
+# skipped or unavailable, or its record describes an earlier head.
 _head_result() {
-  local want=$1 line kind repo state reason
+  local want=$1 want_oid=$2 line kind repo state reason detail oid
   REPLY=none
   _head_reason=
+  _head_detail=
+  _head_found=0
   while IFS= read -r line; do
     [[ -n $line ]] || continue
-    IFS=$_sep read -r kind repo state reason <<<"$line"
-    [[ $kind == head && $repo == "$want" ]] || continue
+    IFS=$_sep read -r kind repo state reason detail oid <<<"$line"
+    [[ $kind == head && $repo == "$want" && $oid == "$want_oid" ]] || continue
     REPLY=$state
     _head_reason=$reason
+    _head_detail=$detail
+    _head_found=1
     return
   done <<<"${_sched_records:-}"
+}
+
+# Print the repositories whose head needs a fresh fallback lookup during
+# --watch: a null rollup with no head record for the current commit, as when
+# a merge lands mid-watch. Otherwise a settled repository is never re-read and
+# keeps showing the result, or credited pull request, of its previous head.
+# An unreadable repository keeps no head record at all; it is re-read only
+# when pending, as before, so a persistent API error does not add calls to
+# every poll.
+_stale_heads() {
+  local line kind repo branch oid rollup
+  ((_scheduled == 1)) || return 0
+  while IFS= read -r line; do
+    IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
+    [[ $kind == repo && -n $branch && -z $rollup ]] || continue
+    [[ $'\n'${_sched_records:-} != *$'\n'"schederror$_sep$repo"$'\n'* ]] || continue
+    _head_result "$repo" "$oid"
+    ((_head_found == 1)) || printf '%s ' "$repo"
+  done <<<"$_records"
 }
 
 # Track repositories whose REST result must be re-read during --watch. Both
@@ -653,7 +826,7 @@ _mark_pending_repo() {
 # query's name order, and each repo's pull requests and truncation notice
 # follow it.
 _summarize() {
-  local line kind repo branch oid rollup number draft auto url title total reason
+  local line kind repo branch oid rollup number draft auto url title total reason via
   _rows=()
   _repos=0
   _prs=0
@@ -676,15 +849,18 @@ _summarize() {
         IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
         _state "$rollup"
         reason=
+        via=
         if [[ -z $rollup && -n $branch && $_scheduled == 1 ]]; then
-          _head_result "$repo"
+          _head_result "$repo" "$oid"
           reason=$_head_reason
+          [[ $reason != via-pr ]] || via=$_head_detail
           if [[ $REPLY == pending ]]; then _mark_pending_repo "$repo"; fi
         fi
         _repos=$((_repos + 1))
         _count "$REPLY"
         ((${#repo} <= _width)) || _width=${#repo}
-        _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid$_sep$reason")
+        _rows+=("repo$_sep$REPLY$_sep$repo$_sep$branch$_sep$oid$_sep$reason$_sep$via")
+        [[ -z $via ]] || _rows+=("credit$_sep$REPLY$_sep$repo$_sep$via")
         _summarize_scheduled "$repo"
         ;;
       pr)
@@ -712,7 +888,7 @@ _summarize_scheduled() {
   while IFS= read -r line; do
     [[ -n $line ]] || continue
     IFS=$_sep read -r kind repo name raw created url <<<"$line"
-    [[ $repo == "$want" ]] || continue
+    [[ $repo == "$want" && $kind != head ]] || continue
     if [[ $kind == schederror ]]; then
       _sched_errors=$((_sched_errors + 1))
       _rows+=("schederror${_sep}none$_sep$repo")
@@ -772,13 +948,14 @@ _repo_has_problem() {
 }
 
 # Succeed when a row of kind $1, state $2, and repository $3 should print.
-# Everything prints by default; --failing keeps problem rows, their repos,
-# and truncation notices.
+# Everything prints by default; --failing keeps problem rows, their repos
+# (with the credit record that explains a repo's state), and truncation
+# notices.
 _visible() {
   local kind=$1 state=$2 repo=$3
   ((_failing == 1)) || return 0
   case $kind in
-    repo) _repo_has_problem "$repo" ;;
+    repo | credit) _repo_has_problem "$repo" ;;
     truncated | schederror) return 0 ;;
     *) _is_problem "$state" ;;
   esac
@@ -786,9 +963,11 @@ _visible() {
 
 # Print stable key=value summary fields, then one tab-separated record per
 # visible row. Fields were stripped of control characters, so tabs only ever
-# separate columns.
+# separate columns. A head credited with a merged pull request's result is
+# followed by `credit<TAB>state<TAB>repo<TAB>number`, so the repo record keeps
+# its columns and consumers that do not know the kind can skip it.
 _print_porcelain() {
-  local row kind state repo
+  local row kind state repo branch oid
   _overall
   printf 'state=%s\nowner=%s\nrepositories=%s\npull_requests=%s\n' \
     "$REPLY" "$_owner" "$_repos" "$_prs"
@@ -798,9 +977,12 @@ _print_porcelain() {
   for row in ${_rows[@]+"${_rows[@]}"}; do
     IFS=$_sep read -r kind state repo _ <<<"$row"
     _visible "$kind" "$state" "$repo" || continue
-    # The reason is an internal display hint; preserve the existing five
-    # columns of the stable repo record for porcelain consumers.
-    if [[ $kind == repo ]]; then row=${row%"$_sep"*}; fi
+    # The reason and credited pull request are display hints; preserve the
+    # existing five columns of the stable repo record for porcelain consumers.
+    if [[ $kind == repo ]]; then
+      IFS=$_sep read -r kind state repo branch oid _ <<<"$row"
+      row=$kind$_sep$state$_sep$repo$_sep$branch$_sep$oid
+    fi
     printf '%s\n' "${row//$_sep/$'\t'}"
   done
 }
@@ -830,7 +1012,7 @@ _badge() {
 # its pull requests indented beneath it (with links for problems), truncation
 # warnings, and a closing count line.
 _print_human() {
-  local row kind state repo branch oid reason number draft auto url title total label
+  local row kind state repo branch oid reason via number draft auto url title total label
   local name raw created
   printf 'owner: %s (%s repositories, %s open pull requests)\n' "$_owner" "$_repos" "$_prs"
   for row in ${_rows[@]+"${_rows[@]}"}; do
@@ -838,8 +1020,9 @@ _print_human() {
     _visible "$kind" "$state" "$repo" || continue
     case $kind in
       repo)
-        IFS=$_sep read -r kind state repo branch oid reason <<<"$row"
+        IFS=$_sep read -r kind state repo branch oid reason via <<<"$row"
         case $reason in
+          via-pr) label="$branch@${oid:0:7} (via PR #$via)" ;;
           no-workflows) label="$branch (no active workflows)" ;;
           no-head-required) label="$branch@${oid:0:7} (required checks missing)" ;;
           no-required-config) label="$branch@${oid:0:7} (no required checks found)" ;;
@@ -854,6 +1037,9 @@ _print_human() {
         esac
         _badge "$state"
         printf ' %-*s  %s\n' "$_width" "$repo" "$label"
+        ;;
+      credit)
+        # Machine record only; the repo line above already names the source.
         ;;
       pr)
         IFS=$_sep read -r kind state repo number draft auto url title <<<"$row"
@@ -924,10 +1110,12 @@ if ((_watch == 1)); then
     sleep "$((10#$_interval))"
     if _fetch; then
       # Re-read only repositories with a pending scheduled run or recovered
-      # required check; the GraphQL query refreshes the remaining branches.
-      if [[ -n $_pending_repos ]]; then
+      # required check, or whose head moved; the GraphQL query refreshes the
+      # remaining branches.
+      _stale=$(_stale_heads)
+      if [[ -n $_pending_repos || -n $_stale ]]; then
         # shellcheck disable=SC2086 # Repository names contain no spaces.
-        _fetch_scheduled $_pending_repos ||
+        _fetch_scheduled $_pending_repos $_stale ||
           _die "could not create a temporary directory"
       fi
       _summarize

@@ -26,6 +26,7 @@ workflows_jq_capture="$fixtures/workflows.jq"
 required_jq_capture="$fixtures/required.jq"
 checks_jq_capture="$fixtures/checks.jq"
 statuses_jq_capture="$fixtures/statuses.jq"
+credit_jq_capture="$fixtures/credit.jq"
 sched_dir="$fixtures/sched"
 mkdir -p "$sched_dir"
 
@@ -40,7 +41,10 @@ mkdir -p "$sched_dir"
 # instead holds a raw GitHub runs listing that the stub pipes through the
 # command's own jq program, as gh does, so run selection is exercised end to
 # end; those cases need jq, and only the .<N>.fail per-call override applies
-# to them.
+# to them. A GraphQL call naming a repository is the merged pull request
+# credit lookup: it serves <repo>.credit (a rendered number/state record;
+# missing means no pull request qualifies), fails on <repo>.credit.fail, and
+# per-call <repo>.credit.<N> and <repo>.credit.<N>.fail override the Nth read.
 cat >"$stub_bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_STUB_LOG"
@@ -131,6 +135,24 @@ fi
 if [[ $1 == api && $2 == user ]]; then
   [[ -z ${GH_STUB_USER_FAIL:-} ]] || exit 1
   printf '%s\n' "${GH_STUB_USER:-stub-user}"
+  exit 0
+fi
+if [[ $1 == api && $2 == graphql && " $* " == *" -f repo="* ]]; then
+  repo=" $* "
+  repo=${repo#* -f repo=}
+  repo=${repo%% *}
+  dir=$GH_STUB_SCHED_DIR
+  jq_program "$@" >"$GH_STUB_CREDIT_JQ_CAPTURE"
+  [[ ! -f $dir/$repo.credit.fail ]] || exit 1
+  counter=$dir/$repo.credit.count
+  count=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
+  printf '%s\n' "$count" >"$counter"
+  [[ ! -f $dir/$repo.credit.$count.fail ]] || exit 1
+  if [[ -f $dir/$repo.credit.$count ]]; then
+    cat "$dir/$repo.credit.$count"
+  else
+    cat "$dir/$repo.credit" 2>/dev/null
+  fi
   exit 0
 fi
 if [[ $1 == api && $2 == graphql ]]; then
@@ -238,6 +260,7 @@ run() {
     GH_STUB_REQUIRED_JQ_CAPTURE=$required_jq_capture \
     GH_STUB_CHECKS_JQ_CAPTURE=$checks_jq_capture \
     GH_STUB_STATUSES_JQ_CAPTURE=$statuses_jq_capture \
+    GH_STUB_CREDIT_JQ_CAPTURE=$credit_jq_capture \
     GH_STUB_SCHED_DIR="${SCHED_DIR:-$sched_dir}" \
     GH_STUB_COUNTER="$fixtures/counter" GH_STUB_RECORDS="${RECORDS:-$records}" \
     PATH="$stub_bin:$PATH" invoke "$command_path" "$@"
@@ -531,6 +554,253 @@ _assert_exit "watch: a failed head re-read keeps the check pending" 8 "$?"
 _assert_contains "watch: pending head lookup retries after an API error" \
   "stopped watching after 2s with checks still pending" "$out"
 rm -f "$watch_head_sched/running.checks.after-first.fail"
+
+echo ""
+echo "=== merged pull request credit ==="
+
+# Print the human summary line of repository $1 from output $2. Fields are
+# split on blanks so the multibyte glyph needs no UTF-8 locale.
+repo_line() {
+  printf '%s\n' "$2" | awk -v repo="$1" '$3 == repo'
+}
+
+credit_records="$fixtures/credit-records"
+credit_sched=$(_tmpdir)
+{
+  _rec repo c-pass main 1111111111111111111111111111111111111111 ''
+  _rec repo c-fail main 2222222222222222222222222222222222222222 ''
+  _rec repo c-pending main 3333333333333333333333333333333333333333 ''
+  _rec repo c-rejected main 5555555555555555555555555555555555555555 ''
+  _rec repo c-error main 6666666666666666666666666666666666666666 ''
+  _rec repo c-malformed main 7777777777777777777777777777777777777777 ''
+  _rec repo c-no-result main 8888888888888888888888888888888888888888 ''
+  _rec repo c-own main 9999999999999999999999999999999999999999 ''
+  _rec repo c-own-fail main 1010101010101010101010101010101010101010 ''
+  _rec repo c-unprotected main abababababababababababababababababababab ''
+  _rec repo c-no-workflows main bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc ''
+  _rec repo c-lookup main cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd ''
+  _rec repo c-rollup main dededededededededededededededededededede SUCCESS
+} >"$credit_records"
+for repo in c-pass c-fail c-pending c-rejected c-error c-malformed c-no-result c-own c-own-fail c-unprotected c-lookup c-rollup; do
+  printf '1\n' >"$credit_sched/$repo.workflows"
+done
+for repo in c-pass c-fail c-pending c-rejected c-error c-malformed c-no-result c-own c-own-fail c-rollup; do
+  _rec Required 15368 >"$credit_sched/$repo.required"
+done
+_rec 193 SUCCESS >"$credit_sched/c-pass.credit"
+_rec 194 FAILURE >"$credit_sched/c-fail.credit"
+_rec 195 PENDING >"$credit_sched/c-pending.credit"
+# No c-rejected.credit: the lookup's jq program found no qualifying PR. The
+# rules it applies, EXPECTED rollups included, are covered by the jq replay.
+: >"$credit_sched/c-error.credit.fail"
+_rec 'not-a-number' SUCCESS >"$credit_sched/c-malformed.credit"
+_rec 197 '' >"$credit_sched/c-no-result.credit"
+# A head's own required checks win over any credit.
+_rec Required 15368 success completed >"$credit_sched/c-own.checks"
+_rec 198 FAILURE >"$credit_sched/c-own.credit"
+_rec Required 15368 failure completed >"$credit_sched/c-own-fail.checks"
+_rec 199 SUCCESS >"$credit_sched/c-own-fail.credit"
+_rec 200 SUCCESS >"$credit_sched/c-unprotected.credit"
+_rec 201 FAILURE >"$credit_sched/c-no-workflows.credit"
+: >"$credit_sched/c-lookup.required.fail"
+_rec 202 SUCCESS >"$credit_sched/c-lookup.credit"
+_rec 203 FAILURE >"$credit_sched/c-rollup.credit"
+
+: >"$gh_log"
+out=$(RECORDS=$credit_records SCHED_DIR=$credit_sched run 2>&1)
+rc=$?
+_assert_exit "credit: a failing credited pull request fails the run" 1 "$rc"
+line=$(repo_line c-pass "$out")
+_assert_contains "credit: a passing pull request passes the head" "✓ pass" "$line"
+_assert_contains "credit: the head names the pull request it is credited from" \
+  "main@1111111 (via PR #193)" "$line"
+line=$(repo_line c-fail "$out")
+_assert_contains "credit: a failing pull request fails the head" "✗ fail" "$line"
+_assert_contains "credit: a failing credit names its pull request" \
+  "main@2222222 (via PR #194)" "$line"
+_assert_contains "credit: a pending pull request leaves the head pending" \
+  "◷ pending" "$(repo_line c-pending "$out")"
+_assert_contains "credit: no qualifying pull request keeps required checks missing" \
+  "○ none     c-rejected      main@5555555 (required checks missing)" "$out"
+_assert_contains "credit: a failed lookup keeps required checks missing" \
+  "○ none     c-error         main@6666666 (required checks missing)" "$out"
+_assert_contains "credit: a malformed lookup result keeps required checks missing" \
+  "○ none     c-malformed     main@7777777 (required checks missing)" "$out"
+_assert_contains "credit: a pull request without a result credits nothing" \
+  "○ none     c-no-result     main@8888888 (required checks missing)" "$out"
+_assert_contains "credit: the head's own passing required checks win" \
+  "✓ pass     c-own           main@9999999" "$out"
+_assert_not_contains "credit: an own result names no pull request" "#198" "$out"
+_assert_contains "credit: the head's own failing required checks win" \
+  "✗ fail     c-own-fail      main@1010101" "$out"
+_assert_not_contains "credit: an own failure names no pull request" "#199" "$out"
+_assert_contains "credit: a head without required checks configured can be credited" \
+  "main@abababa (via PR #200)" "$(repo_line c-unprotected "$out")"
+_assert_contains "credit: a head without active workflows is not credited" \
+  "main (no active workflows)" "$(repo_line c-no-workflows "$out")"
+_assert_contains "credit: an unavailable required-check lookup is not credited" \
+  "main@cdcdcdc (check lookup unavailable)" "$(repo_line c-lookup "$out")"
+_assert_contains "credit: a head with its own rollup is unaffected" \
+  "✓ pass     c-rollup        main@dededed" "$out"
+_assert_not_contains "credit: credit records add no human rows" "credit" "$out"
+credit_calls=$(grep -- '-f repo=' "$gh_log")
+_assert_contains "credit: the lookup names the head commit" \
+  "-f owner=stub-user -f repo=c-pass -f oid=1111111111111111111111111111111111111111" \
+  "$credit_calls"
+for repo in c-own c-own-fail c-no-workflows c-lookup c-rollup; do
+  _assert_not_contains "credit: no lookup for a head that is not creditable ($repo)" \
+    "-f repo=$repo " "$credit_calls"
+done
+_assert_eq "credit: one lookup per creditable head" 8 \
+  "$(printf '%s\n' "$credit_calls" | grep -c .)"
+
+out=$(RECORDS=$credit_records SCHED_DIR=$credit_sched run --porcelain 2>&1)
+_assert_contains "credit porcelain: the repo record keeps five columns, then a credit record" \
+  "repo${tab}pass${tab}c-pass${tab}main${tab}1111111111111111111111111111111111111111
+credit${tab}pass${tab}c-pass${tab}193
+" "$out"
+_assert_contains "credit porcelain: a failing credit is machine-readable" \
+  "credit${tab}fail${tab}c-fail${tab}194" "$out"
+_assert_contains "credit porcelain: a pending credit is machine-readable" \
+  "credit${tab}pending${tab}c-pending${tab}195" "$out"
+_assert_contains "credit porcelain: an uncredited head keeps its none record" \
+  "repo${tab}none${tab}c-error${tab}main${tab}6666666666666666666666666666666666666666" "$out"
+_assert_eq "credit porcelain: only credited heads get credit records" \
+  "c-pass c-fail c-pending c-unprotected " \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$1 == "credit" {printf "%s ", $3}')"
+_assert_eq "credit porcelain: repo records never grow extra columns" "" \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$1 == "repo" && NF != 5')"
+_assert_contains "credit porcelain: counts follow the credited states" \
+  $'pass=4\nfail=2\npending=1\nnone=6' "$out"
+
+out=$(RECORDS=$credit_records SCHED_DIR=$credit_sched run --porcelain --failing 2>&1)
+_assert_contains "credit failing: a failing credit keeps its credit record" \
+  "credit${tab}fail${tab}c-fail${tab}194" "$out"
+_assert_not_contains "credit failing: a passing credit is hidden with its repo" \
+  "c-pass" "$out"
+
+: >"$gh_log"
+out=$(RECORDS=$credit_records SCHED_DIR=$credit_sched run --no-scheduled 2>&1)
+_assert_not_contains "credit: --no-scheduled makes no credit lookups" "-f repo=" "$(cat "$gh_log")"
+_assert_contains "credit: --no-scheduled keeps the rollup-only view" \
+  "○ none     c-pass          main (no checks)" "$out"
+
+# A failed credit lookup is advisory: it must not fail an otherwise green run.
+error_records="$fixtures/credit-error-records"
+_rec repo c-error main 6666666666666666666666666666666666666666 '' >"$error_records"
+out=$(RECORDS=$error_records SCHED_DIR=$credit_sched run 2>&1)
+_assert_exit "credit: a failed lookup adds no failure" 0 "$?"
+
+# --watch re-reads a pending credit until the pull request settles, and a
+# failed re-read keeps it pending rather than ending the watch.
+watch_credit_records="$fixtures/watch-credit-records"
+_rec repo c-pending main 3333333333333333333333333333333333333333 '' >"$watch_credit_records"
+watch_credit_sched=$(_tmpdir)
+printf '1\n' >"$watch_credit_sched/c-pending.workflows"
+_rec Required 15368 >"$watch_credit_sched/c-pending.required"
+_rec 195 PENDING >"$watch_credit_sched/c-pending.credit.1"
+_rec 195 SUCCESS >"$watch_credit_sched/c-pending.credit"
+out=$(RECORDS=$watch_credit_records SCHED_DIR=$watch_credit_sched \
+  run --watch --interval=1 --timeout=3 2>&1)
+_assert_exit "watch: a pending credit settles" 0 "$?"
+_assert_contains "watch: a pending credit is re-read until it passes" \
+  "main@3333333 (via PR #195)" "$out"
+_assert_contains "watch: the settled credit passes" "✓ pass" "$(repo_line c-pending "$out")"
+: >"$watch_credit_sched/c-pending.credit.2.fail"
+: >"$watch_credit_sched/c-pending.credit.3.fail"
+_rec 195 PENDING >"$watch_credit_sched/c-pending.credit.1"
+out=$(RECORDS=$watch_credit_records SCHED_DIR=$watch_credit_sched \
+  run --watch --interval=1 --timeout=2 2>&1)
+_assert_exit "watch: a failed credit re-read keeps the head pending" 8 "$?"
+_assert_contains "watch: a failed credit re-read keeps the credited result" \
+  "main@3333333 (via PR #195)" "$out"
+# The kept credit replaces only the head record: the re-read's fresh
+# scheduled runs still apply.
+printf '31\n' >"$watch_credit_sched/c-pending.workflows"
+_sched "$watch_credit_sched" c-pending 31 Nightly success "$recent"
+out=$(RECORDS=$watch_credit_records SCHED_DIR=$watch_credit_sched \
+  run --porcelain --watch --interval=1 --timeout=2 2>&1)
+_assert_contains "watch: a kept credit keeps its credit record" \
+  "credit${tab}pending${tab}c-pending${tab}195" "$out"
+_assert_contains "watch: a kept credit keeps the fresh scheduled runs" \
+  "sched${tab}pass${tab}c-pending${tab}Nightly" "$out"
+
+# A merge landing mid-watch moves a settled repository's head. Its record of
+# the previous head, credited or not, must not be shown for the new head.
+moved_records="$fixtures/moved-records"
+{
+  _rec repo c-moved main bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ''
+  _rec repo c-busy main eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee SUCCESS
+} >"$moved_records"
+{
+  _rec repo c-moved main aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ''
+  _rec repo c-busy main eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee PENDING
+} >"$moved_records.1"
+moved_sched=$(_tmpdir)
+printf '1\n' >"$moved_sched/c-moved.workflows"
+_rec Required 15368 >"$moved_sched/c-moved.required"
+_rec 10 SUCCESS >"$moved_sched/c-moved.credit.1"
+: >"$gh_log"
+out=$(RECORDS=$moved_records SCHED_DIR=$moved_sched \
+  run --watch --interval=1 --timeout=3 2>&1)
+_assert_exit "watch: a moved head settles with the other checks" 0 "$?"
+_assert_contains "watch: a moved head is looked up again" \
+  "main@bbbbbbb (required checks missing)" "$(repo_line c-moved "$out")"
+_assert_not_contains "watch: a moved head drops the previous head's credit" "#10" "$out"
+_assert_contains "watch: the moved head's credit lookup names the new commit" \
+  "-f oid=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$(grep -- '-f repo=c-moved' "$gh_log")"
+
+# A moved head whose credit lookup fails must not inherit the credit of the
+# previous head.
+: >"$moved_sched/c-moved.credit.2.fail"
+out=$(RECORDS=$moved_records SCHED_DIR=$moved_sched \
+  run --watch --interval=1 --timeout=3 2>&1)
+_assert_contains "watch: a moved head with a failed credit lookup keeps its own reason" \
+  "main@bbbbbbb (required checks missing)" "$(repo_line c-moved "$out")"
+_assert_not_contains "watch: a failed credit lookup never borrows another head's credit" \
+  "#10" "$out"
+rm -f "$moved_sched/c-moved.credit.2.fail"
+
+# Settled heads, credited or unreadable, cost no calls on later polls.
+settled_records="$fixtures/settled-records"
+{
+  _rec repo c-settled main 1111111111111111111111111111111111111111 ''
+  _rec repo c-unreadable main 2222222222222222222222222222222222222222 ''
+  _rec repo c-busy main eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee PENDING
+} >"$settled_records"
+settled_heads=$(_tmpdir)
+printf '1\n' >"$settled_heads/c-settled.workflows"
+_rec Required 15368 >"$settled_heads/c-settled.required"
+_rec 10 SUCCESS >"$settled_heads/c-settled.credit"
+: >"$settled_heads/c-unreadable.workflows.fail"
+: >"$gh_log"
+out=$(RECORDS=$settled_records SCHED_DIR=$settled_heads \
+  run --watch --interval=1 --timeout=2 2>&1)
+_assert_exit "watch: settled heads do not settle a pending branch" 8 "$?"
+_assert_eq "watch: a settled credited head is looked up once" 1 \
+  "$(grep -c 'c-settled/branches' "$gh_log")"
+_assert_eq "watch: a settled credit is queried once" 1 \
+  "$(grep -c -- '-f repo=c-settled' "$gh_log")"
+_assert_eq "watch: an unreadable repository is not re-read while settled" 1 \
+  "$(grep -c 'c-unreadable/actions/workflows' "$gh_log")"
+
+# A credit lookup that keeps failing must not hold back the repository's
+# fresh scheduled runs: a nightly that finishes still settles the watch.
+credit_sched_watch=$(_tmpdir)
+printf '21\n' >"$credit_sched_watch/c-unprotected.workflows"
+_sched "$credit_sched_watch" c-unprotected 21 Nightly success "$recent"
+_rec 21 Nightly in_progress 2026-01-02T03:04:05Z "$recent" \
+  https://github.test/o/c-unprotected/actions/runs/21 >"$credit_sched_watch/c-unprotected.21.1"
+: >"$credit_sched_watch/c-unprotected.credit.fail"
+unprotected_records="$fixtures/unprotected-records"
+_rec repo c-unprotected main abababababababababababababababababababab '' >"$unprotected_records"
+out=$(RECORDS=$unprotected_records SCHED_DIR=$credit_sched_watch \
+  run --watch --interval=1 --timeout=4 2>&1)
+_assert_exit "watch: a failing credit lookup does not hold back scheduled runs" 0 "$?"
+_assert_not_contains "watch: the settled nightly replaces the running one" \
+  "in_progress" "$out"
+_assert_contains "watch: the head without credit keeps its own reason" \
+  "main@abababa (no required checks found)" "$out"
 
 one_failed=$(_tmpdir)
 printf '11\n13\n' >"$one_failed/alpha.workflows"
@@ -912,6 +1182,67 @@ JSON
     fi
   else
     _fail "jq program: the scheduled-run programs were captured"
+  fi
+  # The credit lookup's response for main@6dd54ca, the squash merge of pull
+  # request 193; each case below breaks one rule the credit depends on.
+  cat >"$fixtures/credit.json" <<'JSON'
+{"data":{"repository":{"defaultBranchRef":{"name":"main"},"object":{
+ "oid":"6dd54cacf0230b2339722c4f89745ebe68881675","tree":{"oid":"b534"},
+ "associatedPullRequests":{"nodes":[
+  {"number":193,"merged":true,"baseRefName":"main",
+   "headRefOid":"74dfc4249e2bd7bd3798978ed5919a009ae1286f",
+   "mergeCommit":{"oid":"6dd54cacf0230b2339722c4f89745ebe68881675"},
+   "commits":{"nodes":[{"commit":{"oid":"74dfc4249e2bd7bd3798978ed5919a009ae1286f",
+    "tree":{"oid":"b534"},"statusCheckRollup":{"state":"SUCCESS"}}}]}}]}}}}}
+JSON
+  # Print the credit program's output for the fixture edited by jq filter $1.
+  credit_case() {
+    jq "$1" "$fixtures/credit.json" | jq -r "$(cat "$credit_jq_capture")"
+  }
+  pr='.data.repository.object.associatedPullRequests.nodes[0]'
+  if [[ -s $credit_jq_capture ]]; then
+    _assert_eq "jq program: credits the pull request whose merge commit is the head" \
+      "$(_rec 193 SUCCESS)" "$(credit_case .)"
+    _assert_eq "jq program: credits a failing pull request result" \
+      "$(_rec 193 FAILURE)" \
+      "$(credit_case "$pr.commits.nodes[0].commit.statusCheckRollup.state = \"FAILURE\"")"
+    _assert_eq "jq program: a different merge commit is not credited" "" \
+      "$(credit_case "$pr.mergeCommit.oid = \"0000000000000000000000000000000000000000\"")"
+    _assert_eq "jq program: a pull request without a merge commit is not credited" "" \
+      "$(credit_case "$pr.mergeCommit = null")"
+    _assert_eq "jq program: a pull request merged into another branch is not credited" "" \
+      "$(credit_case "$pr.baseRefName = \"release\"")"
+    _assert_eq "jq program: an unmerged pull request is not credited" "" \
+      "$(credit_case "$pr.merged = false")"
+    _assert_eq "jq program: a head tree CI never tested is not credited" "" \
+      "$(credit_case "$pr.commits.nodes[0].commit.tree.oid = \"c0ffee\"")"
+    _assert_eq "jq program: a pending pull request result is credited" \
+      "$(_rec 193 PENDING)" \
+      "$(credit_case "$pr.commits.nodes[0].commit.statusCheckRollup.state = \"PENDING\"")"
+    _assert_eq "jq program: a required check that never reported is not credited" "" \
+      "$(credit_case "$pr.commits.nodes[0].commit.statusCheckRollup.state = \"EXPECTED\"")"
+    _assert_eq "jq program: a commit other than the final head is not credited" "" \
+      "$(credit_case "$pr.headRefOid = \"0000000000000000000000000000000000000000\"")"
+    _assert_eq "jq program: a pull request head without a rollup is not credited" "" \
+      "$(credit_case "$pr.commits.nodes[0].commit.statusCheckRollup = null")"
+    _assert_eq "jq program: a pull request without commits is not credited" "" \
+      "$(credit_case "$pr.commits.nodes = []")"
+    _assert_eq "jq program: a commit without a pull request is not credited" "" \
+      "$(credit_case '.data.repository.object.associatedPullRequests.nodes = []')"
+    _assert_eq "jq program: an unknown commit is not credited" "" \
+      "$(credit_case '.data.repository.object = null')"
+    _assert_eq "jq program: matching null trees are not credited" "" \
+      "$(credit_case ".data.repository.object.tree = null | $pr.commits.nodes[0].commit.tree = null")"
+    _assert_eq "jq program: a missing repository is not credited" "" \
+      "$(credit_case '.data.repository = null')"
+    _assert_eq "jq program: a qualifying pull request after one that fails is credited" \
+      "$(_rec 193 SUCCESS)" \
+      "$(credit_case ".data.repository.object.associatedPullRequests.nodes |= [(.[0] | .number = 9 | .merged = false)] + .")"
+    _assert_eq "jq program: only the first qualifying pull request is credited" \
+      "$(_rec 193 SUCCESS)" \
+      "$(credit_case ".data.repository.object.associatedPullRequests.nodes |= . + [(.[0] | .number = 9)]")"
+  else
+    _fail "jq program: the credit lookup program was captured"
   fi
 else
   echo "  SKIP: jq program replay (jq unavailable)"
