@@ -42,10 +42,10 @@ Options:
   -t, --timeout <sec>   Give up watching after this long (default: 1800).
   -h, --help            Show this help.
 
-A default-branch head without checks of its own, such as a squash merge made
-with GITHUB_TOKEN, takes the result of the pull request whose merge commit it
-is, when that pull request merged into the default branch and its head has
-the same tree.
+A default-branch head that has CI but no checks of its own, such as a squash
+merge made with GITHUB_TOKEN, takes the result of the pull request whose
+merge commit it is, when that pull request merged into the default branch
+and its final head has the same tree and a result other than EXPECTED.
 
 Repositories without a current CI result report "none" and never fail the run. Scheduled runs
 older than 45 days, from inactive workflows, or cancelled/skipped are ignored.
@@ -796,12 +796,16 @@ _head_result() {
 # --watch: a null rollup with no head record for the current commit, as when
 # a merge lands mid-watch. Otherwise a settled repository is never re-read and
 # keeps showing the result, or credited pull request, of its previous head.
+# An unreadable repository keeps no head record at all; it is re-read only
+# when pending, as before, so a persistent API error does not add calls to
+# every poll.
 _stale_heads() {
   local line kind repo branch oid rollup
   ((_scheduled == 1)) || return 0
   while IFS= read -r line; do
     IFS=$_sep read -r kind repo branch oid rollup <<<"$line"
     [[ $kind == repo && -n $branch && -z $rollup ]] || continue
+    [[ $'\n'${_sched_records:-} != *$'\n'"schederror$_sep$repo"$'\n'* ]] || continue
     _head_result "$repo" "$oid"
     ((_head_found == 1)) || printf '%s ' "$repo"
   done <<<"$_records"

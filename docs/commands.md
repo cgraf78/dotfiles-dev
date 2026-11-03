@@ -38,10 +38,11 @@ the default branch with the head as its merge commit, and its final head
 commit to have the same tree, so its CI tested exactly the merged content. An
 `EXPECTED` rollup, a required check that never reported, is not credited. The
 lookup is one small GraphQL query per such head; if it fails, the head keeps
-its own result. `--no-scheduled` retains the faster rollup-only view.
-Repositories without a current CI result report `none` and never fail the
-run. Each repository's oldest 30 open pull requests are checked, and a longer
-queue prints a warning.
+its own result, or under `--watch` its earlier credit for the same commit.
+`--no-scheduled` retains the faster rollup-only view. Repositories without a
+current CI result report `none` and never fail the run. Each repository's
+oldest 30 open pull requests are checked, and a longer queue prints a
+warning.
 
 Scheduled runs catch nightly failures that a later push would otherwise hide,
 since a push moves the default branch past the commit the nightly ran on.

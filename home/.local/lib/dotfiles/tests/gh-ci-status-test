@@ -714,6 +714,16 @@ out=$(RECORDS=$watch_credit_records SCHED_DIR=$watch_credit_sched \
 _assert_exit "watch: a failed credit re-read keeps the head pending" 8 "$?"
 _assert_contains "watch: a failed credit re-read keeps the credited result" \
   "main@3333333 (via PR #195)" "$out"
+# The kept credit replaces only the head record: the re-read's fresh
+# scheduled runs still apply.
+printf '31\n' >"$watch_credit_sched/c-pending.workflows"
+_sched "$watch_credit_sched" c-pending 31 Nightly success "$recent"
+out=$(RECORDS=$watch_credit_records SCHED_DIR=$watch_credit_sched \
+  run --porcelain --watch --interval=1 --timeout=2 2>&1)
+_assert_contains "watch: a kept credit keeps its credit record" \
+  "credit${tab}pending${tab}c-pending${tab}195" "$out"
+_assert_contains "watch: a kept credit keeps the fresh scheduled runs" \
+  "sched${tab}pass${tab}c-pending${tab}Nightly" "$out"
 
 # A merge landing mid-watch moves a settled repository's head. Its record of
 # the previous head, credited or not, must not be shown for the new head.
@@ -739,6 +749,40 @@ _assert_contains "watch: a moved head is looked up again" \
 _assert_not_contains "watch: a moved head drops the previous head's credit" "#10" "$out"
 _assert_contains "watch: the moved head's credit lookup names the new commit" \
   "-f oid=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$(grep -- '-f repo=c-moved' "$gh_log")"
+
+# A moved head whose credit lookup fails must not inherit the credit of the
+# previous head.
+: >"$moved_sched/c-moved.credit.2.fail"
+out=$(RECORDS=$moved_records SCHED_DIR=$moved_sched \
+  run --watch --interval=1 --timeout=3 2>&1)
+_assert_contains "watch: a moved head with a failed credit lookup keeps its own reason" \
+  "main@bbbbbbb (required checks missing)" "$(repo_line c-moved "$out")"
+_assert_not_contains "watch: a failed credit lookup never borrows another head's credit" \
+  "#10" "$out"
+rm -f "$moved_sched/c-moved.credit.2.fail"
+
+# Settled heads, credited or unreadable, cost no calls on later polls.
+settled_records="$fixtures/settled-records"
+{
+  _rec repo c-settled main 1111111111111111111111111111111111111111 ''
+  _rec repo c-unreadable main 2222222222222222222222222222222222222222 ''
+  _rec repo c-busy main eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee PENDING
+} >"$settled_records"
+settled_heads=$(_tmpdir)
+printf '1\n' >"$settled_heads/c-settled.workflows"
+_rec Required 15368 >"$settled_heads/c-settled.required"
+_rec 10 SUCCESS >"$settled_heads/c-settled.credit"
+: >"$settled_heads/c-unreadable.workflows.fail"
+: >"$gh_log"
+out=$(RECORDS=$settled_records SCHED_DIR=$settled_heads \
+  run --watch --interval=1 --timeout=2 2>&1)
+_assert_exit "watch: settled heads do not settle a pending branch" 8 "$?"
+_assert_eq "watch: a settled credited head is looked up once" 1 \
+  "$(grep -c 'c-settled/branches' "$gh_log")"
+_assert_eq "watch: a settled credit is queried once" 1 \
+  "$(grep -c -- '-f repo=c-settled' "$gh_log")"
+_assert_eq "watch: an unreadable repository is not re-read while settled" 1 \
+  "$(grep -c 'c-unreadable/actions/workflows' "$gh_log")"
 
 # A credit lookup that keeps failing must not hold back the repository's
 # fresh scheduled runs: a nightly that finishes still settles the watch.
