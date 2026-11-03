@@ -9,11 +9,34 @@ if [[ -z $NVIM_TEST_BIN ]]; then
 fi
 
 _nvim_lua() {
-  local lua_dir=$HOME/.config/nvim/lua
-  "$NVIM_TEST_BIN" --headless --noplugin -u NONE -i NONE \
+  local lua_dir=$HOME/.config/nvim/lua _output _rc
+  _output=$("$NVIM_TEST_BIN" --headless --noplugin -u NONE -i NONE \
     -c "lua package.path='$lua_dir/?.lua;' .. package.path; $1" \
-    -c 'qa!' 2>&1
+    -c 'qa!' 2>&1)
+  _rc=$?
+  # Before Neovim 0.12, messages printed without a UI (as in --headless) turn
+  # each NL into CR NL; 0.12.0 dropped the CR for headless
+  # (neovim/neovim#38048). test/run still runs this suite on 0.11.2+, so
+  # normalize here rather than in every assertion. Mirrors `_nvim_lf` in
+  # dotfiles-nvim's nvim/helpers.sh: only a CR before an NL goes, plus the CR
+  # of a final CR NL that command substitution left at the end.
+  _output=${_output//$'\r\n'/$'\n'}
+  printf '%s' "${_output%$'\r'}"
+  return "$_rc"
 }
+
+echo '=== Headless output normalization ==='
+# A function stands in for pre-0.12 Neovim, which needs no real binary. Its
+# output ends in CR NL, as a final empty message leaves it.
+_nvim_crlf_stub() {
+  printf 'a\r\nb\rc\r\n' >&2
+  return 3
+}
+crlf_rc=0
+crlf_output=$(NVIM_TEST_BIN=_nvim_crlf_stub _nvim_lua '') || crlf_rc=$?
+_assert_eq 'Headless output: CR NL becomes NL and a lone CR stays' \
+  $'a\nb\rc' "$crlf_output"
+_assert_exit 'Headless output: normalizing keeps the exit status' 3 "$crlf_rc"
 
 echo '=== Development Nvim boundary ==='
 _assert_contains 'Mason policy is dev-owned' 'lsp_server_packages' "$(<"$HOME/.config/nvim/lua/config/mason-policy.lua")"
