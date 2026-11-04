@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.206.2 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.210.1 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.206.2",
+  "x-renovate-version": "44.210.1",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -30658,6 +30658,7 @@
             "java-version",
             "jenkins-plugins",
             "jsr",
+            "julia-general-metadata",
             "kubernetes-api",
             "maven",
             "nextcloud",
@@ -35638,6 +35639,7 @@
                   "java-version",
                   "jenkins-plugins",
                   "jsr",
+                  "julia-general-metadata",
                   "kubernetes-api",
                   "maven",
                   "nextcloud",
@@ -35733,6 +35735,7 @@
                 "java-version",
                 "jenkins-plugins",
                 "jsr",
+                "julia-general-metadata",
                 "kubernetes-api",
                 "maven",
                 "nextcloud",
@@ -63472,6 +63475,7 @@
             "hermit",
             "hex",
             "ivy",
+            "julia",
             "kubernetes-api",
             "lambda-node",
             "loose",
@@ -63499,7 +63503,8 @@
             "swift",
             "ubuntu",
             "unity3d",
-            "unity3d-packages"
+            "unity3d-packages",
+            "vcpkg"
           ]
         },
         {
