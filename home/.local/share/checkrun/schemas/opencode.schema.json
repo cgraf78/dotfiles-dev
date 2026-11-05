@@ -101,7 +101,8 @@
               "integration.use",
               "mcp.use",
               "skill.use",
-              "plugin.use"
+              "plugin.use",
+              "websearch.use"
             ]
           },
           "resource": {
@@ -502,6 +503,9 @@
         "media_blob": {
           "type": "boolean"
         },
+        "part_rows": {
+          "type": "boolean"
+        },
         "image_generate": {
           "anyOf": [
             {
@@ -583,7 +587,8 @@
                   "integration.use",
                   "mcp.use",
                   "skill.use",
-                  "plugin.use"
+                  "plugin.use",
+                  "websearch.use"
                 ]
               },
               "resource": {
@@ -1882,6 +1887,9 @@
         },
         "protocol": {
           "$ref": "#/$defs/Mcp.Protocol"
+        },
+        "pool": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1976,6 +1984,9 @@
         },
         "protocol": {
           "$ref": "#/$defs/Mcp.Protocol"
+        },
+        "pool": {
+          "type": "boolean"
         }
       },
       "required": [

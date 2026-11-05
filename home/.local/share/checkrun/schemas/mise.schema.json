@@ -2073,6 +2073,16 @@
             }
           ]
         },
+        "env_sets": {
+          "description": "Named sets of config environments, which `env` and `-E` can name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
         "env_shell_expand": {
           "default": true,
           "description": "Expand shell-style variables such as `$FOO` and `${BAR:-default}` in `[env]` values.",
@@ -2805,7 +2815,7 @@
               ]
             },
             "provenance": {
-              "default": false,
+              "default": true,
               "description": "Verify the Sigstore provenance npm publishes for an `npm:` tool's own package.",
               "type": "boolean"
             },
