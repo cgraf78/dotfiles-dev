@@ -2414,6 +2414,17 @@
               ],
               "description": "Delete integration account"
             },
+            "dialog.integration.copy": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Copy authorization link"
+            },
             "dialog.worktree.generate": {
               "anyOf": [
                 {
@@ -3168,6 +3179,21 @@
                 }
               ],
               "description": "Show the session transcript scrollbar"
+            },
+            "submit_scroll": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "bottom",
+                    "keep"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jump to the latest message when sending a prompt, or keep the current transcript position"
             },
             "thinking": {
               "anyOf": [
