@@ -5699,6 +5699,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoArrayMethodsOnArgumentsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoArrayMethodsOnArgumentsOptions"
+        }
+      ]
+    },
+    "NoArrayMethodsOnArgumentsOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoArraySortForMinMaxConfiguration": {
       "oneOf": [
         {
@@ -6235,6 +6249,20 @@
       ]
     },
     "NoConstantBinaryExpressionsOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoConstantComparisonsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoConstantComparisonsOptions"
+        }
+      ]
+    },
+    "NoConstantComparisonsOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -7180,6 +7208,20 @@
       ]
     },
     "NoEqualsToNullOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoErasingOperationConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoErasingOperationOptions"
+        }
+      ]
+    },
+    "NoErasingOperationOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -8700,6 +8742,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoNegatedArrayPredicateConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoNegatedArrayPredicateOptions"
+        }
+      ]
+    },
+    "NoNegatedArrayPredicateOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoNegationElseConfiguration": {
       "oneOf": [
         {
@@ -8949,6 +9005,20 @@
       ]
     },
     "NoNullOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoNumberArgumentOutOfRangeConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoNumberArgumentOutOfRangeOptions"
+        }
+      ]
+    },
+    "NoNumberArgumentOutOfRangeOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -10045,6 +10115,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoSharedBranchCodeConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSharedBranchCodeOptions"
+        }
+      ]
+    },
+    "NoSharedBranchCodeOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoShortTimeValuesConfiguration": {
       "oneOf": [
         {
@@ -10210,6 +10294,20 @@
       "type": "object",
       "additionalProperties": false
     },
+    "NoSubtractionComparisonConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSubtractionComparisonOptions"
+        }
+      ]
+    },
+    "NoSubtractionComparisonOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "NoSuspiciousSemicolonInJsxConfiguration": {
       "oneOf": [
         {
@@ -10305,6 +10403,20 @@
       ]
     },
     "NoSvelteExportLetOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "NoSvelteIgnoredUnsubscribeConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoSvelteIgnoredUnsubscribeOptions"
+        }
+      ]
+    },
+    "NoSvelteIgnoredUnsubscribeOptions": {
       "type": "object",
       "additionalProperties": false
     },
@@ -10873,6 +10985,20 @@
           ]
         }
       },
+      "additionalProperties": false
+    },
+    "NoUninvokedArrayCallbackConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithNoUninvokedArrayCallbackOptions"
+        }
+      ]
+    },
+    "NoUninvokedArrayCallbackOptions": {
+      "type": "object",
       "additionalProperties": false
     },
     "NoUnknownAtRulesConfiguration": {
@@ -13337,6 +13463,17 @@
             }
           ]
         },
+        "noArrayMethodsOnArguments": {
+          "description": "Disallow calling array methods on the arguments object.\nSee https://biomejs.dev/linter/rules/no-array-methods-on-arguments",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoArrayMethodsOnArgumentsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noArraySortForMinMax": {
           "description": "Disallow sorting an array only to read its smallest or largest value.\nSee https://biomejs.dev/linter/rules/no-array-sort-for-min-max",
           "anyOf": [
@@ -13436,6 +13573,17 @@
             }
           ]
         },
+        "noConstantComparisons": {
+          "description": "Disallow conditions that are always true, can never be true, or contain a check with no effect.\nSee https://biomejs.dev/linter/rules/no-constant-comparisons",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoConstantComparisonsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noDanglingUnderscore": {
           "description": "Disallow names that start or end with an underscore.\nSee https://biomejs.dev/linter/rules/no-dangling-underscore",
           "anyOf": [
@@ -13485,6 +13633,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoEagerArrayMethodsInLoopsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noErasingOperation": {
+          "description": "Disallow operations with zero that always result in zero.\nSee https://biomejs.dev/linter/rules/no-erasing-operation",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoErasingOperationConfiguration"
             },
             {
               "type": "null"
@@ -13722,6 +13881,17 @@
             }
           ]
         },
+        "noNegatedArrayPredicate": {
+          "description": "Disallow negating the result of Array#some() or Array#every().\nSee https://biomejs.dev/linter/rules/no-negated-array-predicate",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoNegatedArrayPredicateConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noNegationInEqualityCheck": {
           "description": "Disallow negated expressions on the left side of an equality check.\nSee https://biomejs.dev/linter/rules/no-negation-in-equality-check",
           "anyOf": [
@@ -13782,6 +13952,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoNullConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noNumberArgumentOutOfRange": {
+          "description": "Disallow number method arguments that are outside the range the method accepts.\nSee https://biomejs.dev/linter/rules/no-number-argument-out-of-range",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoNumberArgumentOutOfRangeConfiguration"
             },
             {
               "type": "null"
@@ -13975,6 +14156,17 @@
             }
           ]
         },
+        "noSharedBranchCode": {
+          "description": "Disallow the same code at the start or end of every branch of an if statement.\nSee https://biomejs.dev/linter/rules/no-shared-branch-code",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSharedBranchCodeConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "noShortTimeValues": {
           "description": "Disallow animation and transition times that are shorter than a configured minimum.\nSee https://biomejs.dev/linter/rules/no-short-time-values",
           "anyOf": [
@@ -13991,6 +14183,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoSinglePromiseInPromiseMethodsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noSubtractionComparison": {
+          "description": "Disallow subtracting two values only to compare the result with 0.\nSee https://biomejs.dev/linter/rules/no-subtraction-comparison",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSubtractionComparisonConfiguration"
             },
             {
               "type": "null"
@@ -14057,6 +14260,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoSvelteExportLetConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noSvelteIgnoredUnsubscribe": {
+          "description": "Disallow ignoring the function returned by a store's subscribe() method.\nSee https://biomejs.dev/linter/rules/no-svelte-ignored-unsubscribe",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoSvelteIgnoredUnsubscribeConfiguration"
             },
             {
               "type": "null"
@@ -14233,6 +14447,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NoUndeclaredCustomPropertiesConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noUninvokedArrayCallback": {
+          "description": "Disallow array methods with callbacks on arrays that only have empty slots.\nSee https://biomejs.dev/linter/rules/no-uninvoked-array-callback",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoUninvokedArrayCallbackConfiguration"
             },
             {
               "type": "null"
@@ -15427,6 +15652,17 @@
             }
           ]
         },
+        "useNextScriptForGoogleAnalytics": {
+          "description": "Enforce the use of the @next/third-parties/google components to load Google Analytics and Google Tag Manager.\nSee https://biomejs.dev/linter/rules/use-next-script-for-google-analytics",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UseNextScriptForGoogleAnalyticsConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "useNullishCoalescing": {
           "description": "Enforce using the nullish coalescing operator (??) instead of logical or (||).\nSee https://biomejs.dev/linter/rules/use-nullish-coalescing",
           "anyOf": [
@@ -15443,6 +15679,28 @@
           "anyOf": [
             {
               "$ref": "#/$defs/UseObjectFromEntriesConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usePackageJsonCpu": {
+          "description": "Require the cpu field in package.json.\nSee https://biomejs.dev/linter/rules/use-package-json-cpu",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsePackageJsonCpuConfiguration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usePackageJsonEngines": {
+          "description": "Require the engines field in package.json.\nSee https://biomejs.dev/linter/rules/use-package-json-engines",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsePackageJsonEnginesConfiguration"
             },
             {
               "type": "null"
@@ -17897,6 +18155,21 @@
         "level"
       ]
     },
+    "RuleWithNoArrayMethodsOnArgumentsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoArrayMethodsOnArgumentsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoArraySortForMinMaxOptions": {
       "type": "object",
       "properties": {
@@ -18554,6 +18827,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoConstantBinaryExpressionsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoConstantComparisonsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoConstantComparisonsOptions"
         }
       },
       "additionalProperties": false,
@@ -19568,6 +19856,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoEqualsToNullOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoErasingOperationOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoErasingOperationOptions"
         }
       },
       "additionalProperties": false,
@@ -21185,6 +21488,32 @@
         "level"
       ]
     },
+    "RuleWithNoNegatedArrayPredicateOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "description": "Controls the applicability of the rule's fix. `none` suppresses the fix, while `safe` and `unsafe` reclassify its applicability. This setting does not change the fix itself.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoNegatedArrayPredicateOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoNegationElseOptions": {
       "type": "object",
       "properties": {
@@ -21525,6 +21854,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoNullOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoNumberArgumentOutOfRangeOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoNumberArgumentOutOfRangeOptions"
         }
       },
       "additionalProperties": false,
@@ -22746,6 +23090,21 @@
         "level"
       ]
     },
+    "RuleWithNoSharedBranchCodeOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSharedBranchCodeOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoShortTimeValuesOptions": {
       "type": "object",
       "properties": {
@@ -22977,6 +23336,32 @@
         "level"
       ]
     },
+    "RuleWithNoSubtractionComparisonOptions": {
+      "type": "object",
+      "properties": {
+        "fix": {
+          "description": "Controls the applicability of the rule's fix. `none` suppresses the fix, while `safe` and `unsafe` reclassify its applicability. This setting does not change the fix itself.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSubtractionComparisonOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithNoSuspiciousSemicolonInJsxOptions": {
       "type": "object",
       "properties": {
@@ -23108,6 +23493,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoSvelteExportLetOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoSvelteIgnoredUnsubscribeOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoSvelteIgnoredUnsubscribeOptions"
         }
       },
       "additionalProperties": false,
@@ -23609,6 +24009,21 @@
         },
         "options": {
           "$ref": "#/$defs/NoUndeclaredVariablesOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithNoUninvokedArrayCallbackOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/NoUninvokedArrayCallbackOptions"
         }
       },
       "additionalProperties": false,
@@ -28902,6 +29317,21 @@
         "level"
       ]
     },
+    "RuleWithUseNextScriptForGoogleAnalyticsOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UseNextScriptForGoogleAnalyticsOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
     "RuleWithUseNodeAssertStrictOptions": {
       "type": "object",
       "properties": {
@@ -29155,6 +29585,36 @@
         },
         "options": {
           "$ref": "#/$defs/UseOptionalChainOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUsePackageJsonCpuOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UsePackageJsonCpuOptions"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ]
+    },
+    "RuleWithUsePackageJsonEnginesOptions": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        "options": {
+          "$ref": "#/$defs/UsePackageJsonEnginesOptions"
         }
       },
       "additionalProperties": false,
@@ -38090,6 +38550,20 @@
       },
       "additionalProperties": false
     },
+    "UseNextScriptForGoogleAnalyticsConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUseNextScriptForGoogleAnalyticsOptions"
+        }
+      ]
+    },
+    "UseNextScriptForGoogleAnalyticsOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
     "UseNodeAssertStrictConfiguration": {
       "oneOf": [
         {
@@ -38334,6 +38808,34 @@
       ]
     },
     "UseOptionalChainOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UsePackageJsonCpuConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUsePackageJsonCpuOptions"
+        }
+      ]
+    },
+    "UsePackageJsonCpuOptions": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "UsePackageJsonEnginesConfiguration": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RulePlainConfiguration"
+        },
+        {
+          "$ref": "#/$defs/RuleWithUsePackageJsonEnginesOptions"
+        }
+      ]
+    },
+    "UsePackageJsonEnginesOptions": {
       "type": "object",
       "additionalProperties": false
     },
