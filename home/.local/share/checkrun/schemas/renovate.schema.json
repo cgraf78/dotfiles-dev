@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.222.5 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.225.1 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.222.5",
+  "x-renovate-version": "44.225.1",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -105,6 +105,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -577,6 +580,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -1047,6 +1053,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -1519,6 +1528,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -1987,6 +1999,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -2474,6 +2489,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -2959,6 +2977,12 @@
       "type": "string",
       "default": "automergeComment"
     },
+    "automergeLabel": {
+      "description": "Label to add to the PR to trigger automerge. Only used if `automergeType=label`.\nSee also: https://docs.renovatebot.com/configuration-options/#automergelabel",
+      "markdownDescription": "Label to add to the PR to trigger automerge. Only used if `automergeType=label`.\n\nSee also: [automergeLabel](https://docs.renovatebot.com/configuration-options/#automergelabel)",
+      "type": "string",
+      "default": "automerge"
+    },
     "automergeSchedule": {
       "description": "Limit automerge to these times of day or week.\nSee also: https://docs.renovatebot.com/configuration-options/#automergeschedule",
       "markdownDescription": "Limit automerge to these times of day or week.\n\nSee also: [automergeSchedule](https://docs.renovatebot.com/configuration-options/#automergeschedule)",
@@ -2998,7 +3022,8 @@
       "enum": [
         "branch",
         "pr",
-        "pr-comment"
+        "pr-comment",
+        "label"
       ],
       "default": "pr"
     },
@@ -3053,6 +3078,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -3545,6 +3573,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -4016,6 +4047,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -4490,6 +4524,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -4960,6 +4997,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -5433,6 +5473,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -5917,6 +5960,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -6388,6 +6434,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -6858,6 +6907,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -7372,6 +7424,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -7844,6 +7899,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -8398,6 +8456,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -8869,6 +8930,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -9342,6 +9406,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -9812,6 +9879,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -10285,6 +10355,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -10754,6 +10827,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -11230,6 +11306,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -11719,6 +11798,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -12190,6 +12272,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -12745,6 +12830,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -13226,6 +13314,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -14032,6 +14123,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -14503,6 +14597,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -14971,6 +15068,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -15442,6 +15542,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -16104,6 +16207,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -16659,6 +16765,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -17145,6 +17254,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -17618,6 +17730,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -18086,6 +18201,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -18454,6 +18572,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -18926,6 +19047,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -19403,6 +19527,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -20172,6 +20299,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -20642,6 +20772,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -21151,6 +21284,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -21623,6 +21759,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -22115,6 +22254,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -22585,6 +22727,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -23057,6 +23202,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -23525,6 +23673,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -23997,6 +24148,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -24481,6 +24635,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -24960,6 +25117,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -25432,6 +25592,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -25899,6 +26062,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -26277,6 +26443,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -26761,6 +26930,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -27233,6 +27405,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -27710,6 +27885,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -28178,6 +28356,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -28654,6 +28835,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -29129,6 +29313,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -29599,6 +29786,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -30071,6 +30261,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -30746,6 +30939,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -31363,6 +31559,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -31831,6 +32030,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -32304,6 +32506,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -32774,6 +32979,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -33267,6 +33475,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -33735,6 +33946,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -34207,6 +34421,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -34688,6 +34905,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -35166,6 +35386,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -35557,6 +35780,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -36771,6 +36997,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -37242,6 +37471,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -37731,6 +37963,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -38239,6 +38474,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -38601,6 +38839,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -39082,6 +39323,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -39552,6 +39796,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -40055,6 +40302,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -40531,6 +40781,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -41012,6 +41265,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -41512,6 +41768,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -41985,6 +42244,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -42453,6 +42715,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -42924,6 +43189,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -43434,6 +43702,9 @@
               },
               "automergeComment": {
                 "$ref": "#/definitions/automergeComment"
+              },
+              "automergeLabel": {
+                "$ref": "#/definitions/automergeLabel"
               },
               "automergeSchedule": {
                 "$ref": "#/definitions/automergeSchedule"
@@ -43986,6 +44257,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -44450,6 +44724,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -44812,6 +45089,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -45281,6 +45561,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -45755,6 +46038,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -46118,6 +46404,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -46490,6 +46779,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -46962,6 +47254,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -47432,6 +47727,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -47904,6 +48202,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -48375,6 +48676,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -48863,6 +49167,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -49554,6 +49861,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -50030,6 +50340,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -50514,6 +50827,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -50984,6 +51300,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -51458,6 +51777,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -51930,6 +52252,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -52450,6 +52775,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -52959,6 +53287,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -53430,6 +53761,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -53850,6 +54184,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -54219,6 +54556,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -54692,6 +55032,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -55163,6 +55506,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -55639,6 +55985,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -56109,6 +56458,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -56650,6 +57002,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -57135,6 +57490,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -57725,6 +58083,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -58198,6 +58559,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -58666,6 +59030,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -59141,6 +59508,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -59614,6 +59984,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -60085,6 +60458,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -60559,6 +60935,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -61031,6 +61410,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -61568,6 +61950,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -62039,6 +62424,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -62509,6 +62897,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -63022,6 +63413,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -63493,6 +63887,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -64056,6 +64453,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -64524,6 +64924,9 @@
             },
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
+            },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
             },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
@@ -65002,6 +65405,9 @@
             "automergeComment": {
               "$ref": "#/definitions/automergeComment"
             },
+            "automergeLabel": {
+              "$ref": "#/definitions/automergeLabel"
+            },
             "automergeSchedule": {
               "$ref": "#/definitions/automergeSchedule"
             },
@@ -65478,6 +65884,9 @@
     },
     "automergeComment": {
       "$ref": "#/definitions/automergeComment"
+    },
+    "automergeLabel": {
+      "$ref": "#/definitions/automergeLabel"
     },
     "automergeSchedule": {
       "$ref": "#/definitions/automergeSchedule"
