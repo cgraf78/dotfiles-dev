@@ -157,6 +157,22 @@ if [[ $1 == api && $2 == graphql && " $* " == *" -f repo="* ]]; then
 fi
 if [[ $1 == api && $2 == graphql ]]; then
   [[ -z ${GH_STUB_GRAPHQL_FAIL:-} ]] || exit 1
+  # Model the upstream timeout for a repository page larger than ten while
+  # preserving gh's contract of returning every page with --paginate.
+  if [[ -n ${GH_STUB_BOUNDED_PAGES:-} ]]; then
+    query=
+    paginate=0
+    args=("$@")
+    for arg in "${args[@]}"; do
+      [[ $arg != --paginate ]] || paginate=1
+      [[ $arg != query=* ]] || query=${arg#query=}
+    done
+    [[ $query =~ repositories\(first:[[:space:]]*([0-9]+) ]] || exit 2
+    ((BASH_REMATCH[1] <= 10)) || exit 1
+    cat "$GH_STUB_RECORDS"
+    ((paginate == 0)) || cat "$GH_STUB_RECORDS.page2"
+    exit 0
+  fi
   while (($#)); do
     if [[ $1 == --jq ]]; then
       printf '%s' "$2" >"$GH_STUB_JQ_CAPTURE"
@@ -300,6 +316,17 @@ _sched "$sched_dir" zeta 71 Timeout timed_out "$recent"
 _sched "$sched_dir" zeta 72 Skipper skipped "$recent"
 _sched "$sched_dir" zeta 73 CancelledOld cancelled "$stale"
 empty_sched=$(_tmpdir)
+
+echo "=== bounded repository pagination ==="
+
+paged_records="$fixtures/paged-records"
+_rec repo first-page main aaaaaaa SUCCESS >"$paged_records"
+_rec repo last-page main bbbbbbb SUCCESS >"$paged_records.page2"
+out=$(GH_STUB_BOUNDED_PAGES=1 RECORDS=$paged_records run --no-scheduled --porcelain 2>&1)
+rc=$?
+_assert_exit "pagination: bounded repository query succeeds" 0 "$rc"
+_assert_contains "pagination: first repository page is included" 'first-page' "$out"
+_assert_contains "pagination: later repository pages are included" 'last-page' "$out"
 
 echo "=== status presentation ==="
 
