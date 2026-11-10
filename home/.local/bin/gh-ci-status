@@ -195,12 +195,14 @@ _sep=$'\x1f'
 # archived repositories are filtered server-side unless requested, which also
 # keeps the query's rate-limit cost low for --watch. Default-branch rollups
 # cover the latest commit only; open pull requests are read in one page, and a
-# longer queue is reported as truncated rather than silently dropped.
+# longer queue is reported as truncated rather than silently dropped. Keep
+# repository pages small: nested PR/check rollups can make larger pages hit
+# GitHub gateway timeouts; --paginate still includes every repository.
 # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
 _query='
 query($owner: String!, $endCursor: String, $isFork: Boolean, $isArchived: Boolean) {
   repositoryOwner(login: $owner) {
-    repositories(first: 50, after: $endCursor, ownerAffiliations: [OWNER],
+    repositories(first: 10, after: $endCursor, ownerAffiliations: [OWNER],
                  isFork: $isFork, isArchived: $isArchived,
                  orderBy: {field: NAME, direction: ASC}) {
       pageInfo { hasNextPage endCursor }
