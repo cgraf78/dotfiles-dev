@@ -494,6 +494,9 @@
         "portable_shell_scanner": {
           "type": "boolean"
         },
+        "codemode_vm": {
+          "type": "boolean"
+        },
         "all_flags": {
           "type": "boolean"
         },
@@ -512,13 +515,13 @@
         "artifacts": {
           "type": "boolean"
         },
-        "codemode_vm": {
-          "type": "boolean"
-        },
         "shell_timeout_background": {
           "type": "boolean"
         },
         "console_watches": {
+          "type": "boolean"
+        },
+        "mcp_events": {
           "type": "boolean"
         },
         "part_rows": {
@@ -2500,6 +2503,14 @@
         }
       ]
     },
+    "Tool.FreeformFormat": {
+      "type": "string",
+      "enum": [
+        "text",
+        "regex",
+        "lark"
+      ]
+    },
     "Config.Model.Reasoning": {
       "anyOf": [
         {
@@ -2564,6 +2575,12 @@
       "properties": {
         "tools": {
           "type": "boolean"
+        },
+        "freeform": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tool.FreeformFormat"
+          }
         },
         "input": {
           "type": "array",

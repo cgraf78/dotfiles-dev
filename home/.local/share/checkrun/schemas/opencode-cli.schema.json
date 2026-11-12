@@ -3261,7 +3261,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Show average tokens per second"
+              "description": "Show output tokens per second while the model streams"
             },
             "markdown": {
               "anyOf": [
