@@ -11,7 +11,8 @@ unresolved contradiction.
 
 - Use project scope for repository-specific facts and pass
   `--project <file-or-repo-path>` using the relevant project or file, not an
-  incidental shell working directory.
+  incidental shell working directory, so project identity survives across
+  machines.
 - Use explicit global scope only for guidance that should be recalled across
   unrelated repositories, machines, and agents.
 - Do not broaden a host-specific, employer-specific, or private operational
@@ -32,6 +33,11 @@ unresolved contradiction.
 
 ## Keep signal high
 
+- Use `hm remember --text` for a durable preference, project fact, recurring
+  workflow, convention, environment detail, or architectural decision, and
+  `hm note --text` for lower-confidence observations.
+- Prefer one concise memory per lasting fact. Do not remember transient state,
+  raw output, or speculation.
 - Store the durable conclusion, rationale, and future action, not raw command
   output or a transcript of the investigation.
 - Record hypotheses and unconfirmed observations as notes until evidence makes
