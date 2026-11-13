@@ -109,6 +109,25 @@
     "args": { "text": "\u0001" },
     "when": "terminalFocus"
   },
+  // Karabiner also turns physical Ctrl+Shift+B into Cmd+Shift+B, VS Code's
+  // macOS build-task chord. In the terminal it is tmux's nested prefix, as in
+  // the common Ctrl+Shift+B route; editors keep the build task.
+  {
+    "key": "shift+cmd+b",
+    "command": "workbench.action.terminal.sendSequence",
+    "args": { "text": "\u001b[98;6u" },
+    "when": "terminalFocus"
+  },
+  // Option+Space opens tmux's command palette (M-Space). With
+  // terminal.integrated.macOptionIsMeta at its default (off), macOS would
+  // type a no-break space instead; send ESC space, which tmux reads as
+  // M-Space, from the terminal only.
+  {
+    "key": "alt+space",
+    "command": "workbench.action.terminal.sendSequence",
+    "args": { "text": "\u001b " },
+    "when": "terminalFocus"
+  },
   {
     "key": "cmd+c",
     "command": "workbench.action.terminal.copySelection",

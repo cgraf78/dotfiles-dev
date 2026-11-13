@@ -275,6 +275,29 @@ dot_dev_vscode_merges_test() {
           and .args.text == "\u0002"
           and .when == "terminalFocus"
         )] | length' "$keybindings_file")"
+      # Ctrl+Shift+B is tmux's prefix for the next layer in every terminal,
+      # Termnav or not: the CSI-u chord tmux binds as C-S-b, never the build
+      # task.
+      _assert_eq "vscode $platform terminal: Ctrl+Shift+B sends the nested tmux prefix" \
+        '[["workbench.action.terminal.sendSequence","\u001b[98;6u","terminalFocus"]]' \
+        "$(jq -c '[.[] | select(.key == "ctrl+shift+b") | [.command, .args.text, .when]]' \
+          "$keybindings_file")"
+      if [[ "$platform" == "macOS" ]]; then
+        # Karabiner turns physical Ctrl+Shift+B into Cmd+Shift+B.
+        _assert_eq "vscode macOS terminal: Karabiner's Cmd+Shift+B sends the nested tmux prefix" \
+          '[["workbench.action.terminal.sendSequence","\u001b[98;6u","terminalFocus"]]' \
+          "$(jq -c '[.[] | select(.key == "shift+cmd+b") | [.command, .args.text, .when]]' \
+            "$keybindings_file")"
+        _assert_eq "vscode macOS terminal: Option+Space reaches tmux as M-Space" \
+          '[["workbench.action.terminal.sendSequence","\u001b ","terminalFocus"]]' \
+          "$(jq -c '[.[] | select(.key == "alt+space") | [.command, .args.text, .when]]' \
+            "$keybindings_file")"
+      else
+        _assert_eq "vscode $platform: macOS-only Cmd+Shift+B and Option+Space routes stay off" \
+          "0" \
+          "$(jq '[.[] | select(.key == "shift+cmd+b" or .key == "alt+space")] | length' \
+            "$keybindings_file")"
+      fi
       _assert_eq "vscode $platform terminal: tmux prefix has no focus-only duplicate" \
         "0" \
         "$(jq '[.[] | select(

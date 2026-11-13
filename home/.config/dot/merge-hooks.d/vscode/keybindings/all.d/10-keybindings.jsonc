@@ -117,6 +117,17 @@
     "args": { "text": "\u001b[9;6u" },
     "when": "terminalFocus"
   },
+  // Ctrl+Shift+B is tmux's one-key prefix for the next tmux in: the base tmux
+  // config's C-S-b sends the prefix into a nested or remote tmux and starts
+  // its own prefix elsewhere. VS Code would run its build task here, and
+  // xterm.js would send the plain Ctrl-B byte, so send the CSI-u chord tmux
+  // reads as C-S-b. Outside the terminal the build task keeps the chord.
+  {
+    "key": "ctrl+shift+b",
+    "command": "workbench.action.terminal.sendSequence",
+    "args": { "text": "\u001b[98;6u" },
+    "when": "terminalFocus"
+  },
   {
     "key": "ctrl+v",
     "command": "workbench.action.terminal.paste",

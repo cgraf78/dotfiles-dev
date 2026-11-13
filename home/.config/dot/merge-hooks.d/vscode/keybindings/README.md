@@ -39,8 +39,10 @@ Use this decision order:
    translates Karabiner's output but mirrors the ownership decision from steps
    3-5; it does not create a separate macOS focus policy. See the physical-key
    ownership policy below before adding a macOS-only transport.
-7. Encode Ctrl letters and exact C0 controls as their byte. For a modified key
-   with no exact C0 identity, use CSI-u: `ESC [ <ASCII> ; <modifier> u`. Ctrl is
+7. Encode Ctrl letters and exact C0 controls as their byte. Encode an Alt
+   (Meta) chord as `ESC` followed by the key, as the `ESC H/J/K/L` pane
+   movement and Option+Space routes do. For any other modified key with no
+   exact C0 identity, use CSI-u: `ESC [ <ASCII> ; <modifier> u`. Ctrl is
    5 and Ctrl+Shift is 6. Legacy terminals encode physical Ctrl+/ as Ctrl-_
    (`0x1f`), so Neovim intentionally maps both spellings.
 8. When changing or deleting an existing managed object, copy the complete old
@@ -154,10 +156,14 @@ workbench behavior continues outside the terminal, while terminal-native
 controls continue reaching shell and tmux.
 
 The common terminal-native inventory is intentionally narrow: `Ctrl-B` for the
-tmux prefix, explicit `Ctrl-H/K/L` directional pane controls, `Ctrl-\` for the
-local previous pane, native `Ctrl-J` passthrough, both `Ctrl-Tab` directions for
-layered tab navigation, and Ctrl+/ normalization to the conventional Ctrl-_
-byte. Clipboard chords keep their explicit
+tmux prefix, `Ctrl-Shift-B` for the next tmux in, explicit `Ctrl-H/K/L`
+directional pane controls, `Ctrl-\` for the local previous pane, native
+`Ctrl-J` passthrough, both `Ctrl-Tab` directions for layered tab navigation,
+and Ctrl+/ normalization to the conventional Ctrl-_ byte. `Ctrl-Shift-B`
+replaces VS Code's Run Build Task in the terminal only: xterm.js would send it
+as plain `Ctrl-B`, so the route sends the CSI-u chord `ESC [ 98 ; 6 u`. tmux
+binds it to send its prefix into a nested or remote tmux, or to start its own
+prefix over any other pane. Clipboard chords keep their explicit
 client-side paste policy, while Shift+Enter and Alt+Shift+bracket already have
 their own terminal routes. Removing `workbench.action.togglePanel` from the
 terminal skip-shell set protects native Ctrl-J from VS Code's global panel
@@ -182,8 +188,14 @@ shells and tmux must always receive (`Ctrl-A/B/L/N/R/U/W/Z` and `Ctrl-/`) are
 sent under `terminalFocus` without depending on Termnav. In particular,
 physical `Ctrl-B` reaches tmux as C0 byte `0x02`, physical `Ctrl-/` reaches the
 pty as `0x1f`, and the corresponding native Cmd shortcuts remain active outside
-the terminal. Other translated VSCode-style chords override the host only while
+the terminal. Karabiner turns physical `Ctrl-Shift-B` into Cmd+Shift+B, so a
+macOS route sends the same CSI-u chord under `terminalFocus`; editors keep the
+build task. Other translated VSCode-style chords override the host only while
 `termnav.nvimFocused` is true.
+Option+Space is macOS client behavior rather than a Karabiner translation:
+with `terminal.integrated.macOptionIsMeta` at its default (off), macOS types a
+no-break space for it. A macOS route sends `ESC` space under `terminalFocus`,
+the Meta encoding tmux reads as `M-Space`, its command-palette key.
 Karabiner transports physical `Ctrl-Shift-V` through otherwise-unused `F20`;
 focused Neovim receives the distinct CSI-u chord, while terminal and editor
 fallbacks retain normal paste behavior without consuming native
