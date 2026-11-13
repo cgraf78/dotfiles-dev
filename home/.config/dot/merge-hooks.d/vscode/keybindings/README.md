@@ -156,13 +156,14 @@ workbench behavior continues outside the terminal, while terminal-native
 controls continue reaching shell and tmux.
 
 The common terminal-native inventory is intentionally narrow: `Ctrl-B` for the
-tmux prefix, `Ctrl-Shift-B` for a nested tmux's prefix, explicit `Ctrl-H/K/L`
+tmux prefix, `Ctrl-Shift-B` for the next tmux in, explicit `Ctrl-H/K/L`
 directional pane controls, `Ctrl-\` for the local previous pane, native
 `Ctrl-J` passthrough, both `Ctrl-Tab` directions for layered tab navigation,
 and Ctrl+/ normalization to the conventional Ctrl-_ byte. `Ctrl-Shift-B`
 replaces VS Code's Run Build Task in the terminal only: xterm.js would send it
-as plain `Ctrl-B`, so the route sends the CSI-u chord `ESC [ 98 ; 6 u`, which
-tmux binds to `send-prefix`. Clipboard chords keep their explicit
+as plain `Ctrl-B`, so the route sends the CSI-u chord `ESC [ 98 ; 6 u`. tmux
+binds it to send its prefix into a nested or remote tmux, or to start its own
+prefix over any other pane. Clipboard chords keep their explicit
 client-side paste policy, while Shift+Enter and Alt+Shift+bracket already have
 their own terminal routes. Removing `workbench.action.togglePanel` from the
 terminal skip-shell set protects native Ctrl-J from VS Code's global panel

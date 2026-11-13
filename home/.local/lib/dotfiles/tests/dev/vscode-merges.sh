@@ -275,8 +275,9 @@ dot_dev_vscode_merges_test() {
           and .args.text == "\u0002"
           and .when == "terminalFocus"
         )] | length' "$keybindings_file")"
-      # Ctrl+Shift+B is the nested tmux prefix in every terminal, Termnav or
-      # not: the CSI-u chord tmux binds to send-prefix, never the build task.
+      # Ctrl+Shift+B is tmux's prefix for the next layer in every terminal,
+      # Termnav or not: the CSI-u chord tmux binds as C-S-b, never the build
+      # task.
       _assert_eq "vscode $platform terminal: Ctrl+Shift+B sends the nested tmux prefix" \
         '[["workbench.action.terminal.sendSequence","\u001b[98;6u","terminalFocus"]]' \
         "$(jq -c '[.[] | select(.key == "ctrl+shift+b") | [.command, .args.text, .when]]' \
