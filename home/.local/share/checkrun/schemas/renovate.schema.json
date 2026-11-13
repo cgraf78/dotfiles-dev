@@ -1,8 +1,8 @@
 {
   "$id": "https://docs.renovatebot.com/renovate-schema.json",
-  "title": "JSON schema for Renovate 44.235.1 config files (https://renovatebot.com/)",
+  "title": "JSON schema for Renovate 44.237.1 config files (https://renovatebot.com/)",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "x-renovate-version": "44.235.1",
+  "x-renovate-version": "44.237.1",
   "allowComments": true,
   "type": "object",
   "definitions": {
@@ -333,6 +333,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -808,6 +811,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -1281,6 +1287,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -1756,6 +1765,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -2227,6 +2239,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -2716,6 +2731,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -3313,6 +3331,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -3807,6 +3828,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -4281,6 +4305,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -4758,6 +4785,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -5231,6 +5261,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -5707,6 +5740,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -6194,6 +6230,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -6668,6 +6707,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -7141,6 +7183,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -7658,6 +7703,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -8133,6 +8181,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -8690,6 +8741,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -9164,6 +9218,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -9640,6 +9697,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -10113,6 +10173,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -10589,6 +10652,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -11061,6 +11127,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -11540,6 +11609,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -12032,6 +12104,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -12506,6 +12581,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -13064,6 +13142,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -13548,6 +13629,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -14357,6 +14441,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -14831,6 +14918,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -15302,6 +15392,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -15776,6 +15869,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -16441,6 +16537,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -17010,6 +17109,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -17499,6 +17601,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -17974,6 +18079,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -18818,6 +18926,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -19292,6 +19403,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -19772,6 +19886,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -20545,6 +20662,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -21018,6 +21138,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -21535,6 +21658,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -22009,6 +22135,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -22485,6 +22614,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -22980,6 +23112,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -23453,6 +23588,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -23928,6 +24066,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -24399,6 +24540,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -24874,6 +25018,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -25361,6 +25508,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -25843,6 +25993,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -26317,6 +26470,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -27170,6 +27326,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -27662,6 +27821,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -28137,6 +28299,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -28617,6 +28782,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -29088,6 +29256,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -29567,6 +29738,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -30045,6 +30219,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -30518,6 +30695,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -30993,6 +31173,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -31672,6 +31855,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -32292,6 +32478,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -32763,6 +32952,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -33239,6 +33431,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -33712,6 +33907,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -34208,6 +34406,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -34679,6 +34880,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -35154,6 +35358,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -35637,6 +35844,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -37738,6 +37948,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -38212,6 +38425,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -38705,6 +38921,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -38943,6 +39162,12 @@
         "null"
       ],
       "default": "30 minutes"
+    },
+    "minimumReleaseAgePackageManagerSync": {
+      "description": "Opt early into the new `minimumReleaseAge` behavior: Renovate uses the minimum release age of the package manager's config and passes `minimumReleaseAge` of the repository to the package manager.\nSee also: https://docs.renovatebot.com/configuration-options/#minimumreleaseagepackagemanagersync",
+      "markdownDescription": "Opt early into the new `minimumReleaseAge` behavior: Renovate uses the minimum release age of the package manager's config and passes `minimumReleaseAge` of the repository to the package manager.\n\nSee also: [minimumReleaseAgePackageManagerSync](https://docs.renovatebot.com/configuration-options/#minimumreleaseagepackagemanagersync)",
+      "type": "boolean",
+      "default": false
     },
     "minor": {
       "description": "Configuration to apply when an update type is `minor`.\nSee also: https://docs.renovatebot.com/configuration-options/#minor",
@@ -39581,6 +39806,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -40064,6 +40292,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -40537,6 +40768,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -41043,6 +41277,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -41522,6 +41759,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -42006,6 +42246,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -42509,6 +42752,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -42985,6 +43231,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -43456,6 +43705,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -43930,6 +44182,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -45009,6 +45264,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -45842,6 +46100,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -46313,6 +46574,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -47538,6 +47802,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -48011,6 +48278,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -48486,6 +48756,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -48959,6 +49232,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -49434,6 +49710,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -49925,6 +50204,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -50619,6 +50901,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -51098,6 +51383,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -51585,6 +51873,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -52058,6 +52349,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -52535,6 +52829,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -53010,6 +53307,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -53533,6 +53833,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -54044,6 +54347,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -55321,6 +55627,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -55796,6 +56105,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -56270,6 +56582,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -56749,6 +57064,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -57222,6 +57540,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -57766,6 +58087,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -58254,6 +58578,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -58847,6 +59174,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -59323,6 +59653,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -59794,6 +60127,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -60272,6 +60608,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -60748,6 +61087,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -61222,6 +61564,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -61699,6 +62044,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -62174,6 +62522,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -62720,6 +63071,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -63194,6 +63548,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -63667,6 +64024,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -64183,6 +64543,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -64657,6 +65020,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -65695,6 +66061,9 @@
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
             },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
+            },
             "minor": {
               "$ref": "#/definitions/minor"
             },
@@ -66174,6 +66543,9 @@
             },
             "minimumReleaseAgeBuffer": {
               "$ref": "#/definitions/minimumReleaseAgeBuffer"
+            },
+            "minimumReleaseAgePackageManagerSync": {
+              "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
             },
             "minor": {
               "$ref": "#/definitions/minor"
@@ -66903,6 +67275,9 @@
     },
     "minimumReleaseAgeBuffer": {
       "$ref": "#/definitions/minimumReleaseAgeBuffer"
+    },
+    "minimumReleaseAgePackageManagerSync": {
+      "$ref": "#/definitions/minimumReleaseAgePackageManagerSync"
     },
     "minor": {
       "$ref": "#/definitions/minor"
