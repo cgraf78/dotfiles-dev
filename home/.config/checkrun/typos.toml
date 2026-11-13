@@ -32,3 +32,7 @@ mak = "mak"
 othe = "othe"
 # Pluralized hardware-token acronym.
 OTPs = "OTPs"
+# Samba's setting name is part of its configuration interface.
+browseable = "browseable"
+# Preserve the complete protocol acronym without accepting its word fragments.
+UPnP = "UPnP"

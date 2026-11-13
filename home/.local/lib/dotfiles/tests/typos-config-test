@@ -84,4 +84,24 @@ HOME="$work/home" XDG_CONFIG_HOME="$work/config" \
   --format json "$work/$nfs_command-notes.md" >/dev/null || status=$?
 _assert_eq 'command in file name: status' 0 "$status"
 
+# Whole-identifier exceptions must preserve technical vocabulary without
+# suppressing an acronym fragment or a neighboring prose mistake. Encode the
+# new vocabulary until the installed fallback contains these entries too.
+samba_setting=$(printf '\142\162\157\167\163\145\141\142\154\145')
+network_acronym=$(printf '\125\120\156\120')
+acronym_fragment=$(printf '\120\156')
+acronym_findings="[\"$acronym_fragment\"]"
+
+check_spelling 'Samba setting in a matching expression' '[]' \
+  "/read only|$samba_setting|force user/"
+check_spelling 'network acronym in prose' '[]' "$network_acronym is disabled."
+check_spelling 'standalone acronym fragment remains checked' "$acronym_findings" \
+  "$acronym_fragment"
+check_spelling 'fragment in another identifier remains checked' "$acronym_findings" \
+  "Get${acronym_fragment}Mode"
+check_spelling 'typo beside Samba setting remains checked' "$word_findings" \
+  "$samba_setting $misspelling"
+check_spelling 'typo beside network acronym remains checked' "$word_findings" \
+  "$network_acronym $misspelling"
+
 _test_summary
