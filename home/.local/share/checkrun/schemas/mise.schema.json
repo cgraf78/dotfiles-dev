@@ -3917,6 +3917,14 @@
           "description": "Show extra output, such as installation logs, and set the log level to debug; same as `--verbose`.",
           "type": "boolean"
         },
+        "versions_host_exclude": {
+          "default": [],
+          "description": "GitHub repositories that never use mise-versions, such as `my-org/*`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "windows_default_file_shell_args": {
           "default": "cmd /c",
           "description": "Shell that runs a file task on Windows when the task sets no `shell` and the file has no shebang or known extension.",
@@ -9069,6 +9077,14 @@
                 "type": "string",
                 "description": "inline file content; cannot be combined with source"
               },
+              "block": {
+                "type": "string",
+                "description": "block content kept between marker comments named by id, in a file mise does not own; the rest of the file is left alone, a missing file is created with just the block, and the block is appended when its markers are absent. Cannot be combined with source or content, and needs id"
+              },
+              "id": {
+                "type": "string",
+                "description": "names the block's marker comments, as in \"# >>> mise:<id> >>>\"; required with block"
+              },
               "owner": {
                 "type": "string",
                 "description": "user that should own the file; left as it is when unset"
@@ -9079,7 +9095,7 @@
               },
               "mode": {
                 "type": "string",
-                "description": "octal permissions such as \"0640\"; defaults to \"0644\" for a file with source or content, otherwise left as it is"
+                "description": "octal permissions such as \"0640\"; defaults to \"0644\" for a file with source or content, or one a block creates, otherwise left as it is"
               },
               "template": {
                 "type": "boolean",
@@ -9143,7 +9159,57 @@
                 }
               },
               {
-                "$comment": "A present file without source or content manages only its permissions: it must declare some, and cannot be templated or replaced.",
+                "$comment": "A block edits one marked region of a file mise does not own: it needs an id, takes its body from block alone, and is never removed or replaced.",
+                "if": {
+                  "required": [
+                    "block"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "id"
+                  ],
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "source"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "content"
+                        ]
+                      }
+                    ]
+                  },
+                  "properties": {
+                    "state": {
+                      "const": "present"
+                    },
+                    "replace": {
+                      "const": false
+                    },
+                    "remove_empty": {
+                      "const": false
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "id"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "block"
+                  ]
+                }
+              },
+              {
+                "$comment": "A present file without source, content or block manages only its permissions: it must declare some, and cannot be templated or replaced.",
                 "if": {
                   "properties": {
                     "state": {
@@ -9160,6 +9226,11 @@
                       {
                         "required": [
                           "content"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "block"
                         ]
                       }
                     ]
@@ -9834,23 +9905,28 @@
           "description": "macOS-specific bootstrap config",
           "properties": {
             "dock": {
-              "$ref": "#/$defs/bootstrap_macos_dock"
+              "$ref": "#/$defs/bootstrap_macos_dock",
+              "deprecated": true
             },
             "finder": {
-              "$ref": "#/$defs/bootstrap_macos_finder"
+              "$ref": "#/$defs/bootstrap_macos_finder",
+              "deprecated": true
             },
             "keyboard": {
-              "$ref": "#/$defs/bootstrap_macos_keyboard"
+              "$ref": "#/$defs/bootstrap_macos_keyboard",
+              "deprecated": true
             },
             "trackpad": {
-              "$ref": "#/$defs/bootstrap_macos_trackpad"
+              "$ref": "#/$defs/bootstrap_macos_trackpad",
+              "deprecated": true
             },
             "defaults": {
-              "$ref": "#/$defs/bootstrap_macos_defaults"
+              "$ref": "#/$defs/bootstrap_macos_defaults",
+              "deprecated": true
             },
             "defaults_entries": {
               "type": "array",
-              "description": "Explicit macOS preferences with a selectable host scope",
+              "description": "deprecated: use [[bootstrap.settings.macos.defaults_entries]]",
               "items": {
                 "type": "object",
                 "properties": {
@@ -9906,7 +9982,8 @@
                   "key",
                   "value"
                 ]
-              }
+              },
+              "deprecated": true
             },
             "launchd": {
               "type": "object",
@@ -10072,7 +10149,7 @@
             },
             "login_items": {
               "type": "object",
-              "description": "applications to open at login (System Settings > General > Login Items & Extensions)",
+              "description": "deprecated: use [bootstrap.settings.macos.login_items]",
               "properties": {
                 "apps": {
                   "type": "array",
@@ -10086,6 +10163,7 @@
                   "description": "also remove login items that are not declared (default: false, so apps that register themselves are left alone)"
                 }
               },
+              "deprecated": true,
               "additionalProperties": false
             }
           },
@@ -11043,6 +11121,124 @@
             "description": "at most 32 ASCII letters, digits, '_' or '-', starting with a letter or '_', with an optional trailing '$'",
             "pattern": "^[A-Za-z_][A-Za-z0-9_-]*\\$?$",
             "maxLength": 32
+          }
+        },
+        "settings": {
+          "type": "object",
+          "description": "[experimental] settings that bootstrap settings plugins apply, keyed by plugin name; which keys a plugin accepts is up to the plugin",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_.-]+$"
+          },
+          "properties": {
+            "macos": {
+              "type": "object",
+              "description": "macOS preferences, written the way `defaults write` writes them; `macos` is built in, not a plugin",
+              "properties": {
+                "dock": {
+                  "description": "Dock preferences (com.apple.dock)",
+                  "$ref": "#/$defs/bootstrap_macos_dock"
+                },
+                "finder": {
+                  "description": "Finder preferences (com.apple.finder)",
+                  "$ref": "#/$defs/bootstrap_macos_finder"
+                },
+                "keyboard": {
+                  "description": "keyboard preferences",
+                  "$ref": "#/$defs/bootstrap_macos_keyboard"
+                },
+                "trackpad": {
+                  "description": "trackpad preferences",
+                  "$ref": "#/$defs/bootstrap_macos_trackpad"
+                },
+                "defaults": {
+                  "description": "any preference, by domain and key",
+                  "$ref": "#/$defs/bootstrap_macos_defaults"
+                },
+                "defaults_entries": {
+                  "type": "array",
+                  "description": "Explicit macOS preferences with a selectable host scope",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "type": "string",
+                        "description": "preferences domain, such as \"com.apple.dock\" or \"NSGlobalDomain\"; -g and -globalDomain mean NSGlobalDomain"
+                      },
+                      "key": {
+                        "type": "string",
+                        "description": "preference key within the domain"
+                      },
+                      "host": {
+                        "type": "string",
+                        "description": "any writes the preference for every host; current writes it for this machine only, like defaults -currentHost",
+                        "enum": [
+                          "any",
+                          "current"
+                        ],
+                        "default": "any"
+                      },
+                      "path": {
+                        "type": "array",
+                        "description": "Dictionary keys below the preference key; omitted to replace the whole value",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1
+                      },
+                      "value": {
+                        "description": "desired value, written with the matching property list type; replaces the selected value in full",
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "domain",
+                      "key",
+                      "value"
+                    ]
+                  }
+                },
+                "login_items": {
+                  "type": "object",
+                  "description": "applications to open at login (System Settings > General > Login Items & Extensions)",
+                  "properties": {
+                    "apps": {
+                      "type": "array",
+                      "description": "application bundles to open at login: absolute or `~/` paths ending in `.app`",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "exclusive": {
+                      "type": "boolean",
+                      "description": "also remove login items that are not declared (default: false, so apps that register themselves are left alone)"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": {
+            "type": "object",
+            "description": "settings for the bootstrap settings plugin of this name"
           }
         }
       },
