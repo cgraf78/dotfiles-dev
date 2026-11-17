@@ -10,7 +10,16 @@ project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"]
 # on purpose; they add churn without changing behavior.
 # AgentGuard's dependency-owned fragment enables native hooks separately, so
 # this local policy file does not duplicate that provider-owned setting.
-memories = true
+#
+# Native memories stay explicitly off, the one deliberate `= false` here, so a
+# previously merged `true` is overwritten. When on, Codex injects a
+# developer-role instruction to update memories "only when explicitly asked".
+# Codex read it as covering `hm` too, and because a developer message outranks
+# the shared Hive Memory rule, it stopped writing `hm` memories. Its private
+# store also kept Codex's lessons out of the agent-agnostic memory every other
+# agent reads. Turning it off also drops Codex's private recall (the injected
+# ~/.codex/memories summary), which stays on disk for review.
+memories = false
 goals = true
 terminal_resize_reflow = true
 
