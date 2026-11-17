@@ -8,13 +8,19 @@
 _DR_AGENT_HOOK_DEADLINE=10
 
 # What the probes set for every hook run: a neutral agent name, and the
-# hook's side effects (memory hooks, process detection, the commit gate)
-# switched off. The reproduction hints print the same settings.
+# hook's side effects (memory hooks, process detection, the commit gate,
+# telemetry) switched off. The reproduction hints print the same settings.
+# Telemetry is off because each probe would otherwise record a synthetic
+# session, including a policy block, in AgentGuard's audit log; those
+# sessions crowd real ones out of `agentguard-telemetry sessions` and inflate
+# block counts. Recording never changes a hook's decision or exit status, so
+# the probes test the same behavior either way.
 _DR_AGENT_HOOK_ENV=(
   AGENTGUARD_NAME=agent
   AGENTGUARD_HIVE_MEMORY_HOOKS=0
   AGENTGUARD_PROCESS_DETECT=0
   AGENTGUARD_SLEY_GATE=0
+  AGENTGUARD_TELEMETRY=0
 )
 # The probe payloads: an ordinary command, one policy forbids, and the stop
 # hook's empty event.

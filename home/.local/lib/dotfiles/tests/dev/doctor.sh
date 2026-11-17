@@ -1311,15 +1311,20 @@ case $input in
   *) exit 3 ;;
 esac
 SH
+  # The stop stub records the telemetry switch it saw, so the test can
+  # check that probes never write AgentGuard audit records.
   cat >"$agent_home/.local/bin/agent-hook-stop" <<'SH'
 #!/usr/bin/env bash
 cat >/dev/null
+printf '%s\n' "${AGENTGUARD_TELEMETRY-unset}" >"$HOME/stop-telemetry"
 printf '{}\n'
 SH
   chmod +x "$agent_home/.local/bin/agent-hook-pre-bash" \
     "$agent_home/.local/bin/agent-hook-stop"
-  result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" \
+  result=$(HOME="$agent_home" PATH="$doctor_bin:$PATH" AGENTGUARD_TELEMETRY=1 \
     _probe_records)
+  _assert_eq 'Agent Hooks doctor probes run with AgentGuard telemetry off' \
+    0 "$(cat "$agent_home/stop-telemetry" 2>/dev/null)"
   _assert_contains 'Agent Hooks doctor accepts the allowed benign command' \
     $'ok\tagent pre-bash allows a benign command\tdot status' "$result"
   _assert_contains 'Agent Hooks doctor accepts the policy denial path' \
@@ -1350,13 +1355,13 @@ SH
   # Every failing probe says how to rerun it by hand: the reinstall first,
   # then the command, last, so it can be pasted on its own.
   _assert_contains 'Agent Hooks doctor: a rejected benign command says how to reproduce it' \
-    $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{"tool_input":{"command":"dot status"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
+    $'fail\tagent pre-bash rejects a benign command\tbroken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{"tool_input":{"command":"dot status"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_TELEMETRY=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
   _assert_contains 'Agent Hooks doctor: a failed policy probe says how to reproduce it' \
-    $'exit 7: broken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run (a block exits 2 with a reason): (t=$(mktemp -d) && cd ~ && echo \'{"tool_input":{"command":"git status -uall"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
+    $'exit 7: broken pre-bash; reinstall AgentGuard with \'dot update\'; to see the failure first, run (a block exits 2 with a reason): (t=$(mktemp -d) && cd ~ && echo \'{"tool_input":{"command":"git status -uall"}}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_TELEMETRY=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-pre-bash"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
   _assert_contains 'Agent Hooks doctor: a failed stop hook says how to reproduce it' \
-    $'fail\tagent stop hook failed\tbroken stop; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)' \
+    $'fail\tagent stop hook failed\tbroken stop; reinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_TELEMETRY=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)' \
     "$result"
   # The printed command runs as printed: from any directory, without moving
   # the caller's shell, under the throwaway session ID, with the hook's own
@@ -1390,7 +1395,7 @@ SH
   _assert_contains 'Agent Hooks doctor: a newer Dot keeps the probe detail on the row' \
     $'\nfail\tagent stop hook failed\tbroken stop for dot-doctor-' "$result"
   _assert_contains 'Agent Hooks doctor: a newer Dot gets the probe step as a hint' \
-    $'hint\treinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)\t' "$result"
+    $'hint\treinstall AgentGuard with \'dot update\'; to see the failure first, run: (t=$(mktemp -d) && cd ~ && echo \'{}\' | env -u BASH_ENV -u ENV AGENTGUARD_NAME=agent AGENTGUARD_HIVE_MEMORY_HOOKS=0 AGENTGUARD_PROCESS_DETECT=0 AGENTGUARD_SLEY_GATE=0 AGENTGUARD_TELEMETRY=0 AGENTGUARD_SESSION_ID=dot-doctor-repro TMPDIR="$t" "$HOME/.local/bin/agent-hook-stop"; rc=$?; rm -rf "$t"; exit $rc)\t' "$result"
 
   permissive_home=$(_tmpdir)
   mkdir -p "$permissive_home/.local/bin" "$permissive_home/.config/shell"
