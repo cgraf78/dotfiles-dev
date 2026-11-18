@@ -320,6 +320,9 @@
           "type": "boolean",
           "description": "Enable automatic compaction when context is full (default: true)"
         },
+        "background": {
+          "type": "boolean"
+        },
         "keep": {
           "type": "object",
           "properties": {
@@ -503,22 +506,28 @@
         "todo": {
           "type": "boolean"
         },
-        "background_compaction": {
-          "type": "boolean"
-        },
         "media_blob": {
           "type": "boolean"
         },
-        "schedules": {
+        "automations": {
           "type": "boolean"
         },
         "artifacts": {
+          "type": "boolean"
+        },
+        "video_generate": {
           "type": "boolean"
         },
         "console_watches": {
           "type": "boolean"
         },
         "mcp_events": {
+          "type": "boolean"
+        },
+        "full_codemode": {
+          "type": "boolean"
+        },
+        "schedules": {
           "type": "boolean"
         },
         "part_rows": {
@@ -2450,7 +2459,8 @@
           "enum": [
             "chat",
             "decision",
-            "image"
+            "image",
+            "video"
           ]
         },
         {
