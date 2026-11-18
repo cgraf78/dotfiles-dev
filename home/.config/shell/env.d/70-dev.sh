@@ -44,6 +44,12 @@ fi
 # blocks foreground or detached watcher launches. An inherited value wins
 # (0 turns both back into reminders).
 export AGENTGUARD_WATCH_BLOCK="${AGENTGUARD_WATCH_BLOCK:-1}"
+# Claude sessions here run in bypassPermissions mode with AgentGuard's
+# pre-tool guards as the safety net, yet Claude still prompts for some Bash
+# and Monitor commands (critical-path `rm` checks), which a headless or
+# nested run denies. AgentGuard's PermissionRequest hook answers those
+# prompts in bypass mode only. An inherited value wins (0 restores prompts).
+export AGENTGUARD_PERMISSION_REQUEST_ALLOW="${AGENTGUARD_PERMISSION_REQUEST_ALLOW:-1}"
 export AGENTGUARD_EDIT_CHURN_WARN="${AGENTGUARD_EDIT_CHURN_WARN:-10}"
 export AGENTGUARD_EDIT_CHURN_BLOCK="${AGENTGUARD_EDIT_CHURN_BLOCK:-20}"
 export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS="${OPENCODE_DISABLE_CLAUDE_CODE_SKILLS:-1}"
