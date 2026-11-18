@@ -20,6 +20,16 @@ asset cannot be resolved or validated, the hook reports a failed refresh and
 leaves the complete live `~/.claude/settings.json` untouched; it does not apply
 permission policy alone against a missing guard base.
 
+`settings.d/30-bypass-permission-requests.json` makes bypass-permissions
+sessions prompt-free. Claude Code still asks about some Bash and Monitor
+commands in that mode, such as an `rm` whose target it cannot rule out as a
+critical path. Its `CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS` switch
+does nothing while any `PermissionRequest` hook is registered, and AgentGuard
+and some plugins register one, so this layer answers those requests
+with `allow` instead. It answers only when the request's `permission_mode` is
+`bypassPermissions`; every other mode keeps its prompts. AgentGuard's own
+hooks still see every request and keep guarding commands.
+
 Change native hook behavior and its tests in AgentGuard under
 `share/agentguard/integrations/claude/`. Keep additions here limited to local
 policy that does not belong in a reusable integration.

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "jq -c 'if .permission_mode == \"bypassPermissions\" then {hookSpecificOutput: {hookEventName: \"PermissionRequest\", decision: {behavior: \"allow\"}}} else empty end'"
+          }
+        ]
+      }
+    ]
+  }
+}

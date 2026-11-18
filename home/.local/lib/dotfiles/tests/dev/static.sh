@@ -359,6 +359,32 @@ PY
     fail=$((fail + 1))
   fi
 
+  # The bypass layer must answer only bypass sessions: every other mode keeps
+  # its prompt, so the hook prints nothing there. Run the shipped command
+  # itself, as Claude Code does, on each mode's request payload.
+  local bypass_layer bypass_command mode mode_output bypass_ok=1
+  bypass_layer=$root/.config/dot/merge-hooks.d/claude/settings.d/30-bypass-permission-requests.json
+  bypass_command=$(jq -er '.hooks.PermissionRequest[] | select(.matcher == "Bash|Monitor") | .hooks[0].command' "$bypass_layer") ||
+    bypass_ok=0
+  for mode in bypassPermissions default acceptEdits auto plan dontAsk; do
+    [[ $bypass_ok == 1 ]] || break
+    mode_output=$(printf '{"hook_event_name":"PermissionRequest","permission_mode":"%s","tool_name":"Bash","tool_input":{"command":"true"}}' "$mode" |
+      bash -c "$bypass_command") || bypass_ok=0
+    if [[ $mode == bypassPermissions ]]; then
+      [[ $(jq -r '.hookSpecificOutput | "\(.hookEventName) \(.decision.behavior)"' <<<"$mode_output") == "PermissionRequest allow" ]] ||
+        bypass_ok=0
+    else
+      [[ -z $mode_output ]] || bypass_ok=0
+    fi
+  done
+  if [[ $bypass_ok == 1 ]]; then
+    printf 'PASS: Claude bypass layer allows permission requests only in bypass mode\n'
+    pass=$((pass + 1))
+  else
+    printf 'FAIL: Claude bypass layer allows permission requests only in bypass mode\n' >&2
+    fail=$((fail + 1))
+  fi
+
   # AgentGuard owns native lifecycle vocabulary and adapter behavior; this
   # overlay keeps only user policy plus the generic machinery that installs
   # those assets. The negative contract keeps a future hook tweak from quietly
