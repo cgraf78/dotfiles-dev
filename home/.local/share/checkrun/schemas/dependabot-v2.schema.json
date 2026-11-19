@@ -681,6 +681,7 @@
     },
     "package-ecosystem-values": {
       "enum": [
+        "apm",
         "bazel",
         "bun",
         "bundler",
@@ -762,6 +763,7 @@
           "description": "A custom branch name format using placeholders.",
           "type": "string",
           "minLength": 1,
+          "maxLength": 200,
           "allOf": [
             {
               "description": "Must not contain spaces, ~, ^, :, ?, *, [ or \\.",
@@ -955,7 +957,7 @@
               "items": {
                 "type": "string"
               },
-              "maxItems": 100
+              "maxItems": 150
             },
             "exclude": {
               "description": "List of dependencies excluded from cooldown. Supports wildcards (`*`).",
@@ -963,7 +965,7 @@
               "items": {
                 "type": "string"
               },
-              "maxItems": 100
+              "maxItems": 150
             }
           },
           "additionalProperties": false

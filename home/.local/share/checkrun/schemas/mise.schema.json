@@ -2078,6 +2078,14 @@
           "description": "Maximum total size of the download cache, such as `500MB` or `10GiB`.",
           "type": "string"
         },
+        "enable_backends": {
+          "default": [],
+          "description": "Allowlist of backends mise may resolve and install tools with, such as `core` or `aqua`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "enable_tools": {
           "description": "Allowlist of configured tools mise uses; other tools are ignored.",
           "type": "array",
@@ -5637,6 +5645,15 @@
         "bin_path": {
           "type": "string",
           "description": "directory inside the install that contains binaries (tera templated)"
+        },
+        "libc": {
+          "type": "string",
+          "description": "force strict glibc or musl asset selection on linux",
+          "enum": [
+            "glibc",
+            "gnu",
+            "musl"
+          ]
         }
       }
     },
@@ -6058,6 +6075,20 @@
           "type": "string",
           "description": "directory inside the install that contains binaries (tera templated)"
         },
+        "filter_bins": {
+          "description": "only expose these binaries on PATH",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "shared_extraction": {
           "description": "share extracted content between installs with identical artifacts",
           "$ref": "#/$defs/tool_bool"
@@ -6138,6 +6169,9 @@
           },
           "bin_path": {
             "$ref": "#/$defs/tool_http_options/properties/bin_path"
+          },
+          "filter_bins": {
+            "$ref": "#/$defs/tool_http_options/properties/filter_bins"
           },
           "windows_script_interpreter": {
             "$ref": "#/$defs/tool_http_options/properties/windows_script_interpreter"
@@ -6339,6 +6373,15 @@
           "type": "string",
           "description": "publisher-declared alternative build to select, such as fips"
         },
+        "libc": {
+          "type": "string",
+          "description": "force strict glibc or musl artifact selection on linux",
+          "enum": [
+            "glibc",
+            "gnu",
+            "musl"
+          ]
+        },
         "pubkey": {
           "type": "string",
           "description": "minisign public key line or path to a .pub file pinning the signer"
@@ -6476,6 +6519,51 @@
             "if-necessary",
             "explicit"
           ]
+        },
+        "indexes": {
+          "type": "array",
+          "description": "extra uv package indexes: an array of { name, url, explicit } tables (requires uv and a dependency graph)",
+          "items": {
+            "type": "object",
+            "description": "a uv package index",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "unique index name: ASCII letters, digits, dashes and underscores"
+              },
+              "url": {
+                "type": "string",
+                "description": "index url, without credentials"
+              },
+              "explicit": {
+                "description": "only use this index for packages pinned to it in sources",
+                "$ref": "#/$defs/tool_bool"
+              }
+            },
+            "required": [
+              "name",
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sources": {
+          "type": "object",
+          "description": "pin packages to a named entry of indexes: a table of package = { index = \"name\" } (requires uv and a dependency graph)",
+          "additionalProperties": {
+            "type": "object",
+            "description": "the index a package is installed from",
+            "properties": {
+              "index": {
+                "type": "string",
+                "description": "name of an entry in indexes"
+              }
+            },
+            "required": [
+              "index"
+            ],
+            "additionalProperties": false
+          }
         },
         "python": {
           "type": "string",
@@ -9238,6 +9326,10 @@
               "os": {
                 "description": "OS or OS/arch selectors; entries on other platforms are skipped",
                 "$ref": "#/$defs/os_filter"
+              },
+              "permissions": {
+                "type": "string",
+                "description": "the same as mode, under the name [dotfiles] uses; set only one of the two"
               }
             },
             "allOf": [
@@ -9353,6 +9445,11 @@
                     },
                     {
                       "required": [
+                        "permissions"
+                      ]
+                    },
+                    {
+                      "required": [
                         "owner"
                       ]
                     },
@@ -9370,6 +9467,14 @@
                       "const": false
                     }
                   }
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "mode",
+                    "permissions"
+                  ]
                 }
               }
             ],
@@ -9427,8 +9532,22 @@
               "os": {
                 "description": "OS or OS/arch selectors; entries on other platforms are skipped",
                 "$ref": "#/$defs/os_filter"
+              },
+              "permissions": {
+                "type": "string",
+                "description": "the same as mode, under the name [dotfiles] uses; set only one of the two"
               }
             },
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "mode",
+                    "permissions"
+                  ]
+                }
+              }
+            ],
             "additionalProperties": false
           }
         },
@@ -9588,11 +9707,12 @@
             "properties": {
               "state": {
                 "type": "string",
-                "description": "running or stopped; absent removes a user service's definition (user scope only)",
+                "description": "running or stopped; absent removes a user service's definition (user scope only); unchanged sets enabled without starting or stopping the unit (system services and existing user units only)",
                 "enum": [
                   "running",
                   "stopped",
-                  "absent"
+                  "absent",
+                  "unchanged"
                 ],
                 "default": "running"
               },
