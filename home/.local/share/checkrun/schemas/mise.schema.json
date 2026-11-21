@@ -2467,6 +2467,14 @@
               "description": "Allow publishing or applying history that holds plaintext copies of files now marked for encryption, or publishing versions that look like they contain secrets.",
               "type": "boolean"
             },
+            "allow_secret_values": {
+              "default": [],
+              "description": "Values the secret scan of saved versions accepts, such as a known placeholder.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "describe_command": {
               "default": "",
               "description": "Command, such as an AI agent, that writes the description of each checkpoint the history watcher saves.",
@@ -3860,6 +3868,11 @@
                   "type": "string"
                 }
               ]
+            },
+            "self_update_first": {
+              "default": false,
+              "description": "Update mise before automatic tool updates, and skip the tools if that fails.",
+              "type": "boolean"
             }
           }
         },
@@ -4740,6 +4753,10 @@
                       "type": "integer",
                       "description": "how many of the lock's slots the task holds while it runs; `task.lock_pools` sets how many slots the lock has, one unless it says more, and a count above that is lowered to it",
                       "minimum": 1
+                    },
+                    "if_pool": {
+                      "type": "boolean",
+                      "description": "take the lock only on a machine whose `task.lock_pools` declares this name, so a project can join a pool where one exists without serializing runs where none does; the default is to take it everywhere"
                     }
                   },
                   "unevaluatedProperties": false
@@ -4770,6 +4787,10 @@
                         "type": "integer",
                         "description": "how many of the lock's slots the task holds while it runs; `task.lock_pools` sets how many slots the lock has, one unless it says more, and a count above that is lowered to it",
                         "minimum": 1
+                      },
+                      "if_pool": {
+                        "type": "boolean",
+                        "description": "take the lock only on a machine whose `task.lock_pools` declares this name, so a project can join a pool where one exists without serializing runs where none does; the default is to take it everywhere"
                       }
                     },
                     "required": [
@@ -6304,10 +6325,11 @@
           "deprecated": true
         },
         "version_order": {
-          "description": "ordering applied to remote versions: \"source\" keeps the backend's order, \"semver\" sorts semantic versions",
+          "description": "ordering applied to remote versions: \"source\" keeps the backend's order, \"semver\" sorts semantic versions, \"published_at\" sorts by release date on github, gitlab and forgejo tools",
           "enum": [
             "source",
-            "semver"
+            "semver",
+            "published_at"
           ]
         },
         "prerelease": {
@@ -6538,6 +6560,11 @@
               "explicit": {
                 "description": "only use this index for packages pinned to it in sources",
                 "$ref": "#/$defs/tool_bool"
+              },
+              "exclude-newer": {
+                "type": "boolean",
+                "description": "false skips the minimum_release_age cutoff for this index, which serves no upload times",
+                "const": false
               }
             },
             "required": [
@@ -10058,7 +10085,7 @@
                   },
                   "state": {
                     "type": "string",
-                    "description": "desired package state; pacman, scoop, snap, and zypper support absent",
+                    "description": "desired package state; macports, pacman, scoop, snap, and zypper support absent",
                     "enum": [
                       "present",
                       "absent"
