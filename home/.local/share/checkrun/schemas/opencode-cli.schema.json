@@ -2271,6 +2271,39 @@
               ],
               "description": "Kill shell command"
             },
+            "composer.script.up": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Previous script"
+            },
+            "composer.script.down": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Next script"
+            },
+            "composer.script.cancel": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cancel script"
+            },
             "composer.terminal.up": {
               "anyOf": [
                 {
