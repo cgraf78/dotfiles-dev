@@ -95,18 +95,23 @@ fi
 grep -Fx '  provider-compatibility:' "$workflow" >/dev/null || fail 'provider compatibility job is missing'
 grep -Fx '        run: test/run --provider-compatibility' "$workflow" >/dev/null ||
   fail 'provider compatibility runner is not wired'
-grep -F 'watchexec/releases/download/v2.7.0/watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz' \
-  "$workflow" >/dev/null || fail 'Watchexec compatibility artifact is not version-pinned'
+verified_downloads=$(grep -Fc 'uses: cgraf78/actions/.github/actions/download-release-asset@' "$workflow" || true)
+[[ $verified_downloads -eq 3 ]] || fail 'provider compatibility lacks verified release downloads'
+workflow_text=$(<"$workflow")
+[[ $workflow_text == *$'      - name: Exercise real provider contracts\n        env:\n          GITHUB_TOKEN: ${{ github.token }}'* ]] ||
+  fail 'provider compatibility does not authenticate the shared Dot release download'
+[[ $workflow_text == *$'repository: watchexec/watchexec\n          tag: v2.7.0\n          asset: watchexec-2.7.0-x86_64-unknown-linux-gnu.tar.xz'* ]] ||
+  fail 'Watchexec compatibility artifact is not version-pinned'
 grep -F '2590f2d13e6a5a2210f4bf3fada9542263fbcea77604921bf28aada3bc7513d1' \
   "$workflow" >/dev/null || fail 'Watchexec compatibility checksum drifted'
-# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
-watchexec_verify_line=$(grep -nF '          xz --test "$archive"' "$workflow" | cut -d: -f1)
+watchexec_verify_line=$(grep -nF 'sha256: ad226e24baa077b9d97d1a0e575a7202ed38da0e1841d4ec3ebb8c6afbf73440' \
+  "$workflow" | cut -d: -f1)
 # shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
 watchexec_extract_line=$(grep -nF '          tar -xJf "$archive"' "$workflow" | cut -d: -f1)
 [[ -n $watchexec_verify_line && -n $watchexec_extract_line &&
   $watchexec_verify_line -lt $watchexec_extract_line ]] ||
   fail 'Watchexec archive integrity is not checked before extraction'
-grep -F 'mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64' "$workflow" >/dev/null ||
+[[ $workflow_text == *$'repository: mikefarah/yq\n          tag: v4.53.6\n          asset: yq_linux_amd64'* ]] ||
   fail 'yq compatibility runtime is not version-pinned'
 grep -F 'c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' \
   "$workflow" >/dev/null || fail 'yq compatibility checksum drifted'
@@ -127,15 +132,14 @@ primary_checkout=$'      - uses: actions/checkout@PIN\n        # Name checkout\'
 # newline and accept any single line, hiding a dropped `fetch-depth: 0`.
 [[ $pinned_workflow == *"$primary_checkout"* ]] ||
   fail 'provider compatibility primary checkout does not fetch development history'
-grep -F 'neovim/releases/download/v0.12.2/nvim-linux-x86_64.tar.gz' "$workflow" >/dev/null ||
+[[ $workflow_text == *$'repository: neovim/neovim\n          tag: v0.12.2\n          asset: nvim-linux-x86_64.tar.gz'* ]] ||
   fail 'provider compatibility Neovim is not version-pinned'
 grep -F 'fe333ad1dddfeb4b15169859287369207443477288737d4b94c07df7647ae21e' \
   "$workflow" >/dev/null || fail 'provider compatibility Neovim checksum drifted'
 grep -F '31cf85945cb600d96cdf69f88bc68bec814acbff50863c5546adef3a1bcef260' \
   "$workflow" >/dev/null || fail 'provider compatibility Neovim archive checksum drifted'
-# shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
-nvim_archive_verify_line=$(grep -nF '            "$archive" | sha256sum --check --strict' \
-  "$workflow" | head -1 | cut -d: -f1)
+nvim_archive_verify_line=$(grep -nF 'sha256: 31cf85945cb600d96cdf69f88bc68bec814acbff50863c5546adef3a1bcef260' \
+  "$workflow" | cut -d: -f1)
 # shellcheck disable=SC2016 # Match the literal workflow shell, not this test's variables.
 nvim_extract_line=$(grep -nF '          tar -xzf "$archive"' "$workflow" | cut -d: -f1)
 [[ -n $nvim_archive_verify_line && -n $nvim_extract_line &&

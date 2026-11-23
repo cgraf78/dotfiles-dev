@@ -113,6 +113,7 @@ program	home/.local/lib/dotfiles/tests/vscode-extensions-test
 program	home/.local/lib/dotfiles/tests/vscode-sley-test
 program	home/.local/lib/dotfiles/tests/workflow-consistency-test
 program	test/lib/capability-fixture.sh
+program	test/lib/github-release.sh
 program	test/lib/dot-release.sh
 program	test/lib/suite-inventory.sh
 program	test/lib/wait-github-state.sh
