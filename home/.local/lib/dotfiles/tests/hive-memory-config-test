@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SOURCE_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SOURCE_HOME="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 CONFIG="$SOURCE_HOME/.config/hive-memory/config.toml"
 
 python3 - "$CONFIG" <<'PY'

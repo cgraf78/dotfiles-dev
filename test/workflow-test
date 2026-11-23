@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
+repo_root=$(CDPATH='' cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)
 cd "$repo_root"
 
 # Shared repository contract (identity, LICENSE, .gitignore, remote checks)
@@ -54,7 +54,7 @@ grep -Fx '    - cron: "37 9 * * *"' "$workflow" >/dev/null || fail 'nightly sche
 grep -Fx '      setup: none' "$workflow" >/dev/null || fail 'capability CI must use setup: none'
 grep -Fx '      matrix-set: full' "$workflow" >/dev/null || fail 'capability CI must use the full matrix'
 grep -Fx '      profiles: base,jq,python,lua,neovim,zsh,procps' "$workflow" >/dev/null || fail 'capability prerequisite profile drifted'
-grep -Fx '      test-command: test/run' "$workflow" >/dev/null || fail 'full suite runner is not wired'
+grep -Fx '      test-command: CDPATH=. test/run' "$workflow" >/dev/null || fail 'full suite runner is not wired'
 grep -Fx '      termux-command: test/run --termux' "$workflow" >/dev/null || fail 'Termux smoke command is not explicit'
 grep -Fx '    name: cgraf78/actions sync' "$workflow" >/dev/null || fail 'actions-sync job is missing'
 grep -Fx '          persist-credentials: false' "$workflow" >/dev/null || fail 'checkout credentials must not persist'
