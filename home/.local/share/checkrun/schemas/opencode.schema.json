@@ -85,7 +85,7 @@
     },
     "automations": {
       "type": "boolean",
-      "description": "Run prompts, shell commands or Code Mode actions on a timer, on a cron schedule, or on push events from connected MCP servers. Defaults to true; set false to disable. MCP events still require experimental.mcp_events."
+      "description": "Run prompts, shell commands or Code Mode actions on a timer, on a cron schedule, or on push events from connected MCP servers. Defaults to true; set false to disable."
     },
     "permissions": {
       "$ref": "#/$defs/Permission.Ruleset",
@@ -560,9 +560,6 @@
           ]
         },
         "console_watches": {
-          "type": "boolean"
-        },
-        "mcp_events": {
           "type": "boolean"
         },
         "recommended_api": {
