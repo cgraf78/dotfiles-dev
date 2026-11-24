@@ -16,7 +16,7 @@ dot_dev_codex_merges_test() {
   echo ""
   echo "=== Codex config merge hook ==="
 
-  if command -v yq >/dev/null 2>&1; then
+  if _merge_hook_mikefarah_yq >/dev/null 2>&1; then
     if [[ -n ${DOT_TEST_YQ_MERGE_BLOCK_MARKER:-} ]]; then
       printf 'executed\n' >"$DOT_TEST_YQ_MERGE_BLOCK_MARKER"
     fi
