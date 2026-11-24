@@ -178,10 +178,30 @@ done
 # Dot client hooks under dot/ carry no extension and may carry no shebang,
 # so shellcheck-inventory can only discover them by a shell directive. Keep
 # every one of them inventoried so a new hook cannot skip linting silently.
-while IFS= read -r -d '' dot_hook; do
-  grep -Fxq "program"$'\t'"$dot_hook" .github/shellcheck-files.txt ||
-    fail "Dot hook is missing from the ShellCheck inventory: $dot_hook"
-done < <(find dot -type f -print0)
+check_dot_hook_inventory() (
+  local hook_list dot_hook
+  hook_list=$(mktemp) || fail 'could not create the Dot hook inventory fixture'
+  trap 'rm -f -- "$hook_list"' EXIT
+  # Read only a completed traversal, since a partial inventory can omit the
+  # hook whose entry is missing.
+  find dot -type f -print0 >"$hook_list" || fail 'could not enumerate Dot hooks'
+  while IFS= read -r -d '' dot_hook; do
+    grep -Fxq "program"$'\t'"$dot_hook" .github/shellcheck-files.txt ||
+      fail "Dot hook is missing from the ShellCheck inventory: $dot_hook"
+  done <"$hook_list"
+)
+check_dot_hook_inventory
+
+inventory_output=$(
+  find() {
+    printf '%s\0' dot/profile-deactivate
+    printf '%s\n' 'fixture hook inventory failure' >&2
+    return 17
+  }
+  check_dot_hook_inventory 2>&1
+) && fail 'a partial Dot hook inventory unexpectedly passed'
+[[ $inventory_output == *'fixture hook inventory failure'* ]] ||
+  fail 'failed Dot hook inventory did not retain the traversal diagnostic'
 
 test/lib/wait-github-state.sh --self-test
 test/lib/capability-fixture.sh --self-test
