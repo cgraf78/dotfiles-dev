@@ -2967,6 +2967,11 @@
           "type": "object",
           "unevaluatedProperties": false,
           "properties": {
+            "compinit": {
+              "default": true,
+              "description": "Let zsh activation run `compinit -i` to register packslip completions when `compdef` is not defined yet.",
+              "type": "boolean"
+            },
             "exec": {
               "default": false,
               "description": "Let packslip tools run their own executable at install time to generate resources, such as an agent skill.",
@@ -3055,6 +3060,11 @@
               "items": {
                 "type": "string"
               }
+            },
+            "forget_unused_after": {
+              "default": "90d",
+              "description": "Forget a tracked config or tool stub that no mise command has loaded for this long.",
+              "type": "string"
             }
           }
         },
@@ -4081,7 +4091,7 @@
         },
         "cache": {
           "type": "object",
-          "description": "default experimental local artifact cache configuration for eligible tasks with sources and explicit outputs",
+          "description": "[experimental] default local artifact cache configuration for eligible tasks with sources and explicit outputs",
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -4139,28 +4149,28 @@
         },
         "global_env": {
           "type": "array",
-          "description": "experimental ambient environment variable names added to every enabled task cache key in this config scope",
+          "description": "[experimental] ambient environment variable names added to every enabled task cache key in this config scope",
           "items": {
             "type": "string"
           }
         },
         "global_pass_through_env": {
           "type": "array",
-          "description": "experimental ambient environment variable names preserved under environment denial without affecting task cache keys",
+          "description": "[experimental] ambient environment variable names preserved under environment denial without affecting task cache keys",
           "items": {
             "type": "string"
           }
         },
         "global_inputs": {
           "type": "array",
-          "description": "experimental config-root-relative source patterns added to every task in this config scope; entries may reference input groups with @group:<name>",
+          "description": "[experimental] config-root-relative source patterns added to every task in this config scope; entries may reference input groups with @group:<name>",
           "items": {
             "type": "string"
           }
         },
         "input_groups": {
           "type": "object",
-          "description": "experimental reusable config-root-relative source groups referenced with @group:<name>",
+          "description": "[experimental] reusable config-root-relative source groups referenced with @group:<name>",
           "additionalProperties": {
             "type": "array",
             "description": "source patterns in this group, relative to the config root; may reference other groups with @group:<name>",
@@ -4554,7 +4564,7 @@
         },
         "cache": {
           "type": "object",
-          "description": "experimental local artifact cache for declared task outputs",
+          "description": "[experimental] local artifact cache for declared task outputs",
           "properties": {
             "enabled": {
               "type": "boolean",
@@ -4874,7 +4884,7 @@
         },
         "pass_through_env": {
           "type": "array",
-          "description": "experimental ambient env vars preserved under environment denial without affecting the task cache key",
+          "description": "[experimental] ambient env vars preserved under environment denial without affecting the task cache key",
           "items": {
             "type": "string"
           }
@@ -6841,7 +6851,7 @@
       }
     },
     "tool_spinel": {
-      "description": "a tool installed with the spinel backend",
+      "description": "[experimental] a tool installed with the spinel backend",
       "oneOf": [
         {
           "description": "version of the tool to install",
@@ -7823,6 +7833,10 @@
                 "description": "symlink-each and directory copy only: deploy each source path component named \"dot-<name>\" as \".<name>\", like GNU Stow's --dotfiles; exclude still matches source names",
                 "default": false
               },
+              "main_checkout": {
+                "type": "boolean",
+                "description": "symlink and symlink-each only: when the source is inside a linked Git worktree, link to the same path in the repository's main checkout instead, so the link keeps working after the worktree is removed; the source must exist there"
+              },
               "relative": {
                 "type": "boolean",
                 "description": "symlink and symlink-each only: link by a path relative to the link's directory instead of an absolute one; overrides the dotfiles.relative_symlinks setting (ignored on Windows)"
@@ -7989,6 +8003,7 @@
                     "remove_empty": false,
                     "create_if_missing": false,
                     "relative": false,
+                    "main_checkout": false,
                     "dot_prefix": false,
                     "group": false,
                     "depends": false,
@@ -8419,6 +8434,9 @@
                     "relative": {
                       "const": false
                     },
+                    "main_checkout": {
+                      "const": false
+                    },
                     "encrypt": {
                       "const": false
                     },
@@ -8452,6 +8470,39 @@
                     }
                   }
                 }
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "main_checkout": {
+                        "const": false
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "mode": {
+                        "enum": [
+                          "symlink",
+                          "symlink-each"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "mode": false,
+                      "content": false,
+                      "permissions": false,
+                      "block": false,
+                      "line": false
+                    }
+                  }
+                ]
               }
             ],
             "anyOf": [
@@ -8567,7 +8618,7 @@
                     },
                     "mode": {
                       "type": "string",
-                      "description": "how to apply a whole-file source to the target; omitted uses the group's mode. \"absent\" removes a file or symlink at the target and takes no source. \"track\" saves the file's history where it is, and \"track-local\" saves it in this machine's local-only history, which is never shared",
+                      "description": "how to apply a whole-file source to the target; omitted uses the group's mode. \"absent\" removes a file or symlink at the target and takes no source. \"track\" saves the file's history where it is, and \"track-local\" saves it in this machine's local-only history, which is never shared. \"fnox\" writes the file fnox stores for the target (`fnox set --file`) with mode 0600 and takes no source",
                       "anyOf": [
                         {
                           "enum": [
@@ -8577,7 +8628,8 @@
                             "template",
                             "absent",
                             "track",
-                            "track-local"
+                            "track-local",
+                            "fnox"
                           ]
                         },
                         {
@@ -8620,6 +8672,10 @@
                       "type": "boolean",
                       "description": "symlink-each and directory copy only: deploy each source path component named \"dot-<name>\" as \".<name>\", like GNU Stow's --dotfiles; exclude still matches source names",
                       "default": false
+                    },
+                    "main_checkout": {
+                      "type": "boolean",
+                      "description": "symlink and symlink-each only: when the source is inside a linked Git worktree, link to the same path in the repository's main checkout instead, so the link keeps working after the worktree is removed; the source must exist there"
                     },
                     "relative": {
                       "type": "boolean",
@@ -8728,7 +8784,7 @@
                       "description": "comment prefix for edit marker lines; inferred from the file extension when omitted"
                     },
                     "merge": {
-                      "description": "edit entry: true sets the keys of source (default: the file's path under the group root) on a JSON, JSONC, TOML, or YAML target and leaves the target's other keys to the application that also writes it; \"missing\" sets only the keys the target has no value for; the format comes from the target's extension unless \"format\" names it",
+                      "description": "edit entry: true sets the keys of source (default: the file's path under the group root) on a JSON, JSONC, TOML, YAML, or INI target and leaves the target's other keys to the application that also writes it; \"missing\" sets only the keys the target has no value for; the format comes from the target's extension unless \"format\" names it",
                       "oneOf": [
                         {
                           "type": "boolean"
@@ -8740,14 +8796,15 @@
                     },
                     "format": {
                       "type": "string",
-                      "description": "merge only: the format of the target and source when the target's extension doesn't name it, such as \"jsonc\" for VS Code's settings.json",
+                      "description": "merge only: the format of the target and source when the target's extension doesn't name it, such as \"jsonc\" for VS Code's settings.json or \"ini\" for an extensionless INI file",
                       "anyOf": [
                         {
                           "enum": [
                             "json",
                             "jsonc",
                             "toml",
-                            "yaml"
+                            "yaml",
+                            "ini"
                           ]
                         },
                         {
@@ -8786,6 +8843,7 @@
                           "remove_empty": false,
                           "create_if_missing": false,
                           "relative": false,
+                          "main_checkout": false,
                           "dot_prefix": false,
                           "group": false,
                           "depends": false,
@@ -9216,6 +9274,9 @@
                           "relative": {
                             "const": false
                           },
+                          "main_checkout": {
+                            "const": false
+                          },
                           "encrypt": {
                             "const": false
                           },
@@ -9249,6 +9310,39 @@
                           }
                         }
                       }
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "main_checkout": {
+                              "const": false
+                            }
+                          }
+                        },
+                        {
+                          "properties": {
+                            "mode": {
+                              "enum": [
+                                "symlink",
+                                "symlink-each"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ]
+                        },
+                        {
+                          "properties": {
+                            "mode": false,
+                            "content": false,
+                            "permissions": false,
+                            "block": false,
+                            "line": false
+                          }
+                        }
+                      ]
                     }
                   ],
                   "anyOf": [
@@ -10086,7 +10180,7 @@
                   },
                   "state": {
                     "type": "string",
-                    "description": "desired package state; macports, pacman, scoop, snap, and zypper support absent",
+                    "description": "desired package state; macports, pacman, scoop, snap, zypper, and dnf layering packages with rpm-ostree support absent",
                     "enum": [
                       "present",
                       "absent"
@@ -10373,7 +10467,7 @@
                       },
                       "kickstart": {
                         "type": "boolean",
-                        "description": "run `launchctl kickstart -k` after loading the agent",
+                        "description": "run `launchctl kickstart` after loading the agent",
                         "default": false
                       }
                     },
@@ -11157,7 +11251,7 @@
         },
         "groups": {
           "type": "object",
-          "description": "[experimental] Linux groups that bootstrap creates or removes, keyed by group name",
+          "description": "Linux groups that bootstrap creates or removes, keyed by group name",
           "additionalProperties": {
             "type": "object",
             "description": "local Linux group that bootstrap creates, updates, or removes",
@@ -11212,7 +11306,7 @@
         },
         "users": {
           "type": "object",
-          "description": "[experimental] Linux users that bootstrap creates or removes, keyed by user name",
+          "description": "Linux users that bootstrap creates or removes, keyed by user name",
           "additionalProperties": {
             "type": "object",
             "description": "local Linux user that bootstrap creates, updates, or removes",
@@ -11502,7 +11596,7 @@
     },
     "history": {
       "type": "object",
-      "description": "dotfiles history: what is never captured, reload commands, and the setup repository (https://mise.jdx.dev/history.html)",
+      "description": "dotfiles history: what is never captured, reload commands, and the setup repository (https://mise.jdx.dev/dotfiles/history.html)",
       "properties": {
         "encryption": {
           "type": "object",
@@ -11544,7 +11638,7 @@
         },
         "origin": {
           "type": "object",
-          "description": "the setup repository this machine publishes to and fetches from; machine-local, written by `mise bootstrap dotfiles origin set`",
+          "description": "the setup repository this machine publishes to and fetches from; machine-local, written by `mise dot origin set`",
           "additionalProperties": false,
           "properties": {
             "url": {
@@ -11799,7 +11893,7 @@
           ]
         },
         "^spinel:": {
-          "description": "a tool installed with the spinel backend",
+          "description": "[experimental] a tool installed with the spinel backend",
           "oneOf": [
             {
               "type": "array",
@@ -11908,7 +12002,7 @@
     },
     "daemons": {
       "type": "object",
-      "description": "Experimental project daemons: custom pitchfork commands or managed presets.",
+      "description": "[experimental] Project daemons: custom pitchfork commands or managed presets.",
       "additionalProperties": {
         "description": "A daemon: a version request for the preset of the same name, or a table describing a custom command, task, preset, another project's daemon, or a shared provider.",
         "oneOf": [
@@ -11942,6 +12036,15 @@
                       "required": [
                         "auto"
                       ]
+                    }
+                  },
+                  {
+                    "type": "array",
+                    "description": "Ports the daemon is expected to listen on, forwarded to pitchfork verbatim.",
+                    "items": {
+                      "type": "integer",
+                      "maximum": 65535,
+                      "minimum": 0
                     }
                   }
                 ]
@@ -12005,6 +12108,10 @@
               },
               "proxy_idle_timeout": {
                 "$ref": "#/$defs/daemon_proxy_idle_timeout"
+              },
+              "url": {
+                "type": "string",
+                "description": "URL the daemon answers on, a template that sees `port`, `ports` and `name`, such as `redis://127.0.0.1:{{ port }}/0`. Used when the proxy does not serve the daemon, for example with `proxy = false`: mise exports it as <NAME>_URL and pitchfork gives it as `{{ daemons.<name>.url }}`. Needs pitchfork 2.36.0 or later."
               }
             },
             "required": [
@@ -12068,6 +12175,35 @@
               "init": {
                 "$ref": "#/$defs/daemon_init"
               },
+              "mise": {
+                "type": "boolean",
+                "description": "false runs the daemon's setup steps and probes without the project's tool environment; the task itself always runs through `mise run`."
+              },
+              "port": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/daemon_port"
+                  },
+                  {
+                    "type": "object",
+                    "description": "Pitchfork's structured port configuration, forwarded verbatim.",
+                    "not": {
+                      "required": [
+                        "auto"
+                      ]
+                    }
+                  },
+                  {
+                    "type": "array",
+                    "description": "Ports the daemon is expected to listen on, forwarded to pitchfork verbatim.",
+                    "items": {
+                      "type": "integer",
+                      "maximum": 65535,
+                      "minimum": 0
+                    }
+                  }
+                ]
+              },
               "ports": {
                 "type": "object",
                 "description": "More named ports, each exported as <NAME>_<PORT>_PORT and moved by the same worktree slot as `port`.",
@@ -12127,6 +12263,10 @@
               },
               "proxy_idle_timeout": {
                 "$ref": "#/$defs/daemon_proxy_idle_timeout"
+              },
+              "url": {
+                "type": "string",
+                "description": "URL the daemon answers on, a template that sees `port`, `ports` and `name`, such as `redis://127.0.0.1:{{ port }}/0`. Used when the proxy does not serve the daemon, for example with `proxy = false`: mise exports it as <NAME>_URL and pitchfork gives it as `{{ daemons.<name>.url }}`. Needs pitchfork 2.36.0 or later."
               }
             },
             "required": [
@@ -12190,6 +12330,10 @@
               "version": {
                 "type": "string",
                 "description": "Version request for the preset's tool."
+              },
+              "tool": {
+                "type": "string",
+                "description": "Tool to install the server from, in place of the preset's default."
               },
               "port": {
                 "$ref": "#/$defs/daemon_port"
@@ -12425,6 +12569,10 @@
               },
               "proxy_idle_timeout": {
                 "$ref": "#/$defs/daemon_proxy_idle_timeout"
+              },
+              "url": {
+                "type": "string",
+                "description": "URL the daemon answers on, a template that sees `port`, `ports` and `name`, such as `redis://127.0.0.1:{{ port }}/0`. Used when the proxy does not serve the daemon, for example with `proxy = false`: mise exports it as <NAME>_URL and pitchfork gives it as `{{ daemons.<name>.url }}`. Needs pitchfork 2.36.0 or later."
               }
             },
             "required": [
@@ -12512,7 +12660,7 @@
     },
     "daemon_providers": {
       "type": "object",
-      "description": "Experimental shared servers owned by the user. Only allowed in global configuration.",
+      "description": "[experimental] Shared servers owned by the user. Only allowed in global configuration.",
       "additionalProperties": {
         "type": "object",
         "description": "A PostgreSQL, CockroachDB or NATS server that every checkout shares, with a separate database or NATS account for each.",
@@ -12598,7 +12746,7 @@
     },
     "daemons_settings": {
       "type": "object",
-      "description": "Experimental project-wide daemon options.",
+      "description": "[experimental] Project-wide daemon options.",
       "additionalProperties": false,
       "properties": {
         "namespace": {
@@ -12614,7 +12762,7 @@
     },
     "daemon_groups": {
       "type": "object",
-      "description": "Experimental named groups of project daemons. Members are daemon names or other group names declared in the same project.",
+      "description": "[experimental] Named groups of project daemons. Members are daemon names or other group names declared in the same project.",
       "additionalProperties": {
         "oneOf": [
           {
