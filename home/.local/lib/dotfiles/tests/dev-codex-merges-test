@@ -5,4 +5,25 @@
 # dot-suite-priority: early
 set -euo pipefail
 . "${BASH_SOURCE[0]%/*}/dev/codex-merges.sh"
+
+# A distribution can supply the Python yq on the capability runner's PATH.
+# Use a private marker and reporter state before checking the real suite.
+incompatible_yq_bin=$(_mock_bin)
+incompatible_yq_marker="$incompatible_yq_bin/merge-block"
+cat >"$incompatible_yq_bin/yq" <<'SH'
+#!/bin/sh
+[ "${1:-}" = --version ] || exit 2
+printf '%s\n' 'yq 4.4.5' 'jq-1.8.2'
+SH
+chmod +x "$incompatible_yq_bin/yq"
+if incompatible_yq_output=$(
+  DOT_TEST_REPORTER='' DOT_TEST_YQ_MERGE_BLOCK_MARKER="$incompatible_yq_marker" \
+    PATH="$incompatible_yq_bin:$PATH" dot_dev_codex_merges_test 2>&1
+); then
+  _assert_file_missing 'Codex merge suite skips the incompatible yq' "$incompatible_yq_marker"
+else
+  printf '%s\n' "$incompatible_yq_output" >&2
+  _fail 'Codex merge suite skips the incompatible yq'
+fi
+
 dot_dev_codex_merges_test
