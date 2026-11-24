@@ -8,22 +8,85 @@ if [[ -z $NVIM_TEST_BIN ]]; then
   _test_summary
 fi
 
-_nvim_lua() {
-  local lua_dir=$HOME/.config/nvim/lua _output _rc
-  _output=$("$NVIM_TEST_BIN" --headless --noplugin -u NONE -i NONE \
-    -c "lua package.path='$lua_dir/?.lua;' .. package.path; $1" \
-    -c 'qa!' 2>&1)
-  _rc=$?
+_use_headless_dirs() {
+  local root=$_DOT_TEST_TMP_ROOT alias short_tmp=/tmp interrupted=0 status=0 LC_ALL=C
+  [[ $root == /* ]] || root=$PWD/$root
+  NVIM_TEST_PRIVATE_DIR=$root/headless
+  mkdir -p "$NVIM_TEST_PRIVATE_DIR"/{runtime,tmp,data,state,cache} || return 1
+  chmod 700 "$NVIM_TEST_PRIVATE_DIR/runtime" || return 1
+
+  # Give Neovim a shell-safe absolute runtime for wildcard response files and
+  # enough room to bind its generated Unix socket even under a long TMPDIR.
+  if ((${#NVIM_TEST_PRIVATE_DIR} + 8 + 28 < 104)) &&
+    [[ $NVIM_TEST_PRIVATE_DIR != *[![:alnum:]_./-]* ]]; then
+    return 0
+  fi
+  if [[ ! -w $short_tmp && -n ${PREFIX:-} ]]; then
+    short_tmp=$PREFIX/tmp
+  fi
+  trap '((interrupted != 0)) || interrupted=129' HUP
+  trap '((interrupted != 0)) || interrupted=130' INT
+  trap '((interrupted != 0)) || interrupted=143' TERM
+  alias=$(
+    trap '' HUP INT TERM
+    mktemp -d "$short_tmp/n.XXXXXXXX"
+  ) || status=$?
+  if ((status == 0)); then
+    CLEANUP_DIRS+=("$alias")
+  fi
+  trap - HUP INT TERM
+  ((interrupted == 0)) || return "$interrupted"
+  ((status == 0)) || return "$status"
+  if ((${#alias} + 2 + 8 + 28 >= 104)); then
+    printf 'dev test: cannot create a short Neovim runtime under %s\n' "$short_tmp" >&2
+    return 1
+  fi
+  ln -s "$NVIM_TEST_PRIVATE_DIR" "$alias/r" || return 1
+  NVIM_TEST_PRIVATE_DIR=$alias/r
+}
+_use_headless_dirs || exit "$?"
+NVIM_TEST_LUA_DIR=$HOME/.config/nvim/lua
+
+_nvim_lua() (
+  local output status=0
+  unset NVIM NVIM_APPNAME NVIM_LISTEN_ADDRESS
+  output=$(XDG_CONFIG_HOME="$HOME/.config" XDG_RUNTIME_DIR="$NVIM_TEST_PRIVATE_DIR/runtime" \
+    XDG_STATE_HOME="$NVIM_TEST_PRIVATE_DIR/state" XDG_CACHE_HOME="$NVIM_TEST_PRIVATE_DIR/cache" \
+    XDG_DATA_HOME="$NVIM_TEST_PRIVATE_DIR/data" TMPDIR="$NVIM_TEST_PRIVATE_DIR/tmp" \
+    NVIM_LOG_FILE="$NVIM_TEST_PRIVATE_DIR/native.log" \
+    NVIM_TEST_LUA_DIR="$NVIM_TEST_LUA_DIR" NVIM_TEST_LUA_SOURCE="$1" \
+    "$NVIM_TEST_BIN" --headless --noplugin -u NONE -i NONE -c 'lua
+      local ok, err = xpcall(function()
+        local fixture_dir = vim.env.NVIM_TEST_LUA_DIR
+        -- Honor preload stubs and load the fixture root literally, including
+        -- characters that are delimiters in package.path.
+        table.insert(package.loaders, 2, function(module)
+          local filename = fixture_dir .. "/" .. module:gsub("%.", "/") .. ".lua"
+          if vim.fn.filereadable(filename) == 1 then
+            return assert(loadfile(filename))
+          end
+          return "\n\tno fixture module at " .. filename
+        end)
+        assert(loadstring(vim.env.NVIM_TEST_LUA_SOURCE, "=Dev Neovim fixture"))()
+      end, debug.traceback)
+      if not ok then
+        io.stderr:write(tostring(err), "\n")
+        vim.cmd("cquit 1")
+      end
+    ' -c 'qa!' 2>&1) || status=$?
   # Before Neovim 0.12, messages printed without a UI (as in --headless) turn
   # each NL into CR NL; 0.12.0 dropped the CR for headless
   # (neovim/neovim#38048). test/run still runs this suite on 0.11.2+, so
   # normalize here rather than in every assertion. Mirrors `_nvim_lf` in
   # dotfiles-nvim's nvim/helpers.sh: only a CR before an NL goes, plus the CR
   # of a final CR NL that command substitution left at the end.
-  _output=${_output//$'\r\n'/$'\n'}
-  printf '%s' "${_output%$'\r'}"
-  return "$_rc"
-}
+  output=${output//$'\r\n'/$'\n'}
+  if ((status != 0)); then
+    printf '%s\n' "${output%$'\r'}" >&2
+    return "$status"
+  fi
+  printf '%s' "${output%$'\r'}"
+)
 
 echo '=== Headless output normalization ==='
 # A function stands in for pre-0.12 Neovim, which needs no real binary. Its
@@ -33,10 +96,74 @@ _nvim_crlf_stub() {
   return 3
 }
 crlf_rc=0
-crlf_output=$(NVIM_TEST_BIN=_nvim_crlf_stub _nvim_lua '') || crlf_rc=$?
+crlf_output=$(NVIM_TEST_BIN=_nvim_crlf_stub _nvim_lua '' 2>&1) || crlf_rc=$?
 _assert_eq 'Headless output: CR NL becomes NL and a lone CR stays' \
   $'a\nb\rc' "$crlf_output"
 _assert_exit 'Headless output: normalizing keeps the exit status' 3 "$crlf_rc"
+
+echo '=== Headless fixture boundaries ==='
+probe_status=0
+probe_output=$(_nvim_lua 'error("intentional dev fixture error")' 2>&1) || probe_status=$?
+_assert_exit 'Headless Lua failures exit nonzero' 1 "$probe_status"
+_assert_contains 'Headless Lua failures retain the diagnostic' 'intentional dev fixture error' "$probe_output"
+
+quoted_modules=$(_tmpdir)/"dev's fixture; ?"
+mkdir "$quoted_modules"
+printf '%s\n' 'return "dev module loaded"' >"$quoted_modules/fixture_module.lua"
+probe_output=$(NVIM_TEST_LUA_DIR="$quoted_modules" _nvim_lua 'print(require("fixture_module"))')
+_assert_eq 'Headless modules load from literal paths' 'dev module loaded' "$probe_output"
+
+caller_dirs=$(_tmpdir)
+mkdir -p "$caller_dirs"/{runtime,data,state,cache,config,tmp}
+probe_status=0
+probe_output=$(XDG_RUNTIME_DIR="$caller_dirs/runtime" XDG_STATE_HOME="$caller_dirs/state" \
+  XDG_DATA_HOME="$caller_dirs/data" XDG_CACHE_HOME="$caller_dirs/cache" \
+  XDG_CONFIG_HOME="$caller_dirs/config" TMPDIR="$caller_dirs/tmp" \
+  NVIM_APPNAME=caller NVIM_LOG_FILE="$caller_dirs/native.log" _nvim_lua '
+  print(vim.v.servername)
+  print(vim.env.TMPDIR)
+  print(vim.env.NVIM_LOG_FILE)
+  for _, kind in ipairs({ "data", "state", "cache", "config" }) do
+    print(vim.fn.stdpath(kind))
+  end
+  assert(vim.fn.getftype(vim.v.servername) == "socket", "expected a running private socket")
+  assert(vim.fn.fnamemodify(vim.fn.stdpath("data"), ":t") == "nvim", "expected the fixture app name")
+  print("headless paths checked")
+') || probe_status=$?
+_assert_exit 'Headless fixture binds a private socket under the expected app name' 0 "$probe_status"
+_assert_contains 'Headless runtime probe executes its Lua checks' 'headless paths checked' "$probe_output"
+_assert_not_contains 'Headless paths avoid caller state and config roots' "$caller_dirs/" "$probe_output"
+_assert_file_missing 'Headless fixture does not write the caller native log' "$caller_dirs/native.log"
+
+_check_plugin_imports() {
+  local matches status=0
+  matches=$(grep -R -n 'lazyvim\.plugins\.extras\.' "$1") || status=$?
+  case $status in
+    0)
+      printf 'Custom plugin imports a LazyVim extra too late:\n%s\n' "$matches" >&2
+      return 1
+      ;;
+    1) return 0 ;;
+    *)
+      printf 'Cannot scan plugin sources under %s (grep exit %s)\n' "$1" "$status" >&2
+      return "$status"
+      ;;
+  esac
+}
+
+plugin_fixture=$(_tmpdir)
+printf '%s\n' 'return { { import = "lazyvim.plugins.extras.fixture" } }' >"$plugin_fixture/late.lua"
+scan_status=0
+scan_output=$(_check_plugin_imports "$plugin_fixture" 2>&1) || scan_status=$?
+_assert_exit 'Plugin source check rejects a late extra import' 1 "$scan_status"
+_assert_contains 'Late import diagnostic identifies the source' 'late.lua:1:' "$scan_output"
+scan_status=0
+scan_output=$(
+  grep() { return 2; }
+  _check_plugin_imports "$plugin_fixture" 2>&1
+) || scan_status=$?
+_assert_exit 'Plugin source check rejects a failed scan' 2 "$scan_status"
+_assert_contains 'Failed plugin scan retains a diagnostic' 'Cannot scan plugin sources' "$scan_output"
 
 echo '=== Development Nvim boundary ==='
 _assert_contains 'Mason policy is dev-owned' 'lsp_server_packages' "$(<"$HOME/.config/nvim/lua/config/mason-policy.lua")"
@@ -73,9 +200,9 @@ dev_extras_content=
 _assert_contains 'Dev layer preserves LazyVim dotfile support' \
   '{ import = "lazyvim.plugins.extras.util.dot" }' \
   "$dev_extras_content"
-_assert_not_contains 'Custom plugin specs do not import LazyVim extras too late' \
-  'lazyvim.plugins.extras.' \
-  "$(grep -R -n 'lazyvim\.plugins\.extras\.' "$HOME/.config/nvim/lua/plugins" || true)"
+scan_status=0
+_check_plugin_imports "$HOME/.config/nvim/lua/plugins" || scan_status=$?
+_assert_exit 'Custom plugin specs do not import LazyVim extras too late' 0 "$scan_status"
 _assert_file_missing 'Retired filename-ordered dev overrides are absent' \
   "$HOME/.config/nvim/lua/plugins/zz-dev-extras.lua"
 _assert_file_missing 'Retired filename-ordered Mason policy is absent' \
