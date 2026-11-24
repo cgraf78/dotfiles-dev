@@ -1468,6 +1468,28 @@
               ],
               "description": "List model variants"
             },
+            "speed.cycle": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cycle model speeds"
+            },
+            "speed.list": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TuiKeybind.BindingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "List model speeds"
+            },
             "session.page.up": {
               "anyOf": [
                 {
