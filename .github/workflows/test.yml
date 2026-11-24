@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   shell:
-    uses: cgraf78/actions/.github/workflows/shell-ci.yml@8830716e01e0ab2d770b760a76ff96c4f37b944d
+    uses: cgraf78/actions/.github/workflows/shell-ci.yml@e9922d129ba6d9dc43793247409197b0b07b81c8
     with:
       setup: none
       matrix-set: full
@@ -103,13 +103,13 @@ jobs:
           path: .provider-checkouts/agentguard
           persist-credentials: false
       - name: Install compatibility prerequisites
-        uses: cgraf78/actions/.github/actions/shell-ci-prereqs@8830716e01e0ab2d770b760a76ff96c4f37b944d
+        uses: cgraf78/actions/.github/actions/shell-ci-prereqs@e9922d129ba6d9dc43793247409197b0b07b81c8
         with:
           matrix-name: Ubuntu
           profiles: base,jq,python,lua,neovim,zsh,procps
           setup: none
       - name: Download pinned yq compatibility runtime
-        uses: cgraf78/actions/.github/actions/download-release-asset@8830716e01e0ab2d770b760a76ff96c4f37b944d
+        uses: cgraf78/actions/.github/actions/download-release-asset@e9922d129ba6d9dc43793247409197b0b07b81c8
         with:
           repository: mikefarah/yq
           tag: v4.53.6
@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: chmod +x "$RUNNER_TEMP/yq-v4.53.6"
       - name: Download pinned Neovim compatibility runtime
-        uses: cgraf78/actions/.github/actions/download-release-asset@8830716e01e0ab2d770b760a76ff96c4f37b944d
+        uses: cgraf78/actions/.github/actions/download-release-asset@e9922d129ba6d9dc43793247409197b0b07b81c8
         with:
           repository: neovim/neovim
           tag: v0.12.2
@@ -141,7 +141,7 @@ jobs:
             fe333ad1dddfeb4b15169859287369207443477288737d4b94c07df7647ae21e \
             "$install_root/bin/nvim" | sha256sum --check --strict
       - name: Download pinned Watchexec compatibility artifact
-        uses: cgraf78/actions/.github/actions/download-release-asset@8830716e01e0ab2d770b760a76ff96c4f37b944d
+        uses: cgraf78/actions/.github/actions/download-release-asset@e9922d129ba6d9dc43793247409197b0b07b81c8
         with:
           repository: watchexec/watchexec
           tag: v2.7.0
@@ -197,7 +197,7 @@ jobs:
           GIT_CONFIG_VALUE_0: main
         with:
           persist-credentials: false
-      - uses: cgraf78/actions/.github/actions/verify-consumer-sync@8830716e01e0ab2d770b760a76ff96c4f37b944d
+      - uses: cgraf78/actions/.github/actions/verify-consumer-sync@e9922d129ba6d9dc43793247409197b0b07b81c8
 
       - name: Verify public repository and license
         env:
