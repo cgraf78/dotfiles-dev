@@ -528,6 +528,9 @@
         "full_codemode": {
           "type": "boolean"
         },
+        "codemode_agents": {
+          "type": "boolean"
+        },
         "machines": {
           "type": "boolean"
         },
@@ -541,6 +544,9 @@
           "type": "boolean"
         },
         "mcp_skills": {
+          "type": "boolean"
+        },
+        "compaction_jobs": {
           "type": "boolean"
         },
         "sqlite_fts": {
