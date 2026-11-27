@@ -552,6 +552,9 @@
         "sqlite_fts": {
           "type": "boolean"
         },
+        "browser_stream_tunnel": {
+          "type": "boolean"
+        },
         "video_generate": {
           "anyOf": [
             {
